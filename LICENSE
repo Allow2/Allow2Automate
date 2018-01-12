@@ -1,0 +1,19 @@
+LICENSE
+-------
+Copyright 2016 Allow2 Pty Ltd (Australia)
+
+Licensed under the PERMISSIVE API Licence and Service Agreement 1.0 13_04_2014 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at
+
+   http://www.allow2.com/developer-license/
+   
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
+
+COMMENTS
+--------
+The code is shared here to allow improvements and easy porting/etc by the community, but it implements patented mechanisms to operate as part of the Allow2 platform.
+
+So while it is free to use for any project you like, the main restriction is none of this code can be utilised to build a similar service in any way, such as services we intend to provide for commercial installations using these patented concepts. In other words, you can ONLY use derived variants of this code to access the Allow2 services. If you want to make a proprietary library to use with Allow2 for you to onsell, that's fine.
+
+In essence the core requirement is that if you use any of this code: 1. It MUST connect to the Allow2 web services, not a competitor 2. It MUST not interfere with any ability for Allow2 to earn revenue from their service.
+
+This ensures the basic ability of Allow2 to earn a use-based revenue stream to support the platform for the good of the entire global community.
