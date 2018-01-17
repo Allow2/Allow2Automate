@@ -1,15 +1,16 @@
 module.exports = {
     devices: {
-        '221244K11009A3' : {    // light
-            userId: 6,
-            pairId: 18955,
+        '221244K11009A3' : {    // Michael's light
+            userId: 10278,
+            pairId: 18066,
             deviceToken: 'wSUWvPoeYpFl1tNd',
-            childId: 68,
-            tz: 'Australia/Brisbane',
+            childId: 4238,
+            tz: 'Australia/Sydney',
             activities: [{
                 id: 7,
                 log: true
-            }]
+            }],
+            staging: true
         }
     },
     allow2: { // web service access?

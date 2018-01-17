@@ -30,7 +30,19 @@ Here you can see the IDs for Michaels Bedroom Light and Janes Bedroom Fan.
 Due to how the discovery process works for Wemo devices, you may need to leave it running for a minute or so
 to have it discover all devices on your network.
 
-## Pairing
+## installing the service
+
+Once configured (see below) and tested, you can install the service to start on boot:
+```js
+sudo node install.js
+```
+
+And also uninstall using the appropriate script:
+```js
+sudo node unistall.js
+```
+
+# Pairing
 
 Set up a pairing with Allow2 for any of these devices
 

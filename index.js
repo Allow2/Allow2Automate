@@ -47,6 +47,7 @@ function pollDevices() {
             var monitoredDevice = config.devices[client.device.serialNumber];
             // this will implicitly remove devices that are no longer monitored
             if ((value == 1) && monitoredDevice) {
+	        monitoredDevice.name = client.device.friendlyName;
                 runningDevices[client.device.serialNumber] = monitoredDevice;
             } else {
                 delete runningDevices[client.device.serialNumber];
@@ -66,17 +67,20 @@ function checkDevices() {
             deviceToken: device.deviceToken,
             childId: device.childId,
             tz: device.tz,
-            activities: device.activities
-            //log: true  // default is true
+            activities: device.activities,
+            //log: true 			// default is true,
+	    //staging: device.staging		// default is production
         }, function(err, result) {
             if (err) { return; }    // simple bail out if any errors occur to avoid user not being able to turn on things
 
             if (!result.allowed) {
                 // only need to grab the client to turn it off
                 var client = clients[serial];
-                console.log( client.device.friendlyName, result );
-                client.setBinaryState(0);
+                console.log( client.device.friendlyName, ' not allowed ', JSON.stringify(result) );
+		client.setBinaryState(0);
+                return;
             }
+	    console.log(device.name, ' is on / running');
             // interpret the result and if not allowed, turn the light back off again!
         });
     })
@@ -84,13 +88,13 @@ function checkDevices() {
 
 var timer = setInterval(checkDevices, 5000); // doesn't matter we poll every 5 seconds, calls to the web api are throttled and 
 
-/*var wemoSwitch = new WeMo('192.168.0.39', 49153);
-
-wemoSwitch.setBinaryState(1, function(err, result) { // switch on
-    if (err) console.error(err);
-    console.log(result); // 1
-    wemoSwitch.getBinaryState(function(err, result) {
-        if (err) console.error(err);
-        console.log(result); // 1
-    });
-});*/
+//var wemoSwitch = new WeMo('192.168.0.39', 49153);
+//
+//wemoSwitch.setBinaryState(1, function(err, result) { // switch on
+//    if (err) console.error(err);
+//    console.log(result); // 1
+//    wemoSwitch.getBinaryState(function(err, result) {
+//        if (err) console.error(err);
+//        console.log(result); // 1
+//    });
+//});
