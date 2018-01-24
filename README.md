@@ -3,6 +3,8 @@ allow2wemo
 
 Example of how to monitor and control devices associated with child accounts.
 
+refer to https://github.com/Allow2/Allow2.github.io/wiki for more details.
+
 # Installation
 
 Clone the repo, then install packages and run allow2wemo to discover devices.
