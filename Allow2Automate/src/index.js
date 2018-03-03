@@ -1,6 +1,7 @@
 import { app, BrowserWindow, Menu } from 'electron';
 import installExtension, { REACT_DEVELOPER_TOOLS } from 'electron-devtools-installer';
 import { enableLiveReload } from 'electron-compile';
+import path from 'path';
 
 // Keep a global reference of the window object, if you don't, the window will
 // be closed automatically when the JavaScript object is garbage collected.
@@ -15,10 +16,11 @@ const createWindow = async() => {
     mainWindow = new BrowserWindow({
         width: 800,
         height: 600,
+        icon: path.join(__dirname, 'assets/icons/png/64x64.png')
     });
 
     // and load the index.html of the app.
-    mainWindow.loadURL('file://${__dirname}/index.html');
+    mainWindow.loadURL(`file://${__dirname}/index.html`);
 
     // Open the DevTools.
     if (isDevMode) {
@@ -77,9 +79,9 @@ app.on('ready', () => {
 app.on('window-all-closed', () => {
     // On OS X it is common for applications and their menu bar
     // to stay active until the user quits explicitly with Cmd + Q
-    if (process.platform !== 'darwin') {
+    //if (process.platform !== 'darwin') {
     app.quit();
-    }
+    //}
 });
 
 app.on('activate', () => {
