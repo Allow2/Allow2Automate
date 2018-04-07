@@ -1,23 +1,70 @@
 {
-  "name": "allow2wemo",
+  "name": "allow2automate",
+  "productName": "allow2automate",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "My Electron application description",
+  "main": "src/index.js",
   "scripts": {
-    "svc-install": "sudo node install.js",
-    "svc-uninstall": "sudo node uninstall.js"
+    "start": "electron-forge start",
+    "package": "electron-forge package",
+    "make": "electron-forge make",
+    "publish": "electron-forge publish",
+    "lint": "eslint --cache --color --ext .jsx,.js src"
   },
-  "author": "",
-  "license": "ISC",
+  "keywords": [],
+  "author": "andrew",
+  "license": "MIT",
+  "config": {
+    "forge": {
+      "make_targets": {
+        "win32": [
+          "squirrel"
+        ],
+        "darwin": [
+          "zip"
+        ],
+        "linux": [
+          "deb",
+          "rpm"
+        ]
+      },
+      "electronPackagerConfig": {
+        "packageManager": "yarn"
+      },
+      "electronWinstallerConfig": {
+        "name": "allow2automate"
+      },
+      "electronInstallerDebian": {},
+      "electronInstallerRedhat": {},
+      "github_repository": {
+        "owner": "",
+        "name": ""
+      },
+      "windowsStoreConfig": {
+        "packageName": "",
+        "name": "allow2automate"
+      }
+    }
+  },
   "dependencies": {
-    "allow2": "^0.8.2",
-    "async": "^2.1.4",
-    "co": "^4.6.0",
-    "co-prompt": "^1.0.0",
-    "commander": "^2.9.0",
-    "node-mac": "^0.1.8",
-    "request": "^2.79.0",
-    "ssl-root-cas": "^1.2.3",
-    "wemo-client": "^0.14.0"
+    "electron-compile": "^6.4.2",
+    "electron-devtools-installer": "^2.1.0",
+    "electron-squirrel-startup": "^1.0.0",
+    "react": "^15.4.1",
+    "react-dom": "^15.4.1",
+    "react-hot-loader": "^3.0.0-beta.6"
+  },
+  "devDependencies": {
+    "babel-plugin-transform-async-to-generator": "^6.24.1",
+    "babel-plugin-transform-es2015-classes": "^6.24.1",
+    "babel-preset-env": "^1.6.1",
+    "babel-preset-react": "^6.24.1",
+    "electron-forge": "^5.1.1",
+    "electron-prebuilt-compile": "1.8.2",
+    "eslint": "^3",
+    "eslint-config-airbnb": "^15",
+    "eslint-plugin-import": "^2",
+    "eslint-plugin-jsx-a11y": "^5",
+    "eslint-plugin-react": "^7"
   }
 }

@@ -42,4 +42,6 @@ crashlytics-build.properties
 fabric.properties
 
 node_modules
-config.js
+**/config.js
+out
+.eslintcache

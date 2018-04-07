@@ -1,0 +1,23 @@
+{
+  "name": "allow2wemo",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "svc-install": "sudo node install.js",
+    "svc-uninstall": "sudo node uninstall.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "allow2": "^0.8.2",
+    "async": "^2.1.4",
+    "co": "^4.6.0",
+    "co-prompt": "^1.0.0",
+    "commander": "^2.9.0",
+    "node-mac": "^0.1.8",
+    "request": "^2.79.0",
+    "ssl-root-cas": "^1.2.3",
+    "wemo-client": "^0.14.0"
+  }
+}
