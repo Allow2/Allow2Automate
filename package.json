@@ -1,8 +1,8 @@
 {
-  "name": "allow2automate",
-  "productName": "allow2automate",
+  "name": "Allow2Automate",
+  "productName": "Allow2Automate",
   "version": "1.0.0",
-  "description": "My Electron application description",
+  "description": "Using Allow2 to control access and quotas for electricity via home automation devices",
   "main": "src/index.js",
   "scripts": {
     "start": "electron-forge start",
@@ -32,7 +32,7 @@
         "packageManager": "yarn"
       },
       "electronWinstallerConfig": {
-        "name": "allow2automate"
+        "name": "Allow2Automate"
       },
       "electronInstallerDebian": {},
       "electronInstallerRedhat": {},
@@ -42,7 +42,7 @@
       },
       "windowsStoreConfig": {
         "packageName": "",
-        "name": "allow2automate"
+        "name": "Allow2Automate"
       }
     }
   },
@@ -50,9 +50,14 @@
     "electron-compile": "^6.4.2",
     "electron-devtools-installer": "^2.1.0",
     "electron-squirrel-startup": "^1.0.0",
+    "history": "^4.7.2",
     "react": "^15.4.1",
     "react-dom": "^15.4.1",
-    "react-hot-loader": "^3.0.0-beta.6"
+    "react-hot-loader": "^3.0.0-beta.6",
+    "react-redux": "^5.0.7",
+    "react-router": "^4.2.0",
+    "react-router-redux": "^4.0.8",
+    "redux": "^3.7.2"
   },
   "devDependencies": {
     "babel-plugin-transform-async-to-generator": "^6.24.1",
