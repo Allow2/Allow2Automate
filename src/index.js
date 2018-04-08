@@ -1,15 +1,39 @@
-import { app, BrowserWindow, Menu } from 'electron';
-import installExtension, { REACT_DEVELOPER_TOOLS } from 'electron-devtools-installer';
+import { app, crashReporter, BrowserWindow, Menu } from 'electron';
 import { enableLiveReload } from 'electron-compile';
+import installExtension, { REACT_DEVELOPER_TOOLS, REDUX_DEVTOOLS} from 'electron-devtools-installer';
 import path from 'path';
 
 // Keep a global reference of the window object, if you don't, the window will
 // be closed automatically when the JavaScript object is garbage collected.
-let mainWindow;
+let mainWindow = null;
+let forceQuit = false;
 
 const isDevMode = process.execPath.match(/[\\/]electron/);
 
 if (isDevMode) enableLiveReload({ strategy: 'react-hmr' });
+
+//const installExtensions = async () => {
+//    const installer = require('electron-devtools-installer');
+//    const extensions = [
+//        'REACT_DEVELOPER_TOOLS',
+//        'REDUX_DEVTOOLS'
+//    ];
+//    const forceDownload = !!process.env.UPGRADE_EXTENSIONS;
+//    for (const name of extensions) {
+//        try {
+//            await installer.default(installer[name], forceDownload);
+//        } catch (e) {
+//            console.log(`Error installing ${name} extension: ${e.message}`);
+//        }
+//    }
+//};
+
+crashReporter.start({
+    productName: 'Allow2Automate',
+    companyName: 'Allow2',
+    submitURL: 'https://staging-api.allow2.com/crashReport',
+    uploadToServer: false
+});
 
 const createWindow = async() => {
     // Create the browser window.
@@ -24,8 +48,9 @@ const createWindow = async() => {
 
     // Open the DevTools.
     if (isDevMode) {
-        await
-        installExtension(REACT_DEVELOPER_TOOLS);
+        //await installExtensions;
+        await installExtension(REACT_DEVELOPER_TOOLS);
+        await installExtension(REDUX_DEVTOOLS);
         mainWindow.webContents.openDevTools();
     }
 
@@ -39,11 +64,25 @@ const createWindow = async() => {
 };
 
 
-let template = [{
-    label: 'Menu 1',
-    submenu: [{
-        label: 'Menu Item 1'
-    }]
+let template = [
+    {
+        label: 'Menu 1',
+        submenu: [{
+            label: 'Menu Item 1'
+        }]
+    }, {
+        label: 'View',
+        submenu: [
+            {role: 'reload'},
+            {role: 'forcereload'},
+            {role: 'toggledevtools'},
+            {type: 'separator'},
+            {role: 'resetzoom'},
+            {role: 'zoomin'},
+            {role: 'zoomout'},
+            {type: 'separator'},
+            {role: 'togglefullscreen'}
+        ]
 }];
 
 if (process.platform === 'darwin') {
@@ -79,9 +118,9 @@ app.on('ready', () => {
 app.on('window-all-closed', () => {
     // On OS X it is common for applications and their menu bar
     // to stay active until the user quits explicitly with Cmd + Q
-    //if (process.platform !== 'darwin') {
-    app.quit();
-    //}
+    if (process.platform !== 'darwin') {
+        app.quit();
+    }
 });
 
 app.on('activate', () => {

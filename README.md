@@ -1,102 +1,43 @@
-allow2wemo
-==========
+Allow2Automate
+==============
 
-Example of how to monitor and control devices associated with child accounts.
+This is a userspace app for Mac OSX, Linux and Windows that can be deployed to all relevant
+App Stores for these platforms.
 
-refer to https://github.com/Allow2/Allow2.github.io/wiki for more details.
+The intention is:
+1. Provide a base, self contained Electron User Space App that:
+    * Provides a fully self-contained app to run in user space with no elevated privileges.
+    * Manages an overall user connection to the API back end (rest based)
+    * Allows the user to see and monitor Wemo, Homekit and other devices on the local network
+    * Allows to "connect" (pair) devices selectively to (and remove them from) the currently active Allow2 account
+    * May allow some other basic functions in future
+2. Provide a separate capability to detect (and authenticate against?) a separate elevated daemon service that runs
+on system boot.
+3. Includes the ability to automatically install the elevated daemon service where the relevant App Store
+allows the binary to provide that capability.
+4. Includes a reference to how to download and install the separate daemon installer for those App Stores that
+do not permit the background process to be included in the installer (Yes Apple, I am looking at you!).
 
-# Installation
+The base operation is intended to show a "Network Wide" view of all detected automation devices, and provide the ability to
+link/authenticate with them directly, with bridges and otherwise, and de-duplicate any that may come through separate channels
+(ie: direct wemo connections and the same device via a homekit bridge).
 
-Clone the repo, then install packages and run allow2wemo to discover devices.
+# Development notes
 
-```js
+The following provides more detail on the structure and intent of the application and components.
+
+## Installation
+
+This is a standard electron app, to get started simply clone the repo and run npm install.
+
+```sh
+git clone https://github.com/Allow2/Allow2Automate.git
+cd Allow2Automate
 npm install
-node index.js
 ```
 
-If you leave this running and turn devices on and off, you will see the device names
-and uuids.
+To run in dev mode (launch the user space app with hot-loader):
 
-```js
-Wemo Device Found Michaels Light 221244K11009A3
-Wemo Device Found Janes Fan 221524S0000F65
-Wemo Device Found Garage Light 221351K13015D7
-Michaels Light  changed to off
-Garage Light  changed to off
-Michaels Light  changed to on
-Michaels Light  changed to off
+```sh
+npm start
 ```
-
-Here you can see the IDs for Michaels Bedroom Light and Janes Bedroom Fan.
-
-Due to how the discovery process works for Wemo devices, you may need to leave it running for a minute or so
-to have it discover all devices on your network.
-
-## installing the service
-
-Once configured (see below) and tested, you can install the service to start on boot:
-```js
-sudo node install.js
-```
-
-And also uninstall using the appropriate script:
-```js
-sudo node unistall.js
-```
-
-# Pairing
-
-Set up a pairing with Allow2 for any of these devices
-
-```js
-> node node_modules/allow2/a2pair.js -u your@allow2.account.email -p yourpassword 221244K11009A3 "Michaels Light"
-null { status: 'success', pairId: 18066, userId: 10278, children: [{ id: 4238, name: 'Michael' }, { id: 76533, name: 'Jane' }] }
-```
-NOTE: production is not yet live on the new API, so use staging instead (below).
-
-### Working on the staging environment:
-
-To work on the staging environment, pass '-s' to a2pair:
-
-```js
-> node node_modules/allow2/a2pair.js -u your@allow2.account.email -p yourpassword -s 221244K11009A3 "Michaels Light"
-null { status: 'success', pairId: 18066, userId: 10278, children: [{ id: 4238, name: 'Michael' }, { id: 76533, name: 'Jane' }] }
-```
-
-Then set up the config.js file:
-
-```js
-    devices: {
-        '221244K11009A3' : {    // Michael's light
-            userId: 10278,
-            pairId: 18066,
-            deviceToken: 'wSUWvPoeYpFl1tNd',
-            childId: 4238,
-            tz: 'Australia/Sydney',
-            activities: [{
-                id: 7,
-                log: true
-            }],
-            staging: true
-        }
-    },
-```
-note: id 7 = electricity
-note: wSUWvPoeYpFl1tNd = pre-created Wemo Allow2 Device, or you can create your own as a developer for your product.
-
-## A note on pairing
-
-You can configure allow2wemo 2 different ways.
-
-As "devices" in Allow2 typically refer to a single device (such as a light switch, globe, fan, etc)
-then you really should use a2pair to create pairing for each device separately and use those pairings in the config.js file.
-
-You CAN (if individual device granularity is not important to you) use a single pairing for all devices in the config.js file
-but the offshoot will be that pairing should be called "wemo devices" and you will only see one device in Allow2 that represents all
-wemo devices in the house.
-
-## todo
-
-* add a pairing function for initial setup / installation
-* add command-line functions to update pairings
-* add notifications if devices go missing?
