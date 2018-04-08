@@ -1,4 +1,5 @@
 import React from 'react';
+import ReactDOM from 'react-dom';
 import { Provider } from 'react-redux';
 import { ConnectedRouter } from 'react-router-redux';
 import { createMemoryHistory } from 'history';
@@ -17,12 +18,13 @@ const routerHistory = createMemoryHistory();
 const store = configureStore(initialState, routerHistory);
 syncHistoryWithStore(store, routerHistory);
 
-export default class App extends React.Component {
-  render() {
-    return (<Provider store={store}>
+const rootElement = document.querySelector(document.currentScript.getAttribute('data-container'));
+
+ReactDOM.render(
+    <Provider store={store}>
       <ConnectedRouter history={routerHistory}>
         {routes}
       </ConnectedRouter>
-    </Provider>);
-  }
-}
+    </Provider>,
+    rootElement
+);

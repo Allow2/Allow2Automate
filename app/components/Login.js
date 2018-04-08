@@ -15,13 +15,13 @@ export default class Login extends Component {
             username: this.state.username,
             loggedIn: true
         });
-    }
+    };
 
     handleChange = (e) => {
         this.setState({
             username: e.target.value
         });
-    }
+    };
 
     render() {
         return (

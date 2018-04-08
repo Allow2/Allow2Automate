@@ -39,5 +39,19 @@ npm install
 To run in dev mode (launch the user space app with hot-loader):
 
 ```sh
-npm start
+npm run develop
+```
+
+## Deployment
+
+To run in dev mode (launch the user space app with hot-loader):
+
+```sh
+npm run pack
+```
+
+or for a specific platform:
+
+```sh
+npm run pack:mac
 ```

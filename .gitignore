@@ -43,5 +43,7 @@ fabric.properties
 
 node_modules
 **/config.js
-out
-.eslintcache
+dist
+build
+.DS_Store
+*.log
