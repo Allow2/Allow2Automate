@@ -11,7 +11,10 @@
   "repository": "https://github.com/Allow2/Allow2Automate",
   "license": "CUSTOM",
   "dependencies": {
+    "allow2": "^1.0.0",
+    "async": "^2.6.0",
     "babel-runtime": "^6.22.0",
+    "dialogs": "^1.1.20",
     "history": "^4.6.3",
     "prop-types": "^15.5.10",
     "react": "^16.2.0",
@@ -22,7 +25,9 @@
     "redux": "^3.0.0",
     "redux-actions": "^2.2.1",
     "redux-localstorage": "^0.4.1",
-    "redux-thunk": "^2.2.0"
+    "redux-thunk": "^2.2.0",
+    "request": "^2.85.0",
+    "wemo-client": "^0.15.0"
   },
   "devDependencies": {
     "babel-cli": "^6.22.2",

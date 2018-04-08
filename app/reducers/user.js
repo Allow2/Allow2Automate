@@ -6,9 +6,6 @@ export default handleActions({
         return { ...state, ...action.payload };
     },
     [actions.logout]: (state, action) => {
-        let newState = state;
-        delete newState.username;
-        delete newState.loggedIn;
-        return newState;
+        return {};
     }
 }, {});

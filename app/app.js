@@ -22,9 +22,9 @@ const rootElement = document.querySelector(document.currentScript.getAttribute('
 
 ReactDOM.render(
     <Provider store={store}>
-      <ConnectedRouter history={routerHistory}>
-        {routes}
-      </ConnectedRouter>
+        <ConnectedRouter history={routerHistory}>
+            {routes}
+        </ConnectedRouter>
     </Provider>,
     rootElement
 );
