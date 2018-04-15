@@ -55,3 +55,12 @@ or for a specific platform:
 ```sh
 npm run pack:mac
 ```
+
+## Mac App Store
+
+
+```sh
+./sign.sh
+```
+
+Then upload with *Application Loader*

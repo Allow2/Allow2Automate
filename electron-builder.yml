@@ -26,7 +26,7 @@ dmg:
 
 mac:
   target: dmg
-  category: public.app-category.tools
+  category: public.app-category.lifestyle
 
 win:
   target: nsis
