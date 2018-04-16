@@ -27,6 +27,7 @@
     "redux-localstorage": "^0.4.1",
     "redux-thunk": "^2.2.0",
     "request": "^2.85.0",
+    "reselect": "^3.0.1",
     "wemo-client": "^0.15.0"
   },
   "devDependencies": {
