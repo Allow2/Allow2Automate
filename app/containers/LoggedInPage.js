@@ -24,7 +24,8 @@ const mapDispatchToProps = (dispatch) => { // eslint-disable-line no-unused-vars
         },
 
         onPaired: (data) => {
-            device.paired(data);
+            console.log(data);
+            //device.paired(data);
         }
     };
 };

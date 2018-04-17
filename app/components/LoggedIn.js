@@ -7,6 +7,11 @@ import Checkbox from './Checkbox';
 
 var dialogs = Dialogs({});
 
+var deviceTokens = {
+    LightSwitch: 'ttH8fDKKgn4uTiwg',
+    Socket: '9XJDykzCcxhMCci5'
+};
+
 class DeviceRow extends Component {
 
     toggleCheckbox = (device, isChecked) => {
@@ -15,11 +20,14 @@ class DeviceRow extends Component {
 
     assign = (device) => {
         let onPaired = this.props.onPaired;
-        allow2Request('/pairDevice',
+        allow2Request('/rest/pairDevice',
             {
-                headers: {
-                    Bearer: this.props.user.access_token
+                auth: {
+                    bearer: this.props.user.access_token
                 },
+                //headers: {
+                //    Bearer: this.props.user.access_token
+                //},
                 body: {
                     device: device.UDN,
                     name: device.device.friendlyName
@@ -44,6 +52,8 @@ class DeviceRow extends Component {
 
     render() {
         let device = this.props.device;
+        let token = deviceTokens[device.device.device.modelName];
+        let paired = this.props.pairings[device.UDN];
         return (
             <tr key={ device.device.UDN } >
                 <td>{ device.device.device.friendlyName }</td>
@@ -54,7 +64,14 @@ class DeviceRow extends Component {
                         handleCheckboxChange={this.toggleCheckbox.bind(this, device)}
                         />
                 </td>
-                <td><button onClick={this.assign.bind(this, device.device)}>Assign</button></td>
+                <td>
+                    { paired &&
+                        <b>Paired</b>
+                    }
+                    { !paired && token &&
+                        <button onClick={this.assign.bind(this, device.device)}>Assign { token }</button>
+                    }
+                </td>
             </tr>
         );
     }
