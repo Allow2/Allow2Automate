@@ -5,9 +5,11 @@ import thunk from 'redux-thunk';
 
 import user from './reducers/user';
 import devices from './reducers/devices';
+import pairings from './reducers/pairings';
 
 import userActions from './actions/user';
 import deviceActions from './actions/device';
+import pairingActions from './actions/pairing';
 
 export default function configureStore(initialState, routerHistory) {
     const router = routerMiddleware(routerHistory);
@@ -15,12 +17,14 @@ export default function configureStore(initialState, routerHistory) {
     const actionCreators = {
         ...userActions,
         ...deviceActions,
+        ...pairingActions,
         push
     };
 
     const reducers = {
         user,
         devices,
+        pairings,
         routing
     };
 

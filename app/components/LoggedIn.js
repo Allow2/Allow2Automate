@@ -3,13 +3,14 @@ import Wemo from './Wemo';
 import { sortedVisibleDevicesSelector } from '../selectors';
 import { allow2Request } from '../util';
 import Dialogs from 'dialogs';
+import Checkbox from './Checkbox';
 
 var dialogs = Dialogs({});
 
-export default class LoggedIn extends Component {
+class DeviceRow extends Component {
 
-    handleLogout = () => {
-        this.props.onLogout();
+    toggleCheckbox = (device, isChecked) => {
+        device.device.setBinaryState(isChecked ? 1 : 0);
     };
 
     assign = (device) => {
@@ -42,6 +43,30 @@ export default class LoggedIn extends Component {
     };
 
     render() {
+        let device = this.props.device;
+        return (
+            <tr key={ device.device.UDN } >
+                <td>{ device.device.device.friendlyName }</td>
+                <td>
+                    <Checkbox
+                        label=''
+                        isChecked={device.state}
+                        handleCheckboxChange={this.toggleCheckbox.bind(this, device)}
+                        />
+                </td>
+                <td><button onClick={this.assign.bind(this, device.device)}>Assign</button></td>
+            </tr>
+        );
+    }
+}
+
+export default class LoggedIn extends Component {
+
+    handleLogout = () => {
+        this.props.onLogout();
+    };
+
+    render() {
         let devices = sortedVisibleDevicesSelector(this.props);
         return (
             <div>
@@ -51,16 +76,14 @@ export default class LoggedIn extends Component {
                         <tr>
                             <th>Device</th>
                             <th>State</th>
+                            <th>On</th>
                         </tr>
                     </thead>
                     <tbody>
                     { devices.map( (device) =>
+
                         (
-                            <tr key={ device.device.UDN } >
-                                <td>{ device.device.device.friendlyName }</td>
-                                <td>{ device.state ? 'On' : 'Off' }</td>
-                                <td><button onClick={this.assign.bind(this, device.device)}>Assign</button></td>
-                            </tr>
+                            <DeviceRow key={ device.device.UDN } {...this.props} device={device} />
                         )
                     )}
                     </tbody>

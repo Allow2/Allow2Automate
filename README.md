@@ -64,3 +64,8 @@ npm run pack:mac
 ```
 
 Then upload with *Application Loader*
+
+
+# Notes
+
+https://www.npmjs.com/package/electron-sudo

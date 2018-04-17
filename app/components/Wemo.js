@@ -14,6 +14,11 @@ export default class Wemo extends Component {
         setInterval(this.pollDevices.bind(this), 10000);
     }
 
+    //changeState(device, state) {
+    //    var client = (device.device);
+    //    client.setBinaryState(state ? 1 : 0);
+    //}
+
     // need to call this a few times (and every so often) to discover all devices, and devices may change.
     pollDevices() {
 
@@ -54,8 +59,6 @@ export default class Wemo extends Component {
             //    existing.on('binaryState', null);
             //    //existing.destroy();
             //}
-
-            //clients[deviceInfo.serialNumber] = client;
 
             client.on('error', function(err) {
                 console.log(deviceInfo.friendlyName, deviceInfo.serialNumber, 'Error: %s', err.code);
