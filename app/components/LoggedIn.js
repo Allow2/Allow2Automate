@@ -4,6 +4,7 @@ import { sortedVisibleDevicesSelector } from '../selectors';
 import { allow2Request } from '../util';
 import Dialogs from 'dialogs';
 import Checkbox from './Checkbox';
+import deviceActions from '../actions/device';
 
 var dialogs = Dialogs({});
 
@@ -15,7 +16,16 @@ var deviceTokens = {
 class DeviceRow extends Component {
 
     toggleCheckbox = (device, isChecked) => {
-        device.device.setBinaryState(isChecked ? 1 : 0);
+        this.props.onDeviceActive( device.device.UDN, true );
+        device.device.setBinaryState(isChecked ? 1 : 0, function(err, response) {
+            this.props.onDeviceActive(device.device.UDN, false);
+            if (err || ( response.BinaryState == undefined )) {
+                return;
+            }
+            device.state = ( response.BinaryState != '0' );
+            this.props.onDeviceUpdate({ [device.device.UDN]: device });
+
+        }.bind(this));
     };
 
     assign = (device) => {
@@ -56,11 +66,19 @@ class DeviceRow extends Component {
         let paired = this.props.pairings[device.UDN];
         return (
             <tr key={ device.device.UDN } >
-                <td>{ device.device.device.friendlyName }</td>
+                <td>
+                    { token &&
+                    <span>{ device.device.device.friendlyName }</span>
+                    }
+                    { !token &&
+                    <span><i style={{ color: '#555555' }}>{ device.device.device.friendlyName }</i></span>
+                    }
+                </td>
                 <td>
                     <Checkbox
                         label=''
                         isChecked={device.state}
+                        isDisabled={!token || device.active ? true : false}
                         handleCheckboxChange={this.toggleCheckbox.bind(this, device)}
                         />
                 </td>
@@ -70,6 +88,9 @@ class DeviceRow extends Component {
                     }
                     { !paired && token &&
                         <button onClick={this.assign.bind(this, device.device)}>Assign { token }</button>
+                    }
+                    { !token &&
+                        <i style={{ color: '#555555' }}>Device not yet supported</i>
                     }
                 </td>
             </tr>
@@ -84,7 +105,15 @@ export default class LoggedIn extends Component {
     };
 
     render() {
-        let devices = sortedVisibleDevicesSelector(this.props);
+        let devices = sortedVisibleDevicesSelector(this.props).reduce(function(memo, device) {
+            let token = deviceTokens[device.device.device.modelName];
+            if (token) {
+                memo.supported.push(device);
+            } else {
+                memo.notSupported.push(device);
+            }
+            return memo;
+        }, { supported: [], notSupported: [] });
         return (
             <div>
                 <h2>Visible Devices</h2>
@@ -97,14 +126,39 @@ export default class LoggedIn extends Component {
                         </tr>
                     </thead>
                     <tbody>
-                    { devices.map( (device) =>
-
+                    { devices.supported.map( (device) =>
                         (
                             <DeviceRow key={ device.device.UDN } {...this.props} device={device} />
                         )
                     )}
                     </tbody>
                 </table>
+                { devices.notSupported.length > 0 &&
+                <div>
+                    <h2>Unsupported Devices</h2>
+                    If you would like any of these devices supported, please contact us at support@allow2.com.
+                    <div>
+                        <table>
+                            <thead>
+                            <tr>
+                                <th>Device</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            { devices.supported.map( (device) =>
+                                    (
+                                        <tr key={ device.device.UDN } >
+                                            <td>
+                                                <span>{ device.device.device.friendlyName }</span>
+                                            </td>
+                                        </tr>
+                                    )
+                            )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                }
                 <p>
                     <button onClick={this.handleLogout}>Log Off</button>
                 </p>

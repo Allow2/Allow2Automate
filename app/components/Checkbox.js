@@ -9,7 +9,8 @@ class Checkbox extends Component {
     };
 
     render() {
-        const { label, isChecked } = this.props;
+        const { label, isChecked, isDisabled } = this.props;
+        let disabled = isDisabled ? { disabled : 'disabled'} : {};
 
         return (
             <div className="checkbox">
@@ -17,8 +18,9 @@ class Checkbox extends Component {
                     <input
                         type="checkbox"
                         value={label}
-                        defaultChecked={isChecked}
+                        checked={isChecked == true}
                         onChange={this.toggleCheckboxChange}
+                        {...disabled}
                         />
 
                     {label}
