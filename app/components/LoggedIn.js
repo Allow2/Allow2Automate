@@ -5,8 +5,10 @@ import { allow2Request } from '../util';
 import Dialogs from 'dialogs';
 import Checkbox from './Checkbox';
 import deviceActions from '../actions/device';
-const modal = require('electron-modal');
-const path = require('path');
+import modal from 'electron-modal';
+import path from 'path';
+import url from 'url';
+import { remote } from 'electron';
 
 var dialogs = Dialogs({});
 
@@ -32,57 +34,19 @@ class DeviceRow extends Component {
 
 
     assign = (device) => {
-        let onPaired = this.props.onPaired;
-        console.log(path.join(__dirname, '../pairModal.html'));
-        modal.open(path.join(__dirname, '../pairModal.html'), {
-
-            // Any BrowserWindow options
-            width: 400,
-            height: 300
-
-        }, {
-
-            // Any data you want to pass to the modal
-            title: 'Assign ' + device.device.friendlyName
-
-        }).then((instance) => {
-            instance.on('increment', () => {
-                console.log('Increment event received!');
-            });
-
-            instance.on('decrement', () => {
-                console.log('Decrement event received!');
-            });
+        //let onPaired = this.props.onPaired;
+        //function openModal() {
+        let win = new remote.BrowserWindow({
+            parent: remote.getCurrentWindow(),
+            modal: true
         });
 
-        //allow2Request('/rest/pairDevice',
-        //    {
-        //        auth: {
-        //            bearer: this.props.user.access_token
-        //        },
-        //        //headers: {
-        //        //    Bearer: this.props.user.access_token
-        //        //},
-        //        body: {
-        //            device: device.UDN,
-        //            name: device.device.friendlyName
-        //        }
-        //    },
-        //
-        //    function (error, response, body) {
-        //        if (error) {
-        //            return dialogs.alert(error.toString());
-        //        }
-        //        if (!response) {
-        //            return dialogs.alert('Invalid Response');
-        //        }
-        //        if (body && body.message) {
-        //            return dialogs.alert(body.message);
-        //        }
-        //        return dialogs.alert('Oops');
-        //    },
-        //
-        //    onPaired);
+        //win.loadURL(theUrl);
+        win.loadURL(url.format({
+            pathname: path.join(__dirname, '../pairModal.html'),
+            protocol: 'file:',
+            slashes: true
+        }));
     };
 
     render() {
