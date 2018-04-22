@@ -7,29 +7,16 @@ import {
     getInitialStateRenderer
     } from 'electron-redux';
 
-import user from './reducers/user';
-import devices from './reducers/devices';
-import pairings from './reducers/pairings';
+import reducers from './reducers';
 
-import userActions from './actions/user';
-import deviceActions from './actions/device';
-import pairingActions from './actions/pairing';
+import actionCreators from './actions';
 
 export default function configureStore(routerHistory) {
     const router = routerHistory && routerMiddleware(routerHistory);
 
-    const actionCreators = {
-        ...userActions,
-        ...deviceActions,
-        ...pairingActions,
+    const allActionCreators = {
+        ...actionCreators,
         push
-    };
-
-    const reducers = {
-        user,
-        devices,
-        pairings,
-        routing
     };
 
     const middlewares = [
@@ -41,18 +28,18 @@ export default function configureStore(routerHistory) {
         middlewares.push(router);
     }
 
-    //const composeEnhancers = (() => {
-    //    const compose_ = window && window.__REDUX_DEVTOOLS_EXTENSION_COMPOSE__;
-    //    if (process.env.NODE_ENV === 'development' && compose_) {
-    //        return compose_({actionCreators});
-    //    }
-    //    return compose;
-    //})();
+    const composeEnhancers = (() => {
+        const compose_ = window && window.__REDUX_DEVTOOLS_EXTENSION_COMPOSE__;
+        if (process.env.NODE_ENV === 'development' && compose_) {
+            return compose_({ allActionCreators });
+        }
+        return compose;
+    })();
 
     const rootReducer = combineReducers(reducers);
     const initialState = getInitialStateRenderer();
 
-    const store = createStore(rootReducer, initialState, applyMiddleware(...middlewares));
+    const store = createStore(rootReducer, initialState, composeEnhancers(applyMiddleware(...middlewares)));
 
     if (initialState.user && initialState.user.user && initialState.user.user.id) {
         store.dispatch(replace('/loggedin'));

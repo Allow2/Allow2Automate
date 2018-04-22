@@ -1,41 +1,20 @@
 import { createStore, applyMiddleware, combineReducers, compose } from 'redux';
 import { replace } from 'react-router-redux';
-
-var LocalStorage = require('node-localstorage').LocalStorage;
-
 import thunk from 'redux-thunk';
-
 import {
     forwardToRenderer,
     triggerAlias,               // nb: https://www.npmjs.com/package/electron-redux
     replayActionMain,
     } from 'electron-redux';
+import reducers from './reducers';
 
-import user from './reducers/user';
-import devices from './reducers/devices';
-import pairings from './reducers/pairings';
-
-import userActions from './actions/user';
-import deviceActions from './actions/device';
-import pairingActions from './actions/pairing';
+var LocalStorage = require('node-localstorage').LocalStorage;
 
 const localStorageKey = 'Allow2Automate';
 
 export default function configureStore() {
 
     console.log('parent state init');
-
-    const actionCreators = {
-        ...userActions,
-        ...deviceActions,
-        ...pairingActions
-    };
-
-    const reducers = {
-        user,
-        devices,
-        pairings
-    };
 
     const middlewares = [
         thunk,
