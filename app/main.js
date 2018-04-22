@@ -1,6 +1,7 @@
 import path from 'path';
 import url from 'url';
 import {app, crashReporter, BrowserWindow, Menu} from 'electron';
+const modal = require('electron-modal');
 
 const isDevelopment = (process.env.NODE_ENV === 'development');
 
@@ -39,6 +40,11 @@ app.on('window-all-closed', () => {
 });
 
 app.on('ready', async () => {
+
+    // Run this on the ready event to setup everything
+    // needed on the main process.
+    modal.setup();
+
     if (isDevelopment) {
         await installExtensions();
     }
