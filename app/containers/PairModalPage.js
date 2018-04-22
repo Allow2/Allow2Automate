@@ -2,21 +2,24 @@ import { connect } from 'react-redux';
 import { push } from 'react-router-redux';
 import { bindActionCreators } from 'redux';
 import Pair from '../components/Pair';
-import userActions from '../actions/user';
-import deviceActions from '../actions/device';
+import allActions from '../actions';
 
 const mapStateToProps = (state) => {
     return state;
 };
 
 const mapDispatchToProps = (dispatch) => { // eslint-disable-line no-unused-vars
-    const user = bindActionCreators(userActions, dispatch);
-    const device = bindActionCreators(deviceActions, dispatch);
+    const actions = bindActionCreators(allActions, dispatch);
     return {
+
+        onNewData: (data) => {
+            console.log(data);
+            actions.newData(data);
+        },
 
         onPaired: (data) => {
             console.log(data);
-            //device.paired(data);
+            //.devicePaired(data);
         }
     };
 };

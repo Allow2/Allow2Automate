@@ -25,6 +25,7 @@ export default function configureStore() {
 
     const rootReducer = combineReducers(reducers);
     const initialState = JSON.parse(localStorage.getItem(localStorageKey) || '{}');
+    initialState.children = {};
     const store = createStore(rootReducer, initialState, applyMiddleware(...middlewares));
 
     replayActionMain(store);

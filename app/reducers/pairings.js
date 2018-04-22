@@ -1,8 +1,8 @@
 import { handleActions } from 'redux-actions';
-import pairing from '../actions/pairing';
+import pairing from '../actions';
 
 export default handleActions({
-    [pairing.update]: (state, action) => {
+    [pairing.pairUpdate]: (state, action) => {
         return { ...state, ...action.payload };
     }
 }, {});

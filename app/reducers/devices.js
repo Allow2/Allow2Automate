@@ -1,12 +1,12 @@
 import { handleActions } from 'redux-actions';
-import actions from '../actions/device';
+import actions from '../actions';
 
 export default handleActions({
-    [actions.update]: (state, action) => {
+    [actions.deviceUpdate]: (state, action) => {
         return { ...state, ...action.payload };
     },
 
-    [actions.setActive]: (state, action) => {
+    [actions.deviceActive]: (state, action) => {
         let newState = Object.assign({}, state);
         var device = newState[action.payload.UDN];
         if (device) {
@@ -16,7 +16,7 @@ export default handleActions({
         return newState;
     },
 
-    [actions.paired]: (state, action) => {
+    [actions.devicePaired]: (state, action) => {
         //let newState = Object.assign({}, state);
         //for (var grant of action.result) {
         //    let key = 'user_' + grant.grantee.id;

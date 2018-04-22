@@ -4,7 +4,7 @@ import { sortedVisibleDevicesSelector } from '../selectors';
 import { allow2Request } from '../util';
 import Dialogs from 'dialogs';
 import Checkbox from './Checkbox';
-import deviceActions from '../actions/device';
+//import deviceActions from '../actions/device';
 import modal from 'electron-modal';
 import path from 'path';
 import url from 'url';

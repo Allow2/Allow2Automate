@@ -20,11 +20,11 @@ const mapDispatchToProps = (dispatch) => { // eslint-disable-line no-unused-vars
         },
 
         onDeviceUpdate: (data) => {
-            device.update(data);
+            device.deviceUpdate(data);
         },
 
         onDeviceActive: (UDN, active) => {
-            device.setActive({
+            device.deviceActive({
                 UDN: UDN,
                 active: active
             });
@@ -32,7 +32,7 @@ const mapDispatchToProps = (dispatch) => { // eslint-disable-line no-unused-vars
 
         onPaired: (data) => {
             console.log(data);
-            //device.paired(data);
+            //device.devicePaired(data);
         }
     };
 };
