@@ -44,7 +44,7 @@ npm run develop
 
 ## Deployment
 
-To run in dev mode (launch the user space app with hot-loader):
+To build for all platforms:
 
 ```sh
 npm run pack
@@ -68,4 +68,5 @@ Then upload with *Application Loader*
 
 # Notes
 
-https://www.npmjs.com/package/electron-sudo
+For installation of the daemon helper:
+[https://www.npmjs.com/package/electron-sudo](https://www.npmjs.com/package/electron-sudo)
