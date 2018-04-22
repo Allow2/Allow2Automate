@@ -9,7 +9,7 @@ var dialogs = Dialogs({});
 
 export default class Pair extends Component {
     static propTypes = {
-        onLogin: PropTypes.func.isRequired
+        onPaired: PropTypes.func.isRequired
     };
 
     handlePair = () => {

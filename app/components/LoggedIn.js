@@ -47,6 +47,8 @@ class DeviceRow extends Component {
             protocol: 'file:',
             slashes: true
         }));
+
+        win.webContents.openDevTools();
     };
 
     render() {
@@ -131,14 +133,22 @@ export default class LoggedIn extends Component {
                             <thead>
                             <tr>
                                 <th>Device</th>
+                                <th>Type</th>
+                                <th>Version</th>
                             </tr>
                             </thead>
                             <tbody>
-                            { devices.supported.map( (device) =>
+                            { devices.notSupported.map( (device) =>
                                     (
                                         <tr key={ device.device.UDN } >
                                             <td>
                                                 <span>{ device.device.device.friendlyName }</span>
+                                            </td>
+                                            <td>
+                                                <span>{ device.device.device.modelName }</span>
+                                            </td>
+                                            <td>
+                                                <span>{ device.device.device.modelNumber }</span>
                                             </td>
                                         </tr>
                                     )

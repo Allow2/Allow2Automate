@@ -47,3 +47,6 @@ dist
 build
 .DS_Store
 *.log
+
+# localStorage
+store

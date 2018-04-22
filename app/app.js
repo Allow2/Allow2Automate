@@ -4,7 +4,7 @@ import { Provider } from 'react-redux';
 import { ConnectedRouter } from 'react-router-redux';
 import { createMemoryHistory } from 'history';
 import routes from './routes';
-import configureStore from './store';
+import configureStore from './childStore';
 
 const syncHistoryWithStore = (store, history) => {
   const { routing } = store.getState();
@@ -13,9 +13,8 @@ const syncHistoryWithStore = (store, history) => {
   }
 };
 
-const initialState = {};
 const routerHistory = createMemoryHistory();
-const store = configureStore(initialState, routerHistory);
+const store = configureStore(routerHistory);
 syncHistoryWithStore(store, routerHistory);
 
 const rootElement = document.querySelector(document.currentScript.getAttribute('data-container'));

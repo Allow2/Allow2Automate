@@ -2,11 +2,14 @@ import path from 'path';
 import url from 'url';
 import {app, crashReporter, BrowserWindow, Menu} from 'electron';
 const modal = require('electron-modal');
+import configureStore from './mainStore';
 
 const isDevelopment = (process.env.NODE_ENV === 'development');
 
 let mainWindow = null;
 let forceQuit = false;
+
+const store = configureStore();
 
 const installExtensions = async () => {
     const installer = require('electron-devtools-installer');
@@ -76,6 +79,7 @@ app.on('ready', async () => {
         // 3. ⌘+Q should close the window and quit the app
         if (process.platform === 'darwin') {
             mainWindow.on('close', function (e) {
+                store.save();
                 if (!forceQuit) {
                     e.preventDefault();
                     mainWindow.hide();
@@ -87,10 +91,13 @@ app.on('ready', async () => {
             });
 
             app.on('before-quit', () => {
+                store.save();
                 forceQuit = true;
             });
         } else {
             mainWindow.on('closed', () => {
+                console.log('Persisting');
+                store.save();
                 mainWindow = null;
             });
         }
