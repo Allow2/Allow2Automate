@@ -2,6 +2,8 @@ import React, { Component } from 'react';
 import PropTypes from 'prop-types';
 import { allow2Login } from '../util';
 import Dialogs from 'dialogs';
+import RaisedButton from 'material-ui/RaisedButton';
+import TextField from 'material-ui/TextField';
 
 var dialogs = Dialogs({});
 
@@ -45,13 +47,25 @@ export default class Login extends Component {
             <div>
                 <h2>Login</h2>
                 <p>
-                    Email: <input onChange={this.handleChange} type="text" name="email" value={this.state.email}/>
+                    <TextField
+                        floatingLabelText="Email"
+                        onChange={this.handleChange}
+                        name="email"
+                        value={this.state.email} />
                 </p>
                 <p>
-                    Password: <input onChange={this.handleChange} type="password" name="password" value={this.state.password}/>
+                    <TextField
+                        type="password"
+                        hintText=""
+                        floatingLabelText="Password"
+                        onChange={this.handleChange}
+                        name="password"
+                        value={this.state.password} />
                 </p>
                 <p>
-                    <button onClick={this.handleLogin}>Log In</button>
+                    <RaisedButton onClick={this.handleLogin}>
+                        Log In
+                    </RaisedButton>
                 </p>
             </div>
         );

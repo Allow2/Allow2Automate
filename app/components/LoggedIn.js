@@ -1,4 +1,5 @@
 import React, { Component } from 'react';
+import RaisedButton from 'material-ui/RaisedButton';
 import Wemo from './Wemo';
 import { sortedVisibleDevicesSelector } from '../selectors';
 import { allow2Request } from '../util';
@@ -159,7 +160,9 @@ export default class LoggedIn extends Component {
                 </div>
                 }
                 <p>
-                    <button onClick={this.handleLogout}>Log Off</button>
+                    <RaisedButton onClick={this.handleLogout}>
+                        Log Off
+                    </RaisedButton>
                 </p>
                 <Wemo onDeviceUpdate={this.props.onDeviceUpdate} />
             </div>
