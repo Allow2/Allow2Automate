@@ -49,6 +49,7 @@ app.on('ready', async () => {
         minWidth: 640,
         minHeight: 480,
         show: false,
+        title: 'Allow2Automate',
         icon: path.join(__dirname, 'assets/icons/png/64x64.png')
     });
 
