@@ -28,11 +28,6 @@ const mapDispatchToProps = (dispatch) => { // eslint-disable-line no-unused-vars
                 UDN: UDN,
                 active: active
             });
-        },
-
-        onPaired: (data) => {
-            console.log(data);
-            //device.devicePaired(data);
         }
     };
 };

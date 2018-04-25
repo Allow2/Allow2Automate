@@ -6,6 +6,7 @@ import { sortedVisibleChildrenSelector } from '../selectors';
 import AppBar from 'material-ui/AppBar';
 import IconButton from 'material-ui/IconButton';
 import NavigationClose from 'material-ui/svg-icons/navigation/close';
+import CircularProgress from 'material-ui/CircularProgress';
 import FlatButton from 'material-ui/FlatButton';
 import Avatar from 'material-ui/Avatar';
 import {
@@ -21,7 +22,7 @@ const remote = require('electron').remote;
 
 var dialogs = Dialogs({});
 
-const apiUrl = 'https://api.allow2.com';
+const apiUrl = 'https://staging-api.allow2.com';
 
 function avatarURL(userId, child) {
     var url = apiUrl + '/avatar?key=account' + userId + '&size=medium';
@@ -86,25 +87,33 @@ export default class Pair extends Component {
             this.props.onNewData);
     };
 
-    handlePair = (test1, test2) => {
+    handlePair = (childArray) => {
         this.setState({
             ...this.state,
             pairing: true
         });
 
-        return console.log(test1, test2);
+        let device = this.state.device;
+        let onPaired = this.props.onPaired;
+
         allow2Request('/rest/pairDevice',
             {
                 auth: {
                     bearer: this.props.user.access_token
                 },
                 body: {
-                    device: this.state.device.UDN,
-                    name: device.device.friendlyName
+                    device: device.UDN,
+                    name: device.device.friendlyName,
+                    token: this.state.token
                 }
             },
 
             function (error, response, body) {
+                console.log(error, response, body);
+                this.setState({
+                    ...this.state,
+                    pairing: false
+                });
                 if (error) {
                     return dialogs.alert(error.toString());
                 }
@@ -114,10 +123,20 @@ export default class Pair extends Component {
                 if (body && body.message) {
                     return dialogs.alert(body.message);
                 }
-                return dialogs.alert('Oops');
-            },
+                return dialogs.alert(response.statusMessage);
+            }.bind(this),
 
-            onPaired);
+            function(data) {
+                console.log(data);
+                return this.setState({
+                        ...this.state,
+                    pairing: false
+                });
+                onPaired(data);
+                var window = remote.getCurrentWindow();
+                window.close();
+            }.bind(this)
+        );
     };
 
     handleChange = (e) => {
@@ -135,11 +154,12 @@ export default class Pair extends Component {
         let user = this.props.user;
         let children = sortedVisibleChildrenSelector(this.props);
         let title = this.state.device ? this.state.device.device.friendlyName : 'Loading...';
+        let leftButton = this.state.pairing || !this.state.device ? <CircularProgress /> : <NavigationClose />;
         return (
             <div>
                 <AppBar
                     title={ title }
-                    iconElementLeft={<IconButton disabled={this.state.pairing} onClick={this.handleCancel}><NavigationClose /></IconButton>}
+                    iconElementLeft={<IconButton disabled={this.state.pairing} onClick={this.handleCancel}>{leftButton}</IconButton>}
                     iconElementRight={<FlatButton disabled={this.state.pairing} onClick={this.handleCancel} label="Cancel" />}
                     />
                 { children.length < 1 &&

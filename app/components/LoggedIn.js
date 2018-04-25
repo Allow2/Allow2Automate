@@ -30,6 +30,10 @@ var deviceTokens = {
     LightSwitch: 'ttH8fDKKgn4uTiwg',
     Socket: '9XJDykzCcxhMCci5'
 };
+//var deviceTokens = {
+//    LightSwitch: 'TczDIlwkOxMVlCTJ',
+//    Socket: 'Bw6tUTmmHVykUxGM'
+//};
 
 //class DeviceRow extends Component {
 //
