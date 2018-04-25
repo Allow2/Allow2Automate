@@ -4,6 +4,9 @@ import { allow2Login } from '../util';
 import Dialogs from 'dialogs';
 import RaisedButton from 'material-ui/RaisedButton';
 import TextField from 'material-ui/TextField';
+import Avatar from 'material-ui/Avatar';
+import AppBar from 'material-ui/AppBar';
+import Person from 'material-ui/svg-icons/social/person';
 
 var dialogs = Dialogs({});
 
@@ -45,28 +48,25 @@ export default class Login extends Component {
     render() {
         return (
             <div>
-                <h2>Login</h2>
-                <p>
-                    <TextField
-                        floatingLabelText="Email"
-                        onChange={this.handleChange}
-                        name="email"
-                        value={this.state.email} />
-                </p>
-                <p>
-                    <TextField
-                        type="password"
-                        hintText=""
-                        floatingLabelText="Password"
-                        onChange={this.handleChange}
-                        name="password"
-                        value={this.state.password} />
-                </p>
-                <p>
-                    <RaisedButton onClick={this.handleLogin}>
-                        Log In
-                    </RaisedButton>
-                </p>
+                <AppBar
+                    title="Login to Allow2"
+                    iconElementLeft={<Avatar icon={<Person />} />}
+                    />
+                <TextField
+                    floatingLabelText="Email"
+                    onChange={this.handleChange}
+                    name="email"
+                    value={this.state.email} />
+                <TextField
+                    type="password"
+                    hintText=""
+                    floatingLabelText="Password"
+                    onChange={this.handleChange}
+                    name="password"
+                    value={this.state.password} />
+                <RaisedButton onClick={this.handleLogin}>
+                    Log In
+                </RaisedButton>
             </div>
         );
     }

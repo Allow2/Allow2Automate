@@ -94,3 +94,5 @@ wemo devices in the house.
 
 *
 * add notifications if devices go missing?
+
+Installer: https://github.com/nexe/nexe ?

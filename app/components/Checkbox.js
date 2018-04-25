@@ -1,31 +1,23 @@
 import React, { Component, PropTypes } from 'react';
+import Toggle from 'material-ui/Toggle';
 
 class Checkbox extends Component {
 
-    toggleCheckboxChange = () => {
-        const { handleCheckboxChange, isChecked } = this.props;
-
-        handleCheckboxChange(!isChecked);
+    toggleCheckboxChange = (event, isOn) => {
+        this.props.handleCheckboxChange(isOn);
     };
 
     render() {
         const { label, isChecked, isDisabled } = this.props;
-        let disabled = isDisabled ? { disabled : 'disabled'} : {};
+        //let disabled = isDisabled ? { disabled : true} : {};
 
         return (
-            <div className="checkbox">
-                <label>
-                    <input
-                        type="checkbox"
-                        value={label}
-                        checked={isChecked == true}
-                        onChange={this.toggleCheckboxChange}
-                        {...disabled}
-                        />
-
-                    {label}
-                </label>
-            </div>
+            <Toggle
+                value={label}
+                toggled={isChecked == true}
+                onToggle={this.toggleCheckboxChange}
+                disabled={isDisabled}
+                />
         );
     }
 }

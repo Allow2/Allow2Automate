@@ -1,5 +1,8 @@
 import React, { Component } from 'react';
-import RaisedButton from 'material-ui/RaisedButton';
+import Avatar from 'material-ui/Avatar';
+import FlatButton from 'material-ui/FlatButton';
+import AppBar from 'material-ui/AppBar';
+import Person from 'material-ui/svg-icons/social/person';
 import Wemo from './Wemo';
 import { sortedVisibleDevicesSelector } from '../selectors';
 import { allow2Request } from '../util';
@@ -11,6 +14,16 @@ import path from 'path';
 import url from 'url';
 import { remote } from 'electron';
 
+import {
+    Table,
+    TableBody,
+    TableHeader,
+    TableHeaderColumn,
+    TableRow,
+    TableRowColumn,
+    } from 'material-ui/Table';
+import {Tabs, Tab} from 'material-ui/Tabs';
+
 var dialogs = Dialogs({});
 
 var deviceTokens = {
@@ -18,7 +31,81 @@ var deviceTokens = {
     Socket: '9XJDykzCcxhMCci5'
 };
 
-class DeviceRow extends Component {
+//class DeviceRow extends Component {
+//
+//    toggleCheckbox = (device, isChecked) => {
+//        this.props.onDeviceActive( device.device.UDN, true );
+//        device.device.setBinaryState(isChecked ? 1 : 0, function(err, response) {
+//            this.props.onDeviceActive(device.device.UDN, false);
+//            if (err || ( response.BinaryState == undefined )) {
+//                return;
+//            }
+//            device.state = ( response.BinaryState != '0' );
+//            this.props.onDeviceUpdate({ [device.device.UDN]: device });
+//
+//        }.bind(this));
+//    };
+//
+//
+//    assign = (device) => {
+//        //let onPaired = this.props.onPaired;
+//        //function openModal() {
+//        let win = new remote.BrowserWindow({
+//            parent: remote.getCurrentWindow(),
+//            modal: true
+//        });
+//
+//
+//        //win.loadURL(theUrl);
+//        win.loadURL(url.format({
+//            pathname: path.join(__dirname, '../pairModal.html'),
+//            protocol: 'file:',
+//            slashes: true
+//        }));
+//
+//        win.webContents.openDevTools();
+//    };
+//
+//    render() {
+//        let device = this.props.device;
+//        let token = deviceTokens[device.device.device.modelName];
+//        let paired = this.props.pairings[device.device.UDN];
+//        console.log(device);
+//        return (
+//            <TableRow>
+//                <TableRowColumn>
+//                    { token &&
+//                    <span>{ device.device.device.friendlyName }</span>
+//                    }
+//                    { !token &&
+//                    <span><i style={{ color: '#555555' }}>{ device.device.device.friendlyName }</i></span>
+//                    }
+//                </TableRowColumn>
+//                <TableRowColumn>
+//                    <Checkbox
+//                        label=''
+//                        isChecked={device.state}
+//                        isDisabled={!token || device.active ? true : false}
+//                        handleCheckboxChange={this.toggleCheckbox.bind(this, device)}
+//                        />
+//                </TableRowColumn>
+//                <TableRowColumn>
+//                    { paired &&
+//                        <b>Paired</b>
+//                    }
+//                    { !paired && token &&
+//                        <button onClick={this.assign.bind(this, device.device)}>Assign { token }</button>
+//                    }
+//                    { !token &&
+//                        <i style={{ color: '#555555' }}>Device not yet supported</i>
+//                    }
+//                </TableRowColumn>
+//            </TableRow>
+//        );
+//    }
+//}
+
+export default class LoggedIn extends Component {
 
     toggleCheckbox = (device, isChecked) => {
         this.props.onDeviceActive( device.device.UDN, true );
@@ -34,13 +121,14 @@ class DeviceRow extends Component {
     };
 
 
-    assign = (device) => {
+    assign = (device, token) => {
         //let onPaired = this.props.onPaired;
         //function openModal() {
         let win = new remote.BrowserWindow({
             parent: remote.getCurrentWindow(),
             modal: true
         });
+
 
         //win.loadURL(theUrl);
         win.loadURL(url.format({
@@ -49,48 +137,12 @@ class DeviceRow extends Component {
             slashes: true
         }));
 
+        win.webContents.on('did-finish-load', () => {
+            win.webContents.send('device', { device: device, token: token });
+        });
+
         win.webContents.openDevTools();
     };
-
-    render() {
-        let device = this.props.device;
-        let token = deviceTokens[device.device.device.modelName];
-        let paired = this.props.pairings[device.UDN];
-        return (
-            <tr key={ device.device.UDN } >
-                <td>
-                    { token &&
-                    <span>{ device.device.device.friendlyName }</span>
-                    }
-                    { !token &&
-                    <span><i style={{ color: '#555555' }}>{ device.device.device.friendlyName }</i></span>
-                    }
-                </td>
-                <td>
-                    <Checkbox
-                        label=''
-                        isChecked={device.state}
-                        isDisabled={!token || device.active ? true : false}
-                        handleCheckboxChange={this.toggleCheckbox.bind(this, device)}
-                        />
-                </td>
-                <td>
-                    { paired &&
-                        <b>Paired</b>
-                    }
-                    { !paired && token &&
-                        <button onClick={this.assign.bind(this, device.device)}>Assign { token }</button>
-                    }
-                    { !token &&
-                        <i style={{ color: '#555555' }}>Device not yet supported</i>
-                    }
-                </td>
-            </tr>
-        );
-    }
-}
-
-export default class LoggedIn extends Component {
 
     handleLogout = () => {
         this.props.onLogout();
@@ -106,65 +158,115 @@ export default class LoggedIn extends Component {
             }
             return memo;
         }, { supported: [], notSupported: [] });
+        let user = this.props.user;
+        let name = ( user.user && user.user.firstName ) || "...";
+        let avatar = ( user.user && <Avatar src={'https://api.allow2.com/avatar?key=account' + user.user.id + '&size=medium'} />) ||
+            <Avatar icon={<Person />} />;
         return (
             <div>
-                <h2>Visible Devices</h2>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Device</th>
-                            <th>State</th>
-                            <th>On</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                    { devices.supported.map( (device) =>
-                        (
-                            <DeviceRow key={ device.device.UDN } {...this.props} device={device} />
-                        )
-                    )}
-                    </tbody>
-                </table>
-                { devices.notSupported.length > 0 &&
-                <div>
-                    <h2>Unsupported Devices</h2>
-                    If you would like any of these devices supported, please contact us at support@allow2.com.
-                    <div>
-                        <table>
-                            <thead>
-                            <tr>
-                                <th>Device</th>
-                                <th>Type</th>
-                                <th>Version</th>
-                            </tr>
-                            </thead>
-                            <tbody>
-                            { devices.notSupported.map( (device) =>
-                                    (
-                                        <tr key={ device.device.UDN } >
-                                            <td>
+                <AppBar
+                    title={name}
+                    iconElementLeft={avatar}
+                    iconElementRight={<FlatButton label="Log Off" onClick={this.handleLogout} />}
+                    />
+                <Tabs>
+                    <Tab label="Devices" >
+                        <Table>
+                            <TableHeader displaySelectAll={false}>
+                                <TableRow>
+                                    <TableHeaderColumn>Device</TableHeaderColumn>
+                                    <TableHeaderColumn>On</TableHeaderColumn>
+                                    <TableHeaderColumn>Child</TableHeaderColumn>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody
+                                displayRowCheckbox={false}
+                                showRowHover={true}
+                                stripedRows={true}>
+                            { devices.supported.map( function(device) {
+                                    let token = deviceTokens[device.device.device.modelName];
+                                    let paired = this.props.pairings[device.device.UDN];
+                                    return (
+                                        <TableRow
+                                            key={device.device.UDN}
+                                            selectable={false}>
+                                            <TableRowColumn>
+                                                { token &&
                                                 <span>{ device.device.device.friendlyName }</span>
-                                            </td>
-                                            <td>
-                                                <span>{ device.device.device.modelName }</span>
-                                            </td>
-                                            <td>
-                                                <span>{ device.device.device.modelNumber }</span>
-                                            </td>
-                                        </tr>
-                                    )
+                                                }
+                                                { !token &&
+                                                <span><i style={{ color: '#555555' }}>{ device.device.device.friendlyName }</i></span>
+                                                }
+                                            </TableRowColumn>
+                                            <TableRowColumn>
+                                                <Checkbox
+                                                    label=''
+                                                    isChecked={device.state}
+                                                    isDisabled={!token || device.active ? true : false}
+                                                    handleCheckboxChange={this.toggleCheckbox.bind(this, device)}
+                                                    />
+                                            </TableRowColumn>
+                                            <TableRowColumn>
+                                                { paired &&
+                                                <b>Paired</b>
+                                                }
+                                                { !paired && token &&
+                                                <FlatButton label="Assign" onClick={this.assign.bind(this, device.device, token)} />
+                                                }
+                                                { !token &&
+                                                <i style={{ color: '#555555' }}>Device not yet supported</i>
+                                                }
+                                            </TableRowColumn>
+                                        </TableRow>
+                                    );
+                                }.bind(this)
                             )}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-                }
-                <p>
-                    <RaisedButton onClick={this.handleLogout}>
-                        Log Off
-                    </RaisedButton>
-                </p>
-                <Wemo onDeviceUpdate={this.props.onDeviceUpdate} />
+                            </TableBody>
+                        </Table>
+                        <Wemo onDeviceUpdate={this.props.onDeviceUpdate} />
+                    </Tab>
+                    { devices.notSupported.length > 0 &&
+                    <Tab label="Unsupported" >
+                        <div>
+                            <h2>Unsupported Devices</h2>
+                            If you would like any of these devices supported, please contact us at support@allow2.com.
+                            <div>
+                                <Table>
+                                    <TableHeader displaySelectAll={false}>
+                                        <TableRow>
+                                            <TableHeaderColumn>Device</TableHeaderColumn>
+                                            <TableHeaderColumn>Type</TableHeaderColumn>
+                                            <TableHeaderColumn>Version</TableHeaderColumn>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody
+                                        displayRowCheckbox={false}
+                                        showRowHover={true}
+                                        stripedRows={true}>
+                                    { devices.notSupported.map( (device) =>
+                                            (
+                                                <TableRow key={ device.device.UDN }
+                                                          selectable={false}>
+                                                    <TableRowColumn>
+                                                        { device.device.device.friendlyName }
+                                                    </TableRowColumn>
+                                                    <TableRowColumn>
+                                                        { device.device.device.modelName }
+                                                    </TableRowColumn>
+                                                    <TableRowColumn>
+                                                        { device.device.device.modelNumber }
+                                                    </TableRowColumn>
+                                                </TableRow>
+                                            )
+                                    )}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        </div>
+                    </Tab>
+                    }
+
+                </Tabs>
             </div>
         );
     }
