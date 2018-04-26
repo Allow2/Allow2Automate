@@ -35,6 +35,14 @@ var deviceTokens = {
 //    Socket: 'Bw6tUTmmHVykUxGM'
 //};
 
+var deviceImages = {
+    LightSwitch: 'wemo_lightswitch',
+    Socket: 'wemo_switch',
+    Maker: 'wemo_maker',
+    Smart: 'wemo_smart_switch',
+    Bulb: 'wemo_bulb'
+};
+
 //class DeviceRow extends Component {
 //
 //    toggleCheckbox = (device, isChecked) => {
@@ -178,6 +186,7 @@ export default class LoggedIn extends Component {
                         <Table>
                             <TableHeader displaySelectAll={false}>
                                 <TableRow>
+                                    <TableHeaderColumn></TableHeaderColumn>
                                     <TableHeaderColumn>Device</TableHeaderColumn>
                                     <TableHeaderColumn>On</TableHeaderColumn>
                                     <TableHeaderColumn>Child</TableHeaderColumn>
@@ -189,11 +198,17 @@ export default class LoggedIn extends Component {
                                 stripedRows={true}>
                             { devices.supported.map( function(device) {
                                     let token = deviceTokens[device.device.device.modelName];
+                                    let imageName = deviceImages[device.device.device.modelName];
                                     let paired = this.props.pairings[device.device.UDN];
                                     return (
                                         <TableRow
                                             key={device.device.UDN}
                                             selectable={false}>
+                                            <TableRowColumn>
+                                                { imageName &&
+                                                <img width="40" height="40" src={ 'assets/img/' + imageName + '.png' } />
+                                                }
+                                            </TableRowColumn>
                                             <TableRowColumn>
                                                 { token &&
                                                 <span>{ device.device.device.friendlyName }</span>
@@ -238,6 +253,7 @@ export default class LoggedIn extends Component {
                                 <Table>
                                     <TableHeader displaySelectAll={false}>
                                         <TableRow>
+                                            <TableHeaderColumn></TableHeaderColumn>
                                             <TableHeaderColumn>Device</TableHeaderColumn>
                                             <TableHeaderColumn>Type</TableHeaderColumn>
                                             <TableHeaderColumn>Version</TableHeaderColumn>
@@ -247,22 +263,29 @@ export default class LoggedIn extends Component {
                                         displayRowCheckbox={false}
                                         showRowHover={true}
                                         stripedRows={true}>
-                                    { devices.notSupported.map( (device) =>
-                                            (
-                                                <TableRow key={ device.device.UDN }
-                                                          selectable={false}>
-                                                    <TableRowColumn>
-                                                        { device.device.device.friendlyName }
-                                                    </TableRowColumn>
-                                                    <TableRowColumn>
-                                                        { device.device.device.modelName }
-                                                    </TableRowColumn>
-                                                    <TableRowColumn>
-                                                        { device.device.device.modelNumber }
-                                                    </TableRowColumn>
-                                                </TableRow>
-                                            )
-                                    )}
+                                    { devices.notSupported.map( (device) => {
+                                        let imageName = deviceImages[device.device.device.modelName];
+                                        return (
+                                            <TableRow key={ device.device.UDN }
+                                                      selectable={false}>
+                                                <TableRowColumn>
+                                                    { imageName &&
+                                                    <img width="40" height="40" src={ 'assets/img/' + imageName + '.png' } />
+                                                    }
+                                                </TableRowColumn>
+                                                <TableRowColumn>
+                                                    { device.device.device.friendlyName }
+                                                </TableRowColumn>
+                                                <TableRowColumn>
+                                                    { device.device.device.modelName }
+                                                </TableRowColumn>
+                                                <TableRowColumn>
+                                                    { device.device.device.modelNumber }
+                                                </TableRowColumn>
+                                            </TableRow>
+                                        );
+                                    })
+                                    }
                                     </TableBody>
                                 </Table>
                             </div>

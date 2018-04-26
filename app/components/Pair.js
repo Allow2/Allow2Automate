@@ -7,6 +7,7 @@ import AppBar from 'material-ui/AppBar';
 import IconButton from 'material-ui/IconButton';
 import NavigationClose from 'material-ui/svg-icons/navigation/close';
 import CircularProgress from 'material-ui/CircularProgress';
+import LinearProgress from 'material-ui/LinearProgress';
 import FlatButton from 'material-ui/FlatButton';
 import Avatar from 'material-ui/Avatar';
 import {
@@ -23,6 +24,14 @@ const remote = require('electron').remote;
 var dialogs = Dialogs({});
 
 const apiUrl = 'https://staging-api.allow2.com';
+
+var deviceImages = {
+    LightSwitch: 'wemo_lightswitch',
+    Socket: 'wemo_switch',
+    Maker: 'wemo_maker',
+    Smart: 'wemo_smart_switch',
+    Bulb: 'wemo_bulb'
+};
 
 function avatarURL(userId, child) {
     var url = apiUrl + '/avatar?key=account' + userId + '&size=medium';
@@ -87,12 +96,17 @@ export default class Pair extends Component {
             this.props.onNewData);
     };
 
-    handlePair = (childArray) => {
+    handlePair = (children, childArray) => {
+        if (childArray.length < 1) {
+            return;
+        }
+
         this.setState({
             ...this.state,
             pairing: true
         });
 
+        let child = children[childArray[0]];
         let device = this.state.device;
         let onPaired = this.props.onPaired;
 
@@ -104,7 +118,8 @@ export default class Pair extends Component {
                 body: {
                     device: device.UDN,
                     name: device.device.friendlyName,
-                    token: this.state.token
+                    token: this.state.token,
+                    child: child.id
                 }
             },
 
@@ -154,14 +169,25 @@ export default class Pair extends Component {
         let user = this.props.user;
         let children = sortedVisibleChildrenSelector(this.props);
         let title = this.state.device ? this.state.device.device.friendlyName : 'Loading...';
-        let leftButton = this.state.pairing || !this.state.device ? <CircularProgress /> : <NavigationClose />;
+        //let leftButton = this.state.pairing || !this.state.device ? <CircularProgress /> :
+        //    <IconButton disabled={this.state.pairing} onClick={this.handleCancel}><NavigationClose /></IconButton>;
+        //let rightButton = this.state.pairing || !this.state.device ? <CircularProgress /> :
+        //    <FlatButton disabled={this.state.pairing} onClick={this.handleCancel} label="Cancel" />;
+        let progress = <LinearProgress mode="indeterminate" />;
+        let imageName = this.state.device && deviceImages[this.state.device.device.modelName];
         return (
             <div>
                 <AppBar
                     title={ title }
-                    iconElementLeft={<IconButton disabled={this.state.pairing} onClick={this.handleCancel}>{leftButton}</IconButton>}
+                    iconElementLeft={<IconButton disabled={this.state.pairing} onClick={this.handleCancel}><NavigationClose /></IconButton>}
                     iconElementRight={<FlatButton disabled={this.state.pairing} onClick={this.handleCancel} label="Cancel" />}
                     />
+                { imageName &&
+                <div align="center">
+                    <img width="200" height="200" src={ 'assets/img/' + imageName + '.png' } />
+                </div>
+                }
+                { (this.state.pairing || !this.state.device) && progress}
                 { children.length < 1 &&
                     <p>
                         Could not see any children in your account. Please set up some children and try again.
@@ -169,7 +195,7 @@ export default class Pair extends Component {
                     </p>
                 }
                 { children.length > 0 &&
-                <Table onRowSelection={this.handlePair}>
+                <Table onRowSelection={this.handlePair.bind(this, children)}>
                     <TableHeader displaySelectAll={false}>
                         <TableRow>
                             <TableHeaderColumn>Select a Child for this device</TableHeaderColumn>
