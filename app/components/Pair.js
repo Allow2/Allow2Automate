@@ -110,6 +110,23 @@ export default class Pair extends Component {
         let device = this.state.device;
         let onPaired = this.props.onPaired;
 
+        onPaired({
+            [device.UDN] : {
+                ChildId: 68,
+                controllerId: 6,
+                hidden: null,
+                id: 21037,
+                lastSeen: 1524727195527,
+                lastTimezone: null,
+                name: "Codys Light",
+                timestamp: 1524727195000,
+                type: "PairedDevice"
+            }
+        });
+
+        var window = remote.getCurrentWindow();
+        return window.close();
+
         allow2Request('/rest/pairDevice',
             {
                 auth: {
@@ -119,7 +136,7 @@ export default class Pair extends Component {
                     device: device.UDN,
                     name: device.device.friendlyName,
                     token: this.state.token,
-                    child: child.id
+                    childId: child.id
                 }
             },
 

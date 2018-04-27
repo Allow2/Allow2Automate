@@ -14,15 +14,6 @@ export default handleActions({
             newState[action.payload.UDN] = device;
         }
         return newState;
-    },
-
-    [actions.devicePaired]: (state, action) => {
-        //let newState = Object.assign({}, state);
-        //for (var grant of action.result) {
-        //    let key = 'user_' + grant.grantee.id;
-        //    newState[key] = uuidv4();
-        //}
-        //return newState;
-        return { ...state }; //, ...action.payload };
     }
+
 }, {});

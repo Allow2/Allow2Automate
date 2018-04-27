@@ -1,8 +1,13 @@
 import path from 'path';
 import url from 'url';
 import {app, crashReporter, BrowserWindow, Menu} from 'electron';
+import allActions from './actions';
 const modal = require('electron-modal');
 import configureStore from './mainStore';
+import { allow2Request } from './util';
+import { bindActionCreators } from 'redux';
+const async = require('async');
+var allow2 = require('allow2');
 
 const isDevelopment = (process.env.NODE_ENV === 'development');
 
@@ -47,15 +52,20 @@ app.on('ready', async () => {
     // Run this on the ready event to setup everything
     // needed on the main process.
     modal.setup();
+    const actions = bindActionCreators(allActions, store.dispatch);
+
+    var pollTimer = null;
+    var usageTimer = null;
 
     if (isDevelopment) {
         await installExtensions();
     }
 
     mainWindow = new BrowserWindow({
-        width: 1000,
+        width: 660,
         height: 800,
         minWidth: 640,
+        maxWidth: 660,
         minHeight: 480,
         show: false,
         title: 'Allow2Automate',
@@ -118,4 +128,85 @@ app.on('ready', async () => {
             }]).popup(mainWindow);
         });
     }
+
+    function pollInfo() {
+        let state = store.getState();
+        console.log("polling info");
+        if (state && state.user && state.user.access_token) {
+            allow2Request('/rest/info',
+                {
+                    auth: {
+                        bearer: state.user.access_token
+                    },
+                    body: {}
+                },
+
+                function (error, response, body) {
+                    if (error) {
+                        return dialogs.alert(error.toString());
+                    }
+                    if (!response) {
+                        return dialogs.alert('Invalid Response');
+                    }
+                    if (body && body.message) {
+                        return dialogs.alert(body.message);
+                    }
+                    return dialogs.alert('Oops');
+                },
+
+                function (data) {
+                    actions.newData(data);
+                });
+        }
+    }
+    pollInfo();
+    pollTimer = setInterval(pollInfo, 30000);
+
+    function pollUsage() {
+        let state = store.getState();
+
+        let activeDevices = Object.values(state.devices).filter(function(device) {
+            return device.state;
+        });
+        let pollDevices = activeDevices.reduce(function(memo, device) {
+            let pairing = state.pairings[device.device.UDN];
+            if (pairing) {
+                pairing.device = device.device;
+                memo.push(pairing);
+            }
+            return memo;
+        }, []);
+        async.each(pollDevices, function(device, callback) {
+            console.log('poll', device);
+            allow2.check({
+                userId: device.controllerId,
+                pairId: device.id,
+                deviceToken: device.deviceToken,
+                childId: device.ChildId,
+                tz: 'Australia/Sydney',
+                activities: [{
+                    id: 7,
+                    log: true
+                }],
+                //log: true 			// default is true,
+                staging: true		// default is production
+            }, function(err, result) {
+                if (err) { return; }    // simple bail out if any errors occur to avoid user not being able to turn on things
+
+                if (!result.allowed) {
+                    // only need to grab the client to turn it off
+                    console.log( device.device.device.friendlyName, ' not allowed ', result );
+                    //device.setBinaryState(0);
+                    return;
+                }
+                console.log(device.name, ' is on / running');
+                // interpret the result and if not allowed, turn the light back off again!
+            });
+            callback(null);
+        }, function(err) {
+            console.log('poll done', err);
+        });
+    }
+    pollUsage();
+    usageTimer = setInterval(pollUsage, 10000);
 });

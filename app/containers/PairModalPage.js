@@ -13,13 +13,11 @@ const mapDispatchToProps = (dispatch) => { // eslint-disable-line no-unused-vars
     return {
 
         onNewData: (data) => {
-            console.log(data);
             actions.newData(data);
         },
 
         onPaired: (data) => {
-            console.log(data);
-            //.devicePaired(data);
+            actions.pairingUpdate(data);
         }
     };
 };

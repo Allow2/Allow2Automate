@@ -50,7 +50,7 @@ const allow2Request = function(path, params, onError, onSuccess) {
             console.log('body:', body); // Print the HTML for the Google homepage.
             return onError(error, response, body);
         }
-        console.log('body:', body);
+        //console.log('body:', body);
         onSuccess(body);
     });
 };

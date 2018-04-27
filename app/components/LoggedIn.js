@@ -138,7 +138,13 @@ export default class LoggedIn extends Component {
         //function openModal() {
         let win = new remote.BrowserWindow({
             parent: remote.getCurrentWindow(),
-            modal: true
+            modal: true,
+            width: 500,
+            height: 600,
+            minWidth: 500,
+            maxWidth: 500,
+            minHeight: 600,
+            maxHeight: 800
         });
 
 
@@ -153,11 +159,15 @@ export default class LoggedIn extends Component {
             win.webContents.send('device', { device: device, token: token });
         });
 
-        win.webContents.openDevTools();
+        //win.webContents.openDevTools();
     };
 
     handleLogout = () => {
-        this.props.onLogout();
+        dialogs.confirm('Are you sure you want to log off?', function(ok) {
+            if (ok) {
+                this.props.onLogout();
+            }
+        }.bind(this));
     };
 
     render() {
@@ -172,7 +182,7 @@ export default class LoggedIn extends Component {
         }, { supported: [], notSupported: [] });
         let user = this.props.user;
         let name = ( user.user && user.user.firstName ) || "...";
-        let avatar = ( user.user && <Avatar src={'https://api.allow2.com/avatar?key=account' + user.user.id + '&size=medium'} />) ||
+        let avatar = ( user.user && <Avatar src={'https://staging-api.allow2.com/avatar?key=account' + user.user.id + '&size=medium'} />) ||
             <Avatar icon={<Person />} />;
         return (
             <div>
@@ -200,6 +210,10 @@ export default class LoggedIn extends Component {
                                     let token = deviceTokens[device.device.device.modelName];
                                     let imageName = deviceImages[device.device.device.modelName];
                                     let paired = this.props.pairings[device.device.UDN];
+                                    let child = paired && paired.ChildId && this.props.children[paired.ChildId];
+                                    let detail = child ? (
+                                            <b>{child.name}</b>
+                                        ) : <b>Paired</b>;
                                     return (
                                         <TableRow
                                             key={device.device.UDN}
@@ -226,14 +240,9 @@ export default class LoggedIn extends Component {
                                                     />
                                             </TableRowColumn>
                                             <TableRowColumn>
-                                                { paired &&
-                                                <b>Paired</b>
-                                                }
-                                                { !paired && token &&
+                                                { paired && detail }
+                                                { !paired &&
                                                 <FlatButton label="Assign" onClick={this.assign.bind(this, device.device, token)} />
-                                                }
-                                                { !token &&
-                                                <i style={{ color: '#555555' }}>Device not yet supported</i>
                                                 }
                                             </TableRowColumn>
                                         </TableRow>
