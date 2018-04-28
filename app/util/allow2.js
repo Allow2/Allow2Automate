@@ -1,6 +1,6 @@
 import request from 'request';
 
-const apiUrl = 'https://staging-api.allow2.com';
+const apiUrl = 'https:/api.allow2.com';
 
 const allow2Login = function(params, onError, onSuccess) {
     request({

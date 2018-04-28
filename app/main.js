@@ -1,6 +1,6 @@
 import path from 'path';
 import url from 'url';
-import {app, crashReporter, BrowserWindow, Menu} from 'electron';
+import {app, crashReporter, BrowserWindow, Menu, ipcMain as ipc} from 'electron';
 import allActions from './actions';
 const modal = require('electron-modal');
 import configureStore from './mainStore';
@@ -8,6 +8,8 @@ import { allow2Request } from './util';
 import { bindActionCreators } from 'redux';
 const async = require('async');
 var allow2 = require('allow2');
+import Wemo from './util/Wemo';
+var moment = require('moment-timezone');
 
 const isDevelopment = (process.env.NODE_ENV === 'development');
 
@@ -15,6 +17,31 @@ let mainWindow = null;
 let forceQuit = false;
 
 const store = configureStore();
+const actions = bindActionCreators(allActions, store.dispatch);
+
+actions.deviceInit();
+actions.timezoneGuess(moment.tz.guess());
+
+var devices = new Wemo(
+    {
+        onDeviceUpdate: (data) => {
+            console.log('deviceUpdate');
+            actions.deviceUpdate(data);
+        }
+    }
+);
+
+ipc.on('setBinaryState', function(event, params) {
+    console.log('setBinaryState', params);
+    devices.setBinaryState(params.UDN, params.state, function(err, response) {
+        console.log('response:', params.UDN, response);
+        event.sender.send('setBinaryStateResponse', params.UDN, err, response);
+    }.bind(this));
+});
+
+ipc.on('saveState', function(event, params) {
+    store.save();
+});
 
 const installExtensions = async () => {
     const installer = require('electron-devtools-installer');
@@ -35,7 +62,7 @@ const installExtensions = async () => {
 crashReporter.start({
     productName: 'Allow2Automate',
     companyName: 'Allow2',
-    submitURL: 'https://staging-api.allow2.com/crashReport',
+    submitURL: 'https://api.allow2.com/crashReport',
     uploadToServer: false
 });
 
@@ -52,7 +79,6 @@ app.on('ready', async () => {
     // Run this on the ready event to setup everything
     // needed on the main process.
     modal.setup();
-    const actions = bindActionCreators(allActions, store.dispatch);
 
     var pollTimer = null;
     var usageTimer = null;
@@ -61,73 +87,79 @@ app.on('ready', async () => {
         await installExtensions();
     }
 
-    mainWindow = new BrowserWindow({
-        width: 660,
-        height: 800,
-        minWidth: 640,
-        maxWidth: 660,
-        minHeight: 480,
-        show: false,
-        title: 'Allow2Automate',
-        icon: path.join(__dirname, 'assets/icons/png/64x64.png')
-    });
+    function showMainWindow() {
+        if (mainWindow) {
+            return mainWindow.show();
+        }
+        mainWindow = new BrowserWindow({
+            width: 660,
+            height: 800,
+            minWidth: 640,
+            maxWidth: 660,
+            minHeight: 480,
+            show: false,
+            title: 'Allow2Automate',
+            icon: path.join(__dirname, 'assets/icons/png/64x64.png')
+        });
 
-    mainWindow.loadURL(url.format({
-        pathname: path.join(__dirname, 'index.html'),
-        protocol: 'file:',
-        slashes: true
-    }));
+        mainWindow.loadURL(url.format({
+            pathname: path.join(__dirname, 'index.html'),
+            protocol: 'file:',
+            slashes: true
+        }));
 
-    // show window once on first load
-    mainWindow.webContents.once('did-finish-load', () => {
-        mainWindow.show();
-    });
+        // show window once on first load
+        mainWindow.webContents.once('did-finish-load', () => {
+            mainWindow.show();
+        });
 
-    mainWindow.webContents.on('did-finish-load', () => {
-        // Handle window logic properly on macOS:
-        // 1. App should not terminate if window has been closed
-        // 2. Click on icon in dock should re-open the window
-        // 3. ⌘+Q should close the window and quit the app
-        if (process.platform === 'darwin') {
-            mainWindow.on('close', function (e) {
-                store.save();
-                if (!forceQuit) {
-                    e.preventDefault();
-                    mainWindow.hide();
-                }
-            });
+        mainWindow.webContents.on('did-finish-load', () => {
+            // Handle window logic properly on macOS:
+            // 1. App should not terminate if window has been closed
+            // 2. Click on icon in dock should re-open the window
+            // 3. ⌘+Q should close the window and quit the app
+            if (process.platform === 'darwin') {
+                mainWindow.on('close', function (e) {
+                    store.save();
+                    if (!forceQuit) {
+                        e.preventDefault();
+                        mainWindow.hide();
+                    }
+                });
 
-            app.on('activate', () => {
-                mainWindow.show();
-            });
+                app.on('activate', () => {
+                    mainWindow.show();
+                });
 
-            app.on('before-quit', () => {
-                store.save();
-                forceQuit = true;
-            });
-        } else {
-            mainWindow.on('closed', () => {
-                console.log('Persisting');
-                store.save();
-                mainWindow = null;
+                app.on('before-quit', () => {
+                    store.save();
+                    forceQuit = true;
+                });
+            } else {
+                mainWindow.on('closed', () => {
+                    console.log('Persisting');
+                    store.save();
+                    mainWindow = null;
+                });
+            }
+        });
+
+        if (isDevelopment) {
+            // auto-open dev tools
+            mainWindow.webContents.openDevTools();
+
+            // add inspect element on right click menu
+            mainWindow.webContents.on('context-menu', (e, props) => {
+                Menu.buildFromTemplate([{
+                    label: 'Inspect element',
+                    click() {
+                        mainWindow.inspectElement(props.x, props.y);
+                    }
+                }]).popup(mainWindow);
             });
         }
-    });
-
-    if (isDevelopment) {
-        // auto-open dev tools
-        mainWindow.webContents.openDevTools();
-
-        // add inspect element on right click menu
-        mainWindow.webContents.on('context-menu', (e, props) => {
-            Menu.buildFromTemplate([{
-                label: 'Inspect element',
-                click() {
-                    mainWindow.inspectElement(props.x, props.y);
-                }
-            }]).popup(mainWindow);
-        });
     }
+    showMainWindow();
 
     function pollInfo() {
         let state = store.getState();
@@ -177,13 +209,14 @@ app.on('ready', async () => {
             return memo;
         }, []);
         async.each(pollDevices, function(device, callback) {
-            console.log('poll', device);
+            console.log('poll', device.name);
             allow2.check({
                 userId: device.controllerId,
                 pairId: device.id,
                 deviceToken: device.deviceToken,
+                pairToken: device.pairToken,
                 childId: device.ChildId,
-                tz: 'Australia/Sydney',
+                tz: state.util.timezoneGuess,
                 activities: [{
                     id: 7,
                     log: true
@@ -195,8 +228,13 @@ app.on('ready', async () => {
 
                 if (!result.allowed) {
                     // only need to grab the client to turn it off
+                    if (result.error && (result.error == 'invalid pairToken' )) {
+                        actions.pairingRemove(device.device.UDN);
+                        store.save();
+                        return;
+                    }
                     console.log( device.device.device.friendlyName, ' not allowed ', result );
-                    //device.setBinaryState(0);
+                    devices.setBinaryState(device.device.UDN, 0);
                     return;
                 }
                 console.log(device.name, ' is on / running');

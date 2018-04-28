@@ -2,29 +2,28 @@ import { connect } from 'react-redux';
 import { push } from 'react-router-redux';
 import { bindActionCreators } from 'redux';
 import LoggedIn from '../components/LoggedIn';
-import userActions from '../actions/user';
-import deviceActions from '../actions/device';
+import allActions from '../actions';
 
 const mapStateToProps = (state) => {
     return state;
 };
 
 const mapDispatchToProps = (dispatch) => { // eslint-disable-line no-unused-vars
-    const user = bindActionCreators(userActions, dispatch);
-    const device = bindActionCreators(deviceActions, dispatch);
+    const actions = bindActionCreators(allActions, dispatch);
     return {
 
         onLogout: (data) => {
-            user.logout(data);
+            actions.logout(data);
             dispatch(push('/'));
         },
 
         onDeviceUpdate: (data) => {
-            device.deviceUpdate(data);
+            console.log('onDeviceUpdate', data);
+            actions.deviceUpdate(data);
         },
 
         onDeviceActive: (UDN, active) => {
-            device.deviceActive({
+            actions.deviceActive({
                 UDN: UDN,
                 active: active
             });

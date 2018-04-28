@@ -19,11 +19,11 @@ import {
     TableRowColumn,
     } from 'material-ui/Table';
 
-const remote = require('electron').remote;
+import { remote, ipcRenderer as ipc } from 'electron';
 
 var dialogs = Dialogs({});
 
-const apiUrl = 'https://staging-api.allow2.com';
+const apiUrl = 'https://api.allow2.com';
 
 var deviceImages = {
     LightSwitch: 'wemo_lightswitch',
@@ -110,23 +110,6 @@ export default class Pair extends Component {
         let device = this.state.device;
         let onPaired = this.props.onPaired;
 
-        onPaired({
-            [device.UDN] : {
-                ChildId: 68,
-                controllerId: 6,
-                hidden: null,
-                id: 21037,
-                lastSeen: 1524727195527,
-                lastTimezone: null,
-                name: "Codys Light",
-                timestamp: 1524727195000,
-                type: "PairedDevice"
-            }
-        });
-
-        var window = remote.getCurrentWindow();
-        return window.close();
-
         allow2Request('/rest/pairDevice',
             {
                 auth: {
@@ -160,13 +143,10 @@ export default class Pair extends Component {
 
             function(data) {
                 console.log(data);
-                return this.setState({
-                        ...this.state,
-                    pairing: false
-                });
-                onPaired(data);
+                onPaired({ [device.UDN] : data });
                 var window = remote.getCurrentWindow();
                 window.close();
+                ipc.send('setBinaryState');
             }.bind(this)
         );
     };

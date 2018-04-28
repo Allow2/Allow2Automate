@@ -14,6 +14,16 @@ export default handleActions({
             newState[action.payload.UDN] = device;
         }
         return newState;
+    },
+
+    [actions.deviceInit]: (state, action) => {
+        return Object.keys(state).reduce(function(memo, key) {
+            console.log(key);
+            let device = Object.assign({}, state[key]);
+            device.active = false;
+            memo[key] = device;
+            return memo;
+        }, {});
     }
 
 }, {});

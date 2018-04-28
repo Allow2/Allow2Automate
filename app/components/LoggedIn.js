@@ -3,7 +3,6 @@ import Avatar from 'material-ui/Avatar';
 import FlatButton from 'material-ui/FlatButton';
 import AppBar from 'material-ui/AppBar';
 import Person from 'material-ui/svg-icons/social/person';
-import Wemo from './Wemo';
 import { sortedVisibleDevicesSelector } from '../selectors';
 import { allow2Request } from '../util';
 import Dialogs from 'dialogs';
@@ -12,8 +11,7 @@ import Checkbox from './Checkbox';
 import modal from 'electron-modal';
 import path from 'path';
 import url from 'url';
-import { remote } from 'electron';
-
+import { remote, ipcRenderer as ipc } from 'electron';
 import {
     Table,
     TableBody,
@@ -23,6 +21,8 @@ import {
     TableRowColumn,
     } from 'material-ui/Table';
 import {Tabs, Tab} from 'material-ui/Tabs';
+
+const apiUrl = 'https://api.allow2.com/';
 
 var dialogs = Dialogs({});
 
@@ -119,16 +119,26 @@ var deviceImages = {
 
 export default class LoggedIn extends Component {
 
+    messageDevices = {};
+
     toggleCheckbox = (device, isChecked) => {
         this.props.onDeviceActive( device.device.UDN, true );
-        device.device.setBinaryState(isChecked ? 1 : 0, function(err, response) {
-            this.props.onDeviceActive(device.device.UDN, false);
+        ipc.send('setBinaryState', {
+            UDN: device.device.UDN,
+            state: isChecked ? 1 : 0
+        });
+    };
+
+    componentDidMount = () => {
+        ipc.on('setBinaryStateResponse', function (event, UDN, err, response) {
+            let device = this.props.devices[UDN];
+            this.props.onDeviceActive(UDN, false);
             if (err || ( response.BinaryState == undefined )) {
                 return;
             }
+            device.active = false;
             device.state = ( response.BinaryState != '0' );
-            this.props.onDeviceUpdate({ [device.device.UDN]: device });
-
+            this.props.onDeviceUpdate({[UDN]: device});
         }.bind(this));
     };
 
@@ -159,7 +169,7 @@ export default class LoggedIn extends Component {
             win.webContents.send('device', { device: device, token: token });
         });
 
-        //win.webContents.openDevTools();
+        win.webContents.openDevTools();
     };
 
     handleLogout = () => {
@@ -182,7 +192,7 @@ export default class LoggedIn extends Component {
         }, { supported: [], notSupported: [] });
         let user = this.props.user;
         let name = ( user.user && user.user.firstName ) || "...";
-        let avatar = ( user.user && <Avatar src={'https://staging-api.allow2.com/avatar?key=account' + user.user.id + '&size=medium'} />) ||
+        let avatar = ( user.user && <Avatar src={apiUrl + 'avatar?key=account' + user.user.id + '&size=medium'} />) ||
             <Avatar icon={<Person />} />;
         return (
             <div>
@@ -251,7 +261,6 @@ export default class LoggedIn extends Component {
                             )}
                             </TableBody>
                         </Table>
-                        <Wemo onDeviceUpdate={this.props.onDeviceUpdate} />
                     </Tab>
                     { devices.notSupported.length > 0 &&
                     <Tab label="Unsupported" >
