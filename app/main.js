@@ -175,15 +175,21 @@ app.on('ready', async () => {
 
                 function (error, response, body) {
                     if (error) {
-                        return dialogs.alert(error.toString());
+                        return console.log(error.toString());
                     }
                     if (!response) {
-                        return dialogs.alert('Invalid Response');
+                        return console.log('Invalid Response');
+                    }
+                    if (response.statusCode == 403) {
+                        console.log('kicked out'); // Print the HTML for the Google homepage.
+                        actions.logout();
+                        mainWindow.webContents.send('loggedOut');
+                        return
                     }
                     if (body && body.message) {
-                        return dialogs.alert(body.message);
+                        return console.log(body.message);
                     }
-                    return dialogs.alert('Oops');
+                    return console.log('Oops');
                 },
 
                 function (data) {
@@ -222,7 +228,7 @@ app.on('ready', async () => {
                     log: true
                 }],
                 //log: true 			// default is true,
-                staging: true		// default is production
+                //staging: true		// default is production
             }, function(err, result) {
                 if (err) { return; }    // simple bail out if any errors occur to avoid user not being able to turn on things
 

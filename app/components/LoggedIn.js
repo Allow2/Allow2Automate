@@ -1,4 +1,5 @@
 import React, { Component } from 'react';
+import { push } from 'react-router-redux';
 import Avatar from 'material-ui/Avatar';
 import FlatButton from 'material-ui/FlatButton';
 import AppBar from 'material-ui/AppBar';
@@ -26,14 +27,14 @@ const apiUrl = 'https://api.allow2.com/';
 
 var dialogs = Dialogs({});
 
-var deviceTokens = {
-    LightSwitch: 'ttH8fDKKgn4uTiwg',
-    Socket: '9XJDykzCcxhMCci5'
-};
 //var deviceTokens = {
-//    LightSwitch: 'TczDIlwkOxMVlCTJ',
-//    Socket: 'Bw6tUTmmHVykUxGM'
+//    LightSwitch: 'ttH8fDKKgn4uTiwg',
+//    Socket: '9XJDykzCcxhMCci5'
 //};
+var deviceTokens = {
+    LightSwitch: 'TczDIlwkOxMVlCTJ',
+    Socket: 'Bw6tUTmmHVykUxGM'
+};
 
 var deviceImages = {
     LightSwitch: 'wemo_lightswitch',
@@ -140,6 +141,9 @@ export default class LoggedIn extends Component {
             device.state = ( response.BinaryState != '0' );
             this.props.onDeviceUpdate({[UDN]: device});
         }.bind(this));
+        ipc.on('loggedOut', function(event) {
+            this.props.dispatch(push('/'));
+        }.bind(this));
     };
 
 
@@ -169,7 +173,7 @@ export default class LoggedIn extends Component {
             win.webContents.send('device', { device: device, token: token });
         });
 
-        win.webContents.openDevTools();
+        //win.webContents.openDevTools();
     };
 
     handleLogout = () => {
