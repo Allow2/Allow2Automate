@@ -66,6 +66,38 @@ crashReporter.start({
     uploadToServer: false
 });
 
+const template = [
+    {
+        label: 'Edit',
+        submenu: [
+            {role: 'cut'},
+            {role: 'copy'},
+            {role: 'paste'}
+        ]
+    },
+    {
+        role: 'window',
+        submenu: [
+            {
+                role: 'minimize'
+            },
+            {
+                role: 'close'
+            }
+        ]
+    }
+    //,
+    //{
+    //    role: 'help',
+    //    submenu: [
+    //        {
+    //            label: 'Learn More',
+    //            click () { require('electron').shell.openExternal('http://electron.atom.io') }
+    //        }
+    //    ]
+    //}
+];
+
 app.on('window-all-closed', () => {
     // On OS X it is common for applications and their menu bar
     // to stay active until the user quits explicitly with Cmd + Q
@@ -85,6 +117,29 @@ app.on('ready', async () => {
 
     if (isDevelopment) {
         await installExtensions();
+    }
+
+    if (process.platform === 'darwin') {
+        template.unshift({
+            label: app.getName(),
+            submenu: [
+                {role: 'about'},
+                {type: 'separator'},
+                {
+                    label: 'Preferences...',
+                    accelerator: 'CmdOrCtrl+,',
+                    click () { showMainWindow() }
+                },
+                {type: 'separator'},
+                {role: 'hide'},
+                {role: 'hideothers'},
+                {role: 'unhide'},
+                {type: 'separator'},
+                {role: 'quit'}
+            ]
+        });
+        const menu = Menu.buildFromTemplate(template)
+        Menu.setApplicationMenu(menu)
     }
 
     function showMainWindow() {
@@ -181,7 +236,7 @@ app.on('ready', async () => {
                         return console.log('Invalid Response');
                     }
                     if (response.statusCode == 403) {
-                        console.log('kicked out'); // Print the HTML for the Google homepage.
+                        console.log('kicked out');
                         actions.logout();
                         mainWindow.webContents.send('loggedOut');
                         return
@@ -240,7 +295,7 @@ app.on('ready', async () => {
                         return;
                     }
                     console.log( device.device.device.friendlyName, ' not allowed ', result );
-                    devices.setBinaryState(device.device.UDN, 0);
+                    devices.setBinaryState(device.device.UDN, 0, () => {});
                     return;
                 }
                 console.log(device.name, ' is on / running');

@@ -74,7 +74,7 @@ export default class Wemo {
     setBinaryState(udn, binaryState, callback) {
         let client = this.clients[udn];
         if (!client) {
-            return callback(new Error('not visible'));
+            return callback && callback(new Error('not visible'));
         }
         client.setBinaryState(binaryState, callback);
     }

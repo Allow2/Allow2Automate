@@ -8,5 +8,7 @@
         <string>L44G2T7U48.com.allow2.automate</string>
         <key>com.apple.security.network.client</key>
         <true/>
+        <key>com.apple.security.network.server</key>
+        <true/>
     </dict>
 </plist>
