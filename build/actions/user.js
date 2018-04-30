@@ -10,3 +10,4 @@ exports.default = {
     login: (0, _reduxActions.createAction)('USER_LOGIN'),
     logout: (0, _reduxActions.createAction)('USER_LOGOUT')
 };
+//# sourceMappingURL=user.js.map

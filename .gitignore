@@ -48,5 +48,6 @@ build
 .DS_Store
 *.log
 
+Allow2Automate_Distribution.provisionprofile
 # localStorage
 store

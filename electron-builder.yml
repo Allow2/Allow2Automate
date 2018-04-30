@@ -25,11 +25,17 @@ dmg:
       y: 150
 
 mac:
-  target: dmg
+  target: mas
+  provisioningProfile: ./Allow2Automate_Distribution.provisionprofile
   category: public.app-category.lifestyle
+  icon: ./app/assets/icons/mac/icon.icns
+  entitlements: ./parent.plist
+  entitlementsInherit: ./child.plist
+  bundleVersion: 24
 
 win:
   target: nsis
+  icon: app/assets/icons/win/icon.ico
 
 linux:
   target:
