@@ -22,6 +22,10 @@ The base operation is intended to show a "Network Wide" view of all detected aut
 link/authenticate with them directly, with bridges and otherwise, and de-duplicate any that may come through separate channels
 (ie: direct wemo connections and the same device via a homekit bridge).
 
+# Screenshots
+
+![Allow2Automate on OSX](/blob/master/ScreenShots/Screen%20Shot%204.png?raw=true "Allow2Automate on OSX")
+
 # Development notes
 
 The following provides more detail on the structure and intent of the application and components.
