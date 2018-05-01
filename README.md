@@ -24,7 +24,7 @@ link/authenticate with them directly, with bridges and otherwise, and de-duplica
 
 # Screenshots
 
-![Allow2Automate on OSX](/blob/master/ScreenShots/Screen%20Shot%204.png?raw=true "Allow2Automate on OSX")
+![Allow2Automate on OSX](/ScreenShots/Screen%20Shot%204.png?raw=true "Allow2Automate on OSX")
 
 # Development notes
 
