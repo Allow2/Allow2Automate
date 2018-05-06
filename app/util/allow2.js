@@ -1,6 +1,7 @@
 import request from 'request';
 
 const apiUrl = 'https://api.allow2.com';
+const cdnUrl = 'https://cdn.allow2.com';
 
 const allow2Login = function(params, onError, onSuccess) {
     request({
@@ -55,7 +56,23 @@ const allow2Request = function(path, params, onError, onSuccess) {
     });
 };
 
+const allow2AvatarURL = function (user, child) {
+    var url = 'assets/img/avatar_placeholder_medium.png'; // default if no user avatar
+
+    if (child) {
+        if (child.avatar) {
+            url = cdnUrl + '/avatar/medium/' + child.avatar + '.png';
+        }
+        return url;
+    }
+    if (user.avatar) {
+        url = cdnUrl + '/avatar/medium/' + user.avatar + '.png';
+    }
+    return url;
+}
+
 module.exports = {
     allow2Login,
-    allow2Request
+    allow2Request,
+    allow2AvatarURL
 };

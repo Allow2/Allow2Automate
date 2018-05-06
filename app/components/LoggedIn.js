@@ -5,7 +5,7 @@ import FlatButton from 'material-ui/FlatButton';
 import AppBar from 'material-ui/AppBar';
 import Person from 'material-ui/svg-icons/social/person';
 import { sortedVisibleDevicesSelector } from '../selectors';
-import { allow2Request } from '../util';
+import { allow2Request, allow2AvatarURL } from '../util';
 import Dialogs from 'dialogs';
 import Checkbox from './Checkbox';
 //import deviceActions from '../actions/device';
@@ -196,7 +196,8 @@ export default class LoggedIn extends Component {
         }, { supported: [], notSupported: [] });
         let user = this.props.user;
         let name = ( user.user && user.user.firstName ) || "...";
-        let avatar = ( user.user && <Avatar src={apiUrl + 'avatar?key=account' + user.user.id + '&size=medium'} />) ||
+        let avatarUrl = allow2AvatarURL(user, null);
+        let avatar = ( user.user && <Avatar src={ avatarUrl } />) ||
             <Avatar icon={<Person />} />;
         return (
             <div>

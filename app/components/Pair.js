@@ -1,6 +1,6 @@
 import React, { Component } from 'react';
 import PropTypes from 'prop-types';
-import { allow2Request } from '../util';
+import { allow2Request, allow2AvatarURL } from '../util';
 import Dialogs from 'dialogs';
 import { sortedVisibleChildrenSelector } from '../selectors';
 import AppBar from 'material-ui/AppBar';
@@ -23,8 +23,6 @@ import { remote, ipcRenderer as ipc } from 'electron';
 
 var dialogs = Dialogs({});
 
-const apiUrl = 'https://api.allow2.com';
-
 var deviceImages = {
     LightSwitch: 'wemo_lightswitch',
     Socket: 'wemo_switch',
@@ -32,19 +30,6 @@ var deviceImages = {
     Smart: 'wemo_smart_switch',
     Bulb: 'wemo_bulb'
 };
-
-function avatarURL(userId, child) {
-    var url = apiUrl + '/avatar?key=account' + userId + '&size=medium';
-
-    if (child) {
-        if (child.AccountId) {
-            url = apiUrl + '/avatar?key=account' + child.AccountId + '&size=medium';
-        } else {
-            url = apiUrl + '/avatar?key=child' + child.Parent.id + "-" + child.id + '&size=medium';
-        }
-    }
-    return url;
-}
 
 
 export default class Pair extends Component {
@@ -182,7 +167,7 @@ export default class Pair extends Component {
                 { imageName &&
                 <div align="center">
                     <img width="200" height="200" src={ 'assets/img/' + imageName + '.png' } />
-                </div>
+                    </div>
                 }
                 { (this.state.pairing || !this.state.device) && progress}
                 { children.length < 1 &&
@@ -204,7 +189,7 @@ export default class Pair extends Component {
                         stripedRows={false}
                         >
                     { children.map((child) => {
-                            let url = avatarURL(null, child);
+                            let url = allow2AvatarURL(null, child);
                             return (
                                 <TableRow key={ child.id }
                                           selectable={!this.state.pairing && (this.state.token != null)}>
