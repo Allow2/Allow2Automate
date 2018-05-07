@@ -39,5 +39,6 @@ win:
 
 linux:
   target:
-    - deb
+    - snap
     - AppImage
+  category: Utility
