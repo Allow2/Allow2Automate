@@ -1,7 +1,7 @@
 {
   "name": "Allow2Automate",
   "productName": "Allow2Automate",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Using Allow2 to control access and quotas for electricity via home automation devices",
   "main": "init.js",
   "author": {
