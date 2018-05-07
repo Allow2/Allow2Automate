@@ -34,7 +34,7 @@ mac:
   bundleVersion: 33
 
 win:
-  target: nsis
+  target: AppX
   icon: app/assets/icons/win/icon.ico
 
 linux:

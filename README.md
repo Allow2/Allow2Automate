@@ -68,6 +68,14 @@ npm run pack:mac
 
 Then upload with *Application Loader*
 
+## Windows App Store
+
+```sh
+npm run pack:win
+```
+
+Then drag into https://developer.microsoft.com/
+
 ## Linux Snap
 
 ```sh
