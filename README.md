@@ -56,12 +56,11 @@ npm run pack
 
 or for a specific platform:
 
+## Mac App Store
+
 ```sh
 npm run pack:mac
 ```
-
-## Mac App Store
-
 
 ```sh
 ./sign.sh
@@ -69,6 +68,15 @@ npm run pack:mac
 
 Then upload with *Application Loader*
 
+## Linux Snap
+
+```sh
+npm run pack:linux
+```
+
+```sh
+snapcraft push dist/Allow2Automate_1.1.0_amd64.snap
+```
 
 # Notes
 
