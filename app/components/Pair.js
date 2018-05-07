@@ -197,6 +197,7 @@ export default class Pair extends Component {
                                         <Avatar src={url} />
                                     </TableRowColumn>
                                     <TableRowColumn>
+
                                         { child.name }
                                     </TableRowColumn>
                                 </TableRow>

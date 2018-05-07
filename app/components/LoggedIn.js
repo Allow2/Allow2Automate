@@ -196,7 +196,7 @@ export default class LoggedIn extends Component {
         }, { supported: [], notSupported: [] });
         let user = this.props.user;
         let name = ( user.user && user.user.firstName ) || "...";
-        let avatarUrl = allow2AvatarURL(user, null);
+        let avatarUrl = allow2AvatarURL(user && user.user, null);
         let avatar = ( user.user && <Avatar src={ avatarUrl } />) ||
             <Avatar icon={<Person />} />;
         return (
@@ -209,14 +209,6 @@ export default class LoggedIn extends Component {
                 <Tabs>
                     <Tab label="Devices" >
                         <Table>
-                            <TableHeader displaySelectAll={false}>
-                                <TableRow>
-                                    <TableHeaderColumn></TableHeaderColumn>
-                                    <TableHeaderColumn>Device</TableHeaderColumn>
-                                    <TableHeaderColumn>On</TableHeaderColumn>
-                                    <TableHeaderColumn>Child</TableHeaderColumn>
-                                </TableRow>
-                            </TableHeader>
                             <TableBody
                                 displayRowCheckbox={false}
                                 showRowHover={true}
@@ -229,6 +221,7 @@ export default class LoggedIn extends Component {
                                     let detail = child ? (
                                             <b>{child.name}</b>
                                         ) : <b>Paired</b>;
+                                    let url = child && allow2AvatarURL(null, child);
                                     return (
                                         <TableRow
                                             key={device.device.UDN}
@@ -246,7 +239,7 @@ export default class LoggedIn extends Component {
                                                 <span><i style={{ color: '#555555' }}>{ device.device.device.friendlyName }</i></span>
                                                 }
                                             </TableRowColumn>
-                                            <TableRowColumn>
+                                            <TableRowColumn style={{textAlign: 'center'}}>
                                                 <Checkbox
                                                     label=''
                                                     isChecked={device.state}
@@ -254,7 +247,12 @@ export default class LoggedIn extends Component {
                                                     handleCheckboxChange={this.toggleCheckbox.bind(this, device)}
                                                     />
                                             </TableRowColumn>
-                                            <TableRowColumn>
+                                            <TableRowColumn style={{textAlign: 'right'}}>
+                                                { child &&
+                                                <Avatar src={url} />
+                                                }
+                                            </TableRowColumn>
+                                            <TableRowColumn style={{textAlign: 'left'}}>
                                                 { paired && detail }
                                                 { !paired &&
                                                 <FlatButton label="Assign" onClick={this.assign.bind(this, device.device, token)} />
@@ -274,14 +272,6 @@ export default class LoggedIn extends Component {
                             If you would like any of these devices supported, please contact us at support@allow2.com.
                             <div>
                                 <Table>
-                                    <TableHeader displaySelectAll={false}>
-                                        <TableRow>
-                                            <TableHeaderColumn></TableHeaderColumn>
-                                            <TableHeaderColumn>Device</TableHeaderColumn>
-                                            <TableHeaderColumn>Type</TableHeaderColumn>
-                                            <TableHeaderColumn>Version</TableHeaderColumn>
-                                        </TableRow>
-                                    </TableHeader>
                                     <TableBody
                                         displayRowCheckbox={false}
                                         showRowHover={true}

@@ -59,7 +59,14 @@ const allow2Request = function(path, params, onError, onSuccess) {
 const allow2AvatarURL = function (user, child) {
     var url = 'assets/img/avatar_placeholder_medium.png'; // default if no user avatar
 
+    if (!user && !child) {
+        return url;
+    }
+
     if (child) {
+        if (child.Account && child.Account.avatar) {
+            url = cdnUrl + '/avatar/medium/' + child.Account.avatar + '.png';
+        }
         if (child.avatar) {
             url = cdnUrl + '/avatar/medium/' + child.avatar + '.png';
         }
@@ -69,7 +76,7 @@ const allow2AvatarURL = function (user, child) {
         url = cdnUrl + '/avatar/medium/' + user.avatar + '.png';
     }
     return url;
-}
+};
 
 module.exports = {
     allow2Login,

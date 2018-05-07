@@ -11,6 +11,20 @@ export default handleActions({
         }
         return { ...state, ...action.payload };
     },
+
+    [actions.newData]: (state, action) => {
+        let user = action.payload.user;
+        if (!user) {
+            return { ...state };
+        }
+
+        let newState = Object.assign({}, state, {
+            user: user
+        });
+
+        return newState;
+    },
+
     [actions.logout]: (state, action) => {
         return {};
     }
