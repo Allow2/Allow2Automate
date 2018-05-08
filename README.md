@@ -70,6 +70,9 @@ Then upload with *Application Loader*
 
 ## Windows App Store
 
+NOTE: cannot currently build on Mac without using a Paid pro version of Parallel.
+So need to do that, or build on a VM
+
 ```sh
 npm run pack:win
 ```
