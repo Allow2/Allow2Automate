@@ -1,7 +1,6 @@
 appId: com.allow2.automate
 copyright: Allow2 Pty Ltd
 productName: Allow2Automate
-publisher: Allow2 Pty Ltd
 
 asar: true
 
@@ -33,6 +32,7 @@ mac:
   entitlements: ./parent.plist
   entitlementsInherit: ./child.plist
   bundleVersion: 33
+  publisher: Allow2 Pty Ltd
 
 win:
   target: AppX
