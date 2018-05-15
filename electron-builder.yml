@@ -40,10 +40,7 @@ appx:
   applicationId: dyq4j96jg1sgw1
 
 win:
-  target:
-    - AppX
-    - nsis
-    - 
+  target: AppX
   icon: app/assets/icons/win/icon.ico
   publisherName: Allow2 Pty Ltd
 
