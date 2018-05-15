@@ -1,6 +1,7 @@
 appId: com.allow2.automate
 copyright: Allow2 Pty Ltd
 productName: Allow2Automate
+publisher: Allow2 Pty Ltd
 
 asar: true
 
@@ -36,7 +37,6 @@ mac:
 win:
   target: AppX
   icon: app/assets/icons/win/icon.ico
-  publisherName: Allow2 Pty Ltd
 
 linux:
   target:
