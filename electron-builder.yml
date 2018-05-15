@@ -34,10 +34,16 @@ mac:
   bundleVersion: 33
 
 appx:
+  identityName: Allow2PtyLtd.Allow2Automate
+  publisher: CN=CE323DB8-E397-42A8-8ADD-A819C832F5A4
   publisherDisplayName: Allow2 Pty Ltd
+  applicationId: dyq4j96jg1sgw1
 
 win:
-  target: AppX
+  target:
+    - AppX
+    - nsis
+    - 
   icon: app/assets/icons/win/icon.ico
   publisherName: Allow2 Pty Ltd
 
