@@ -33,6 +33,9 @@ mac:
   entitlementsInherit: ./child.plist
   bundleVersion: 33
 
+appx:
+  publisherDisplayName: Allow2 Pty Ltd
+
 win:
   target: AppX
   icon: app/assets/icons/win/icon.ico
