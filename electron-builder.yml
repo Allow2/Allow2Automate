@@ -36,6 +36,7 @@ mac:
 win:
   target: AppX
   icon: app/assets/icons/win/icon.ico
+  publisherName: Allow2 Pty Ltd
 
 linux:
   target:
