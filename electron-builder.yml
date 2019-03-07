@@ -31,7 +31,7 @@ mac:
   icon: ./app/assets/icons/mac/icon.icns
   entitlements: ./parent.plist
   entitlementsInherit: ./child.plist
-  bundleVersion: 33
+  bundleVersion: 45
 
 appx:
   identityName: Allow2PtyLtd.Allow2Automate
