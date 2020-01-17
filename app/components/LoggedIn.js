@@ -317,6 +317,16 @@ export default class LoggedIn extends Component {
                     </Tab>
                     }
 
+                    <Tab label="Services" >
+                        Publish services on Github and package/release, then they will be picked up by Allow2 and added to the catalogue. Then can be downloaded and added here by users.
+
+                        const userDataPath = (electron.app || electron.remote.app).getPath('userData');
+                        // We'll use the `configName` property to set the file name and path.join to bring it all together as a string
+                        this.path = path.join(userDataPath, opts.configName + '.json');
+
+                        this.data = parseDataFile(this.path, opts.defaults);
+
+                    </Tab>
                 </Tabs>
             </div>
         );
