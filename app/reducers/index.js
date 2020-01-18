@@ -8,6 +8,7 @@ export default {
     children,
     devices,
     pairings,
+    plugins,
     user,
     util
 };

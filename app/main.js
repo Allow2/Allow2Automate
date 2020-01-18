@@ -22,19 +22,7 @@ const actions = bindActionCreators(allActions, store.dispatch);
 actions.deviceInit();
 actions.timezoneGuess(moment.tz.guess());
 
-var plugins = {
-    library: {},
-    installed: {},
-    configured: {}
-};
-
-function initPlugins() {
-    const userDataPath = (electron.app || electron.remote.app).getPath('userData');
-    // We'll use the `configName` property to set the file name and path.join to bring it all together as a string
-    this.pluginPath = path.join(userDataPath, "PlugIns");
-    console.log("Loading Plugins from " + this.pluginPath);
-}
-initPlugins();
+var plugins = require('./plugins')(app);
 
 var devices = new Wemo(
     {
