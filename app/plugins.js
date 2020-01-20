@@ -7,7 +7,7 @@ module.exports = function(app) {
         installed: {},
         configured: {
             "i78g98g98g": {
-                plugin: "battle.net",
+                plugin: "allow2-battle.net",
                 data: {
                     name: "Cody",
                     url: "https://us.battle.net/account/parental-controls/manage.html?key=GF5C30A125702AC5BADF93B43805BA86975B883EDBAD0926ECDA278D640CE3847",
@@ -16,7 +16,7 @@ module.exports = function(app) {
                 }
             },
             "siugikv89is": {
-                plugin: "battle.net",
+                plugin: "allow2-ssh",
                 data: {
                     name: "Mandy",
                     url: "https://us.battle.net/account/parental-controls/manage.html?key=dF5C30A125702AC5BADF93B43805BA86975B883EDBAD0926ECDA278D640CE3847",
@@ -60,48 +60,48 @@ module.exports = function(app) {
         app.pluginPath = path.join(userDataPath, "PlugIns");
         console.log("Loading Plugins from " + app.pluginPath);
 
+        // should be a network call
+        // use https://flight-manual.atom.io/atom-server-side-apis/sections/atom-package-server-api/ as an example
+
+        // GET api.allow2.com/automate/packages?page=1&sort=downloads&direction=desc
+
         plugins.library = {
-            "wow": {
-                "name": "wow",
-                "version": "1.0.0",
-                "description": "Enable Allow2Automate management of World of Warcraft parental controls",
-                "main": "index.js",
-                "scripts": {
+            "allow2-battle.net": {
+                name: "battle.net",
+                publisher: "allow2",
+                releases: {
+                    latest: "1.0.0"
+                },
+                description: "Enable Allow2Automate management of World of Warcraft parental controls",
+                main: "index.js",
+                scripts: {
                     "test": "echo \"Error: no test specified\" && exit 1"
                 },
-                "keywords": [
-                    'allow2automate'
-                ],
-                "author": "",
-                "license": "ISC"
+                keywords: [
+                    'allow2automate', 'battle.net', 'wow', 'world of warcraft'
+                ]
             },
-            "ssh": {
-                "name": "ssh",
-                "version": "1.0.0",
-                "description": "Enable Allow2Automate the ability to use ssh to configure devices",
-                "main": "index.js",
-                "scripts": {
-                    "test": "echo \"Error: no test specified\" && exit 1"
+            "allow2-ssh": {
+                name: "ssh",
+                publisher: "allow2",
+                releases: {
+                    latest: "1.0.0"
                 },
-                "keywords" : [
-                    'allow2automate'
-                ],
-                "author": "",
-                "license": "ISC"
+                description: "Enable Allow2Automate the ability to use ssh to configure devices",
+                keywords : [
+                    'allow2automate', 'allow2', 'ssh'
+                ]
             },
-            "mcafeesafefamily": {
-                "name": "mcafeesafefamily",
-                "version": "1.0.0",
-                "description": "Enable Allow2Automate the ability to use ssh to configure devices",
-                "main": "index.js",
-                "scripts": {
-                    "test": "echo \"Error: no test specified\" && exit 1"
+            "mcafee-safefamily": {
+                name: "safefamily",
+                publisher: "mcafee",
+                releases: {
+                    latest: "1.0.0"
                 },
-                "keywords" : [
-                    'allow2automate'
-                ],
-                "author": "",
-                "license": "ISC"
+                description: "Enable Allow2Automate management of McAfee Safe Family parental controls",
+                keywords : [
+                    'allow2automate', 'mcafee', 'safefamily'
+                ]
             }
         }
     }
