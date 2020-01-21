@@ -93,3 +93,26 @@ snapcraft push dist/Allow2Automate_1.1.0_amd64.snap
 
 For installation of the daemon helper:
 [https://www.npmjs.com/package/electron-sudo](https://www.npmjs.com/package/electron-sudo)
+
+# Creating PlugIns
+
+Plugins provide an ability to hook in to Allow2 and use it to control external devices/etc. For example, if you use battle.net parental controls,
+they provide no API and are not integrated with Allow2. However, you can develop a plugin and submit it to the directory and within that plugin
+create the necessary bridge to translate controls.
+
+The rationale is if users can set up a process on their own computer or device, and put their credentials in that instance, then it is inherently
+more secure. The endpoint on the parents home network has the credentials in a highly decentralised model. Otherwise they would need to entrust
+their credentials to a cloud service. This is inherently less secure and also creates a much bigger target for hackers.
+
+In the case of battle.net (one of the examples), it uses web calls to the html page and scrapes it using the supplied credentials. This enables
+the end user to set it up and have the Allow2 controls take effect on the web interface for battle.net parental controls.
+
+The second example (both are on github) is a ssh plugin. This can be set to trigger on "interesting" state changes (ie: child 2 runs out of
+internet time) and do an automatic ssh to a device and run a pre-configured command, this also looks for a return code to indicate if there is a
+success or failure. This can be used to do things like ssh in to a flashed router and run a script to change firewall rules and reboot the router.
+Or it could ssh into a light and run a script or command to turn it red.
+
+Plugins package.json require a few extra fields:
+allow2Token: create a new "app/device" token at https://developer.allow2.com/ and enter that token here. All plugins need to have a token to
+communicate with the Allow2 platform.
+engines: { "allow2automate": "*" } - specifies the version range with which the plugin is tested/compatible.

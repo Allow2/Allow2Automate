@@ -8,6 +8,7 @@ import { sortedVisibleDevicesSelector } from '../selectors';
 import { allow2Request, allow2AvatarURL } from '../util';
 import Dialogs from 'dialogs';
 import Checkbox from './Checkbox';
+import PlugIns from './PlugIns';
 //import deviceActions from '../actions/device';
 import modal from 'electron-modal';
 import path from 'path';
@@ -27,10 +28,6 @@ const apiUrl = 'https://api.allow2.com/';
 
 var dialogs = Dialogs({});
 
-//var deviceTokens = {
-//    LightSwitch: 'ttH8fDKKgn4uTiwg',
-//    Socket: '9XJDykzCcxhMCci5'
-//};
 var deviceTokens = {
     LightSwitch: 'TczDIlwkOxMVlCTJ',
     Socket: 'Bw6tUTmmHVykUxGM'
@@ -118,7 +115,7 @@ var deviceImages = {
 //    }
 //}
 
-export default class LoggedIn extends Component {
+export default class Plugins extends Component {
 
     messageDevices = {};
 
@@ -318,14 +315,7 @@ export default class LoggedIn extends Component {
                     }
 
                     <Tab label="Services" >
-                        Publish services on Github and package/release, then they will be picked up by Allow2 and added to the catalogue. Then can be downloaded and added here by users.
-
-                        const userDataPath = (electron.app || electron.remote.app).getPath('userData');
-                        // We'll use the `configName` property to set the file name and path.join to bring it all together as a string
-                        this.path = path.join(userDataPath, opts.configName + '.json');
-
-                        this.data = parseDataFile(this.path, opts.defaults);
-
+                        <PlugIns props={this.props} />
                     </Tab>
                 </Tabs>
             </div>
