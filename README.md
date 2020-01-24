@@ -9,6 +9,7 @@ The intention is:
     * Provides a fully self-contained app to run in user space with no elevated privileges.
     * Manages an overall user connection to the API back end (rest based)
     * Allows the user to see and monitor Wemo, Homekit and other devices on the local network
+    * Switched to a pluggable architecture to support other integrations - now you can publish your own integrations with other services/devices
     * Allows to "connect" (pair) devices selectively to (and remove them from) the currently active Allow2 account
     * May allow some other basic functions in future
 2. Provide a separate capability to detect (and authenticate against?) a separate elevated daemon service that runs
@@ -21,6 +22,7 @@ do not permit the background process to be included in the installer (Yes Apple,
 The base operation is intended to show a "Network Wide" view of all detected automation devices, and provide the ability to
 link/authenticate with them directly, with bridges and otherwise, and de-duplicate any that may come through separate channels
 (ie: direct wemo connections and the same device via a homekit bridge).
+It also provides a pluggable module framework to support communication with 3rd party services and devices.
 
 # Screenshots
 
@@ -96,7 +98,7 @@ For installation of the daemon helper:
 
 # Creating PlugIns
 
-Plugins provide an ability to hook in to Allow2 and use it to control external devices/etc. For example, if you use battle.net parental controls,
+Plugins are new and provide an ability to hook in to Allow2 and use it to control external devices/etc. For example, if you use battle.net parental controls,
 they provide no API and are not integrated with Allow2. However, you can develop a plugin and submit it to the directory and within that plugin
 create the necessary bridge to translate controls.
 

@@ -196,6 +196,7 @@ export default class Plugins extends Component {
         let avatarUrl = allow2AvatarURL(user && user.user, null);
         let avatar = ( user.user && <Avatar src={ avatarUrl } />) ||
             <Avatar icon={<Person />} />;
+
         return (
             <div>
                 <AppBar
@@ -315,7 +316,7 @@ export default class Plugins extends Component {
                     }
 
                     <Tab label="Services" >
-                        <PlugIns props={this.props} />
+                        <PlugIns {...this.props} />
                     </Tab>
                 </Tabs>
             </div>

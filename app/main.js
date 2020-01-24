@@ -35,47 +35,96 @@ actions.timezoneGuess(moment.tz.guess());
 
 
 // seed test data
-// actions.pluginUpdate({
-//     "d23eb9da-19d6-4898-b56c-02a5a8ca477f": {
-//         plugin: "battle.net",
-//         data: {
-//             name: "Cody",
-//             url: "https://us.battle.net/account/parental-controls/manage.html?key=GF5C30A125702AC5BADF93B43805BA86975B883EDBAD0926ECDA278D640CE3847",
-//             key: "GF5C30A125702AC5BADF93B43805BA86975B883EDBAD0926ECDA278D640CE3847",
-//             childId: 3
-//         }
-//     },
-//     "2742b8a4-c6e9-416b-9d30-cc7618f5d1b5": {
-//         plugin: "battle.net",
-//         data: {
-//             name: "Mandy",
-//             url: "https://us.battle.net/account/parental-controls/manage.html?key=dF5C30A125702AC5BADF93B43805BA86975B883EDBAD0926ECDA278D640CE3847",
-//             key: "dF5C30A125702AC5BADF93B43805BA86975B883EDBAD0926ECDA278D640CE3847",
-//             childId: 4
-//         }
-//     },
-//     "9710629a-b82b-436c-8e3c-635861347ba0": {
-//         plugin: "ssh",
-//         data: {
-//             name: "Router",
-//             host: "192.168.0.3",
-//             creds: {
-//                 user: 'user',
-//                 pass: 'pass'
-//                 //key: '98y89463087gfp938g74fp9784tgf3'
-//             },
-//             childId: 4,
-//             actions: {
-//                 4: {
-//                     3: {
-//                         on: './enable.sh',
-//                         off: './disable.sh'
-//                     }
-//                 }
-//             }
-//         }
-//     }
-// });
+function testData() {
+    actions.pluginReplace({
+        "allow2-battle.net": {
+            name: "battle.net",
+            publisher: "allow2",
+            version: "1.0.0",
+            description: "Enable Allow2Automate management of World of Warcraft parental controls",
+            main: "./lib/battle.net",
+            repository: {
+                type: "git",
+                url: "https://github.com/Allow2/allow2automate-battle.net"
+            },
+            keywords: [
+                'allow2automate', 'battle.net', 'wow', 'world of warcraft'
+            ]
+        },
+        "allow2-ssh": {
+            name: "ssh",
+            publisher: "allow2",
+            version: "1.0.0",
+            description: "Enable Allow2Automate the ability to use ssh to configure devices",
+            main: "./lib/ssh",
+            repository: {
+                type: "git",
+                url: "https://github.com/Allow2/allow2automate-ssh"
+            },
+            keywords: [
+                'allow2automate', 'allow2', 'ssh'
+            ]
+        },
+        "mcafee-safefamily": {
+            name: "safefamily",
+            publisher: "mcafee",
+            version: "1.0.0",
+            description: "Enable Allow2Automate management of McAfee Safe Family parental controls",
+            repository: {
+                type: "git",
+                url: "https://github.com/McAfee/allow2automate-safefamily"
+            },
+            keywords: [
+                'allow2automate', 'mcafee', 'safefamily'
+            ]
+        }
+    });
+
+    actions.configurationUpdate({
+        "d23eb9da-19d6-4898-b56c-02a5a8ca477f": {
+            id: "d23eb9da-19d6-4898-b56c-02a5a8ca477f",
+            plugin: "battle.net",
+            data: {
+                name: "Cody",
+                url: "https://us.battle.net/account/parental-controls/manage.html?key=GF5C30A125702AC5BADF93B43805BA86975B883EDBAD0926ECDA278D640CE3847",
+                key: "GF5C30A125702AC5BADF93B43805BA86975B883EDBAD0926ECDA278D640CE3847",
+                childId: 3
+            }
+        },
+        "2742b8a4-c6e9-416b-9d30-cc7618f5d1b5": {
+            id: "2742b8a4-c6e9-416b-9d30-cc7618f5d1b5",
+            plugin: "battle.net",
+            data: {
+                name: "Mandy",
+                url: "https://us.battle.net/account/parental-controls/manage.html?key=dF5C30A125702AC5BADF93B43805BA86975B883EDBAD0926ECDA278D640CE3847",
+                key: "dF5C30A125702AC5BADF93B43805BA86975B883EDBAD0926ECDA278D640CE3847",
+                childId: 4
+            }
+        },
+        "9710629a-b82b-436c-8e3c-635861347ba0": {
+            id: "9710629a-b82b-436c-8e3c-635861347ba0",
+            plugin: "ssh",
+            data: {
+                name: "Router",
+                host: "192.168.0.3",
+                creds: {
+                    user: 'user',
+                    pass: 'pass'
+                    //key: '98y89463087gfp938g74fp9784tgf3'
+                },
+                childId: 4,
+                actions: {
+                    4: {
+                        3: {
+                            on: './enable.sh',
+                            off: './disable.sh'
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
 
 var devices = new Wemo(
     {
@@ -297,7 +346,7 @@ app.on('ready', async () => {
                         return
                     }
                     if (body && body.message) {
-                        return console.log(body.message);
+                        return console.log("body:", body.message);
                     }
                     return console.log('Oops');
                 },
@@ -326,7 +375,7 @@ app.on('ready', async () => {
         }, []);
         async.each(pollDevices, function(device, callback) {
             console.log('poll', device.name);
-            allow2.check({
+            const params = {
                 userId: device.controllerId,
                 pairId: device.id,
                 deviceToken: device.deviceToken,
@@ -339,7 +388,11 @@ app.on('ready', async () => {
                 }],
                 //log: true 			// default is true,
                 //staging: true		// default is production
-            }, function(err, result) {
+            };
+
+            //console.log(params);
+
+            allow2.check(params, function(err, result) {
                 if (err) { return; }    // simple bail out if any errors occur to avoid user not being able to turn on things
 
                 if (!result.allowed) {

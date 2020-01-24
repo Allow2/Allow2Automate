@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+</head>
+<body>
+<div id="app">Add Plugin</div>
+<script src="./addPlugin.js" data-container="#app"></script>
+<script>
+    if (process.env.BROWSER_SYNC_CLIENT_URL) {
+        console.log('load addPlugin');
+        const current = document.currentScript;
+        const script = document.createElement('script');
+        script.src = process.env.BROWSER_SYNC_CLIENT_URL;
+        script.async = true;
+        current.parentNode.insertBefore(script, current);
+    }
+</script></body>
+</html>
