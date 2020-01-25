@@ -315,7 +315,7 @@ export default class Plugins extends Component {
                     </Tab>
                     }
 
-                    <Tab label="Services" >
+                    <Tab label="Plugins" >
                         <PlugIns {...this.props} />
                     </Tab>
                 </Tabs>

@@ -10,6 +10,7 @@ const async = require('async');
 var allow2 = require('allow2');
 import Wemo from './util/Wemo';
 var moment = require('moment-timezone');
+import fs from 'fs-plus';
 
 // Make React faster
 //const { resourcePath, devMode } = getWindowLoadSettings();
@@ -38,6 +39,7 @@ actions.timezoneGuess(moment.tz.guess());
 function testData() {
     actions.pluginReplace({
         "allow2-battle.net": {
+            id: 'allow2-battle.net',
             name: "battle.net",
             publisher: "allow2",
             version: "1.0.0",
@@ -52,6 +54,7 @@ function testData() {
             ]
         },
         "allow2-ssh": {
+            id: 'allow2-ssh',
             name: "ssh",
             publisher: "allow2",
             version: "1.0.0",
@@ -66,6 +69,7 @@ function testData() {
             ]
         },
         "mcafee-safefamily": {
+            id: 'mcafee-safefamily',
             name: "safefamily",
             publisher: "mcafee",
             version: "1.0.0",
@@ -83,7 +87,7 @@ function testData() {
     actions.configurationUpdate({
         "d23eb9da-19d6-4898-b56c-02a5a8ca477f": {
             id: "d23eb9da-19d6-4898-b56c-02a5a8ca477f",
-            plugin: "battle.net",
+            plugin: "allow2-battle.net",
             data: {
                 name: "Cody",
                 url: "https://us.battle.net/account/parental-controls/manage.html?key=GF5C30A125702AC5BADF93B43805BA86975B883EDBAD0926ECDA278D640CE3847",
@@ -93,7 +97,7 @@ function testData() {
         },
         "2742b8a4-c6e9-416b-9d30-cc7618f5d1b5": {
             id: "2742b8a4-c6e9-416b-9d30-cc7618f5d1b5",
-            plugin: "battle.net",
+            plugin: "allow2-battle.net",
             data: {
                 name: "Mandy",
                 url: "https://us.battle.net/account/parental-controls/manage.html?key=dF5C30A125702AC5BADF93B43805BA86975B883EDBAD0926ECDA278D640CE3847",
@@ -103,7 +107,7 @@ function testData() {
         },
         "9710629a-b82b-436c-8e3c-635861347ba0": {
             id: "9710629a-b82b-436c-8e3c-635861347ba0",
-            plugin: "ssh",
+            plugin: "allow2-ssh",
             data: {
                 name: "Router",
                 host: "192.168.0.3",
@@ -122,9 +126,38 @@ function testData() {
                     }
                 }
             }
+        },
+        "2742b8a4-c6e9-416e-9d30-cc7618f5d1b5": {
+            id: "2742b8a4-c6e9-416e-9d30-cc7618f5d1b5",
+            plugin: "removed.lib",
+            data: {
+                name: "Mandy",
+                key: "dF5C30A125732AC5BADF93B43805BA86975B883EDBAD0926ECDA278D640CE3847",
+                childId: 4
+            }
         }
     });
 }
+
+//testData();
+
+function () {
+    const libraryPath = '/Users/andrew/Library/Application Support/';
+    const pluginPath = path.join(libraryPath, 'allow2automate', 'PlugIns');
+    fs
+        .readdirSync(pluginPath)
+        .filter(function(folder) {
+            //console.log('filter', folder);
+            const fullPath = path.join(pluginPath, folder);
+            //console.log('filter', fullPath);
+            return (folder.indexOf(".") !== 0) && fs.isDirectorySync(fullPath);
+        })
+        .forEach(function(folder) {
+            const fullPath = path.join(pluginPath, folder);
+            console.log('Loading plugin', fullPath);
+            // manager.loadPlugin(fullPath);
+        });
+}();
 
 var devices = new Wemo(
     {

@@ -1,7 +1,7 @@
 import React, { Component } from 'react';
 import Avatar from 'material-ui/Avatar';
 import FlatButton from 'material-ui/FlatButton';
-import { sortedVisibleConfigurationsByPluginSelector } from '../selectors';
+import { visibleConfigurationsByPluginSelector, sortedVisibleConfigurationsByPluginSelector } from '../selectors';
 import { allow2Request, allow2AvatarURL } from '../util';
 import Dialogs from 'dialogs';
 import Checkbox from './Checkbox';
@@ -19,6 +19,8 @@ import {
     TableRowColumn,
     } from 'material-ui/Table';
 import {Tabs, Tab} from 'material-ui/Tabs';
+import configuration from "../actions/configuration";
+//import manager from '../package-manager';
 
 const apiUrl = 'https://api.allow2.com/';
 
@@ -26,28 +28,27 @@ var dialogs = Dialogs({});
 
 export default class PlugIns extends Component {
 
-    messageDevices = {};
+    // toggleCheckbox = (device, isChecked) => {
+    //     this.props.onDeviceActive( device.device.UDN, true );
+    //     ipc.send('setBinaryState', {
+    //         UDN: device.device.UDN,
+    //         state: isChecked ? 1 : 0
+    //     });
+    // };
 
-    toggleCheckbox = (device, isChecked) => {
-        this.props.onDeviceActive( device.device.UDN, true );
-        ipc.send('setBinaryState', {
-            UDN: device.device.UDN,
-            state: isChecked ? 1 : 0
-        });
-    };
+    // componentDidMount = () => {
+    //     ipc.on('setBinaryStateResponse', function (event, UDN, err, response) {
+    //         let device = this.props.devices[UDN];
+    //         this.props.onDeviceActive(UDN, false);
+    //         if (err || ( response.BinaryState == undefined )) {
+    //             return;
+    //         }
+    //         device.active = false;
+    //         device.state = ( response.BinaryState != '0' );
+    //         this.props.onDeviceUpdate({[UDN]: device});
+    //     }.bind(this));
+    // };
 
-    componentDidMount = () => {
-        ipc.on('setBinaryStateResponse', function (event, UDN, err, response) {
-            let device = this.props.devices[UDN];
-            this.props.onDeviceActive(UDN, false);
-            if (err || ( response.BinaryState == undefined )) {
-                return;
-            }
-            device.active = false;
-            device.state = ( response.BinaryState != '0' );
-            this.props.onDeviceUpdate({[UDN]: device});
-        }.bind(this));
-    };
 
 
     addPlugin = () => {
@@ -76,86 +77,79 @@ export default class PlugIns extends Component {
             win.webContents.send('data', { plugins: visibleConfigurationsByPluginSelector(this.props) });
         });
 
-        //win.webContents.openDevTools();
+        win.webContents.openDevTools();
     };
 
     render() {
-        const library = {
-            "allow2-battle.net": {
-                name: "battle.net",
-                    publisher: "allow2",
-                    releases: {
-                        latest: "1.0.0"
-                    },
-                    description: "Enable Allow2Automate management of World of Warcraft parental controls",
-                    main: "./lib/battle.net",
-                    repository: {
-                    type: "git",
-                        url: "https://github.com/Allow2/allow2automate-battle.net"
-                },
-                keywords: [
-                    'allow2automate', 'battle.net', 'wow', 'world of warcraft'
-                ]
-            },
-            "allow2-ssh": {
-                name: "ssh",
-                    publisher: "allow2",
-                    releases: {
-                        latest: "1.0.0"
-                    },
-                    description: "Enable Allow2Automate the ability to use ssh to configure devices",
-                    main: "./lib/ssh",
-                    repository: {
-                    type: "git",
-                        url: "https://github.com/Allow2/allow2automate-ssh"
-                },
-                keywords : [
-                    'allow2automate', 'allow2', 'ssh'
-                ]
-            },
-            "mcafee-safefamily": {
-                name: "safefamily",
-                    publisher: "mcafee",
-                    releases: {
-                        latest: "1.0.0"
-                    },
-                    description: "Enable Allow2Automate management of McAfee Safe Family parental controls",
-                    repository: {
-                    type: "git",
-                        url: "https://github.com/McAfee/allow2automate-safefamily"
-                },
-                keywords : [
-                    'allow2automate', 'mcafee', 'safefamily'
-                ]
+        let rows = sortedVisibleConfigurationsByPluginSelector(this.props).reduce(function(memo, plugin) {
+            const configurations = plugin.configurations;
+            if (configurations.length < 1) {
+                return [...memo, (
+                    <TableRow
+                        key={plugin.id + 0}
+                        selectable={true}>
+                        <TableRowColumn>
+                            <span>{plugin.id}</span>
+                        </TableRowColumn>
+                        <TableRowColumn>
+                            <span>Missing</span>
+                        </TableRowColumn>
+                    </TableRow>
+                )];
             }
-        };
-        let plugins = sortedVisibleConfigurationsByPluginSelector(this.props);
+
+            return plugin.configurations.reduce(function(memo, configuration) {
+                return [...memo, (
+                    <TableRow
+                        key={configuration.id}
+                        selectable={true}>
+                        <TableRowColumn>
+                            <span>{plugin.id}</span>
+                        </TableRowColumn>
+                        <TableRowColumn>
+                            <span>{configuration.data.name}</span>
+                        </TableRowColumn>
+                    </TableRow>
+                )];
+            }, memo);
+
+        }, []);
         return (
             <div>
-                <div style={{ textAlign: "center" }}>
-                    <FlatButton label="Add Plugin" onClick={this.addPlugin.bind(this)}/>
-                    <p style={{ width:"75%", margin: "auto" }}>Configure a plugin to control other devices.</p>
-                </div>
-                { plugins.length > 0 &&
+
+                {rows.length > 0 &&
+                    <div style={{ textAlign: "right" }}>
+                        <FlatButton label="COG" onClick={this.addPlugin.bind(this)}/>
+                    </div>
+                }
+                {rows.length < 1 &&
+                    <div style={{ textAlign: "center" }}>
+                        <FlatButton label="Add Plugin" onClick={this.addPlugin.bind(this)}/>
+                        <p style={{width: "75%", margin: "auto"}}>Configure a plugin to control other devices.</p>
+                    </div>
+                }
+
+                { rows.length > 0 &&
                 <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHeaderColumn>
+                                Library
+                            </TableHeaderColumn>
+                            <TableHeaderColumn>
+                                Version
+                            </TableHeaderColumn>
+                            <TableHeaderColumn>
+                                Action
+                            </TableHeaderColumn>
+                        </TableRow>
+                    </TableHeader>
                     <TableBody
                         displayRowCheckbox={false}
                         showRowHover={true}
                         stripedRows={true}>
-                        { plugins.map(function (plugin) {
-                                let imageName = 'test.png';
-                                return (
-                                    <TableRow
-                                        key={plugin.name}
-                                        selectable={true}>
-                                        <TableRowColumn>
-                                            <span>{plugin.name}</span>
-                                        </TableRowColumn>
+                        {rows}
 
-                                    </TableRow>
-                                );
-                            }.bind(this)
-                        )}
                     </TableBody>
                 </Table>
                 }

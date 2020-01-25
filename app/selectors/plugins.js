@@ -15,22 +15,24 @@ const visibleConfigurationsByPluginSelector = createSelector(
     [state => state.plugins, state => state.configurations],
     (plugins, configurations) => {
         if (!plugins || !configurations) { return []; }
-        var initialPlugins = Object.values(plugins).map(function(plugin) {
-            return {
+        var initialPlugins = Object.values(plugins).reduce(function(memo, plugin) {
+            memo[plugin.id] = {
                 ...plugin,
                 configurations: {}
             };
-        });
-        var configurationsyPlugin = Object.values(configurations).reduce(function (memo, configuration) {
+            return memo;
+        }, {});
+        var configurationsByPlugin = Object.values(configurations).reduce(function (memo, configuration) {
             var plugin = memo[configuration.plugin] || {
-                name: configuration.plugin,
+                id: configuration.plugin,
                 configurations: {}
             };
             plugin.configurations = [...plugin.configurations, configuration];
             memo[configuration.plugin] = plugin;
             return memo;
         }, initialPlugins);
-        return configurationsyPlugin;
+        console.log("configurationsByPlugin", configurationsByPlugin);
+        return configurationsByPlugin;
     }
 );
 
@@ -38,9 +40,9 @@ const sortedVisibleConfigurationsByPluginSelector = createSelector(
     [visibleConfigurationsByPluginSelector],
     (configurationsByPlugin) => {
         if (!configurationsByPlugin) { return []; }
-        console.log(configurationsByPlugin);
-        var sortedConfigurations = Object.values(configurationsByPlugin).reduce(function (memo, plugin) {
-            memo[plugin.name] = {
+        //console.log(configurationsByPlugin);
+        const sortedConfigurations = Object.values(configurationsByPlugin).reduce(function (memo, plugin) {
+            memo[plugin.id] = {
                 ...plugin,
                 configurations: Object.values(plugin.configurations).sort((a, b) => {
                     return a.data.name.localeCompare(b.data.name);
@@ -48,9 +50,10 @@ const sortedVisibleConfigurationsByPluginSelector = createSelector(
             };
             return memo;
         }, {});
-        var result = Object.values(sortedConfigurations).sort((a,b) => {
-            return a.name .localeCompare(b.name);
+        const result = Object.values(sortedConfigurations).sort((a,b) => {
+            return (a.name || a.id).localeCompare(b.name || b.id);
         }); // todo: better sorting
+        console.log("sortedVisibleConfigurationsByPlugin", configurationsByPlugin);
         return result;
     }
 );
