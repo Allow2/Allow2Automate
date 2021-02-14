@@ -10,6 +10,7 @@ const async = require('async');
 var allow2 = require('allow2');
 import Wemo from './util/Wemo';
 var moment = require('moment-timezone');
+const epm = require('electron-plugin-manager');
 
 // Make React faster
 //const { resourcePath, devMode } = getWindowLoadSettings();
@@ -25,13 +26,17 @@ let forceQuit = false;
 const store = configureStore();
 const actions = bindActionCreators(allActions, store.dispatch);
 
-require('./compile-cache');
-require('./module-cache');
+const dir = path.join(app.getPath('appData'), 'allow2automate');
+
+epm.manager(ipc);
+epm.install(dir, 'is-number', 'latest', (err, pluginPath) => {
+    console.log('is-number: ', err, pluginPath);
+});
 
 actions.deviceInit();
 actions.timezoneGuess(moment.tz.guess());
 
-//var plugins = require('./plugins')(app);
+var plugins = require('./plugins')(app);
 
 
 // seed test data

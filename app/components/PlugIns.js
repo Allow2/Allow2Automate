@@ -19,6 +19,8 @@ import {
     TableRowColumn,
     } from 'material-ui/Table';
 import {Tabs, Tab} from 'material-ui/Tabs';
+const epm = require('electron-plugin-manager');
+const dir = path.join(remote.app.getPath('appData'), 'allow2automate');
 
 const apiUrl = 'https://api.allow2.com/';
 
@@ -130,6 +132,7 @@ export default class PlugIns extends Component {
             }
         };
         let plugins = sortedVisibleConfigurationsByPluginSelector(this.props);
+        let installed = epm.list(dir, { version: true });
         return (
             <div>
                 <div style={{ textAlign: "center" }}>
@@ -159,6 +162,26 @@ export default class PlugIns extends Component {
                     </TableBody>
                 </Table>
                 }
+                <Table>
+                    <TableBody
+                        displayRowCheckbox={false}
+                        showRowHover={true}
+                        stripedRows={true}>
+                        { installed.map(function (plugin) {
+                                return (
+                                    <TableRow
+                                        key={plugin}
+                                        selectable={false}>
+                                        <TableRowColumn>
+                                            <span>{plugin}</span>
+                                        </TableRowColumn>
+
+                                    </TableRow>
+                                );
+                            }.bind(this)
+                        )}
+                    </TableBody>
+                </Table>
             </div>
         );
     }
