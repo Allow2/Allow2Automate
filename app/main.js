@@ -29,9 +29,9 @@ const actions = bindActionCreators(allActions, store.dispatch);
 const dir = path.join(app.getPath('appData'), 'allow2automate');
 
 epm.manager(ipc);
-epm.install(dir, 'is-number', 'latest', (err, pluginPath) => {
-    console.log('is-number: ', err, pluginPath);
-});
+// epm.install(dir, 'is-number', 'latest', (err, pluginPath) => {
+//     console.log('is-number: ', err, pluginPath);
+// });
 
 actions.deviceInit();
 actions.timezoneGuess(moment.tz.guess());
@@ -42,8 +42,8 @@ var plugins = require('./plugins')(app);
 // seed test data
 function testData() {
     actions.pluginReplace({
-        "allow2-battle.net": {
-            name: "battle.net",
+        "allow2automate-battle.net": {
+            name: "allow2automate-battle.net",
             publisher: "allow2",
             version: "1.0.0",
             description: "Enable Allow2Automate management of World of Warcraft parental controls",
@@ -56,8 +56,8 @@ function testData() {
                 'allow2automate', 'battle.net', 'wow', 'world of warcraft'
             ]
         },
-        "allow2-ssh": {
-            name: "ssh",
+        "allow2automate-ssh": {
+            name: "allow2automate-ssh",
             publisher: "allow2",
             version: "1.0.0",
             description: "Enable Allow2Automate the ability to use ssh to configure devices",
@@ -71,7 +71,7 @@ function testData() {
             ]
         },
         "mcafee-safefamily": {
-            name: "safefamily",
+            name: "mcafee-safefamily",
             publisher: "mcafee",
             version: "1.0.0",
             description: "Enable Allow2Automate management of McAfee Safe Family parental controls",
@@ -88,7 +88,7 @@ function testData() {
     actions.configurationUpdate({
         "d23eb9da-19d6-4898-b56c-02a5a8ca477f": {
             id: "d23eb9da-19d6-4898-b56c-02a5a8ca477f",
-            plugin: "battle.net",
+            plugin: "allow2automate-battle.net",
             data: {
                 name: "Cody",
                 url: "https://us.battle.net/account/parental-controls/manage.html?key=GF5C30A125702AC5BADF93B43805BA86975B883EDBAD0926ECDA278D640CE3847",
@@ -98,7 +98,7 @@ function testData() {
         },
         "2742b8a4-c6e9-416b-9d30-cc7618f5d1b5": {
             id: "2742b8a4-c6e9-416b-9d30-cc7618f5d1b5",
-            plugin: "battle.net",
+            plugin: "allow2automate-battle.net",
             data: {
                 name: "Mandy",
                 url: "https://us.battle.net/account/parental-controls/manage.html?key=dF5C30A125702AC5BADF93B43805BA86975B883EDBAD0926ECDA278D640CE3847",
@@ -108,7 +108,7 @@ function testData() {
         },
         "9710629a-b82b-436c-8e3c-635861347ba0": {
             id: "9710629a-b82b-436c-8e3c-635861347ba0",
-            plugin: "ssh",
+            plugin: "allow2automate-ssh",
             data: {
                 name: "Router",
                 host: "192.168.0.3",
@@ -131,6 +131,7 @@ function testData() {
     });
 }
 
+//testData();
 var devices = new Wemo(
     {
         onDeviceUpdate: (data) => {
@@ -259,7 +260,6 @@ app.on('ready', async () => {
             width: 660,
             height: 800,
             minWidth: 640,
-            maxWidth: 660,
             minHeight: 480,
             show: false,
             title: 'Allow2Automate',
@@ -421,4 +421,10 @@ app.on('ready', async () => {
     }
     pollUsage();
     usageTimer = setInterval(pollUsage, 10000);
+
+    //
+    // * test loading a library
+    //
+    epm.load(dir, 'allow2automate-battle.net');
+    var plugin = require('allow2automate-battle.net')({ allow2: "testing" });
 });

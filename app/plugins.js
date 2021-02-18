@@ -87,7 +87,7 @@ module.exports = function(app) {
         // GET api.allow2.com/automate/packages?page=1&sort=downloads&direction=desc
 
         plugins.library = {
-            "allow2-battle.net": {
+            "allow2automate-battle.net": {
                 name: "battle.net",
                 publisher: "allow2",
                 releases: {
@@ -103,7 +103,7 @@ module.exports = function(app) {
                     'allow2automate', 'battle.net', 'wow', 'world of warcraft'
                 ]
             },
-            "allow2-ssh": {
+            "allow2automate-ssh": {
                 name: "ssh",
                 publisher: "allow2",
                 releases: {

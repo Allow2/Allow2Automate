@@ -83,48 +83,48 @@ export default class PlugIns extends Component {
 
     render() {
         const library = {
-            "allow2-battle.net": {
-                name: "battle.net",
-                    publisher: "allow2",
-                    releases: {
-                        latest: "1.0.0"
-                    },
-                    description: "Enable Allow2Automate management of World of Warcraft parental controls",
-                    main: "./lib/battle.net",
-                    repository: {
+            "allow2automate-battle.net": {
+                name: "allow2automate-battle.net",
+                publisher: "allow2",
+                releases: {
+                    latest: "1.0.0"
+                },
+                description: "Enable Allow2Automate management of World of Warcraft parental controls",
+                main: "./lib/battle.net",
+                repository: {
                     type: "git",
-                        url: "https://github.com/Allow2/allow2automate-battle.net"
+                    url: "https://github.com/Allow2/allow2automate-battle.net"
                 },
                 keywords: [
                     'allow2automate', 'battle.net', 'wow', 'world of warcraft'
                 ]
             },
-            "allow2-ssh": {
-                name: "ssh",
-                    publisher: "allow2",
-                    releases: {
-                        latest: "1.0.0"
-                    },
-                    description: "Enable Allow2Automate the ability to use ssh to configure devices",
-                    main: "./lib/ssh",
-                    repository: {
+            "allow2automate-ssh": {
+                name: "allow2automate-ssh",
+                publisher: "allow2",
+                releases: {
+                    latest: "1.0.0"
+                },
+                description: "Enable Allow2Automate the ability to use ssh to configure devices",
+                main: "./lib/ssh",
+                repository: {
                     type: "git",
-                        url: "https://github.com/Allow2/allow2automate-ssh"
+                    url: "https://github.com/Allow2/allow2automate-ssh"
                 },
                 keywords : [
                     'allow2automate', 'allow2', 'ssh'
                 ]
             },
             "mcafee-safefamily": {
-                name: "safefamily",
-                    publisher: "mcafee",
-                    releases: {
-                        latest: "1.0.0"
-                    },
-                    description: "Enable Allow2Automate management of McAfee Safe Family parental controls",
-                    repository: {
+                name: "mcafee-safefamily",
+                publisher: "mcafee",
+                releases: {
+                    latest: "1.0.0"
+                },
+                description: "Enable Allow2Automate management of McAfee Safe Family parental controls",
+                repository: {
                     type: "git",
-                        url: "https://github.com/McAfee/allow2automate-safefamily"
+                    url: "https://github.com/McAfee/allow2automate-safefamily"
                 },
                 keywords : [
                     'allow2automate', 'mcafee', 'safefamily'
@@ -132,7 +132,15 @@ export default class PlugIns extends Component {
             }
         };
         let plugins = sortedVisibleConfigurationsByPluginSelector(this.props);
-        let installed = epm.list(dir, { version: true });
+        let installed = epm.list(dir, { version: true }).reduce(function(memo, plugin) {
+            const parts = plugin.split('@');
+            memo[parts[0]] = {
+                version: parts[1]
+            }
+            return memo;
+        }, {});
+        console.log(installed);
+
         return (
             <div>
                 <div style={{ textAlign: "center" }}>
@@ -162,27 +170,29 @@ export default class PlugIns extends Component {
                     </TableBody>
                 </Table>
                 }
-                <Table>
-                    <TableBody
-                        displayRowCheckbox={false}
-                        showRowHover={true}
-                        stripedRows={true}>
-                        { installed.map(function (plugin) {
-                                return (
-                                    <TableRow
-                                        key={plugin}
-                                        selectable={false}>
-                                        <TableRowColumn>
-                                            <span>{plugin}</span>
-                                        </TableRowColumn>
-
-                                    </TableRow>
-                                );
-                            }.bind(this)
-                        )}
-                    </TableBody>
-                </Table>
             </div>
         );
+
     }
 }
+
+// <Table>
+//                     <TableBody
+//                         displayRowCheckbox={false}
+//                         showRowHover={true}
+//                         stripedRows={true}>
+//                         { installed.map(function (plugin) {
+//                                 return (
+//                                     <TableRow
+//                                         key={plugin}
+//                                         selectable={false}>
+//                                         <TableRowColumn>
+//                                             <span>{plugin}</span>
+//                                         </TableRowColumn>
+//
+//                                     </TableRow>
+//                                 );
+//                             }.bind(this)
+//                         )}
+//                     </TableBody>
+//                 </Table>

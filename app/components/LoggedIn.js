@@ -4,7 +4,7 @@ import Avatar from 'material-ui/Avatar';
 import FlatButton from 'material-ui/FlatButton';
 import AppBar from 'material-ui/AppBar';
 import Person from 'material-ui/svg-icons/social/person';
-import { sortedVisibleDevicesSelector } from '../selectors';
+import { sortedVisibleDevicesSelector, sortedVisibleConfigurationsByActivePluginSelector } from '../selectors';
 import { allow2Request, allow2AvatarURL } from '../util';
 import Dialogs from 'dialogs';
 import Checkbox from './Checkbox';
@@ -196,6 +196,7 @@ export default class Plugins extends Component {
         let avatarUrl = allow2AvatarURL(user && user.user, null);
         let avatar = ( user.user && <Avatar src={ avatarUrl } />) ||
             <Avatar icon={<Person />} />;
+        let plugins = sortedVisibleConfigurationsByActivePluginSelector(this.props);
 
         return (
             <div>
@@ -315,7 +316,14 @@ export default class Plugins extends Component {
                     </Tab>
                     }
 
-                    <Tab label="Services" >
+                    { plugins.map(function (plugin) {
+                        return (
+                            <Tab label={ plugin.name } >
+                            </Tab>
+                        );
+                    })
+                    }
+                    <Tab label="Settings" >
                         <PlugIns {...this.props} />
                     </Tab>
                 </Tabs>
