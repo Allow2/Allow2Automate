@@ -61,6 +61,7 @@ function testData() {
     actions.pluginReplace({
         "allow2automate-battle.net": {
             name: "allow2automate-battle.net",
+            shortName: "battle.net",
             publisher: "allow2",
             version: "1.0.0",
             description: "Enable Allow2Automate management of World of Warcraft parental controls",
@@ -75,6 +76,7 @@ function testData() {
         },
         "allow2automate-ssh": {
             name: "allow2automate-ssh",
+            shortName: "ssh",
             publisher: "allow2",
             version: "1.0.0",
             description: "Enable Allow2Automate the ability to use ssh to configure devices",
@@ -89,6 +91,7 @@ function testData() {
         },
         "mcafee-safefamily": {
             name: "mcafee-safefamily",
+            shortName: "Safe Family",
             publisher: "mcafee",
             version: "1.0.0",
             description: "Enable Allow2Automate management of McAfee Safe Family parental controls",
@@ -148,7 +151,7 @@ function testData() {
     });
 }
 
-//testData();
+testData();
 var devices = new Wemo(
     {
         onDeviceUpdate: (data) => {

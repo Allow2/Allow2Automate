@@ -177,6 +177,23 @@ module.exports = function(app) {
                     'allow2automate', 'allow2', 'ssh'
                 ]
             },
+            "allow2automate-wemo": {
+                "name": "allow2automate-wemo",
+                "shortName" : "wemo",
+                publisher: "allow2",
+                releases: {
+                    latest: "1.0.0"
+                },
+                "description": "Enable Allow2Automate the ability to control wemo devices",
+                "main": "./index.js",
+                "repository": {
+                    "type": "git",
+                        "url": "https://github.com/Allow2/allow2automate-wemo"
+                },
+                "keywords" : [
+                    "allow2automate", "allow2", "wemo"
+                ]
+            },
             "mcafee-safefamily": {
                 name: "mcafee-safefamily",
                 shortName: "Safe Family",

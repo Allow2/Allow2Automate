@@ -206,7 +206,7 @@ export default class Plugins extends Component {
                     iconElementRight={<FlatButton label="Log Off" onClick={this.handleLogout} />}
                     />
                 <Tabs>
-                    <Tab label="Devices" >
+                    <Tab label="Devices" key="Devices" >
                         { devices.supported.length < 1 &&
                             <div style={{ textAlign: "center" }}>
                                 <h1>No Devices Found</h1>
@@ -276,7 +276,7 @@ export default class Plugins extends Component {
                         }
                     </Tab>
                     { devices.notSupported.length > 0 &&
-                    <Tab label="Unsupported" >
+                    <Tab label="Unsupported" key="Unsupported" >
                         <div>
                             <h2>Unsupported Devices</h2>
                             If you would like any of these devices supported, please contact us at support@allow2.com.
@@ -318,12 +318,13 @@ export default class Plugins extends Component {
 
                     { plugins.map(function (plugin) {
                         return (
-                            <Tab label={ plugin.name } >
+                            <Tab label={ plugin.shortName } key={ plugin.name } >
+                                {plugin.name}
                             </Tab>
                         );
                     })
                     }
-                    <Tab label="Settings" >
+                    <Tab label="Settings" key="Allow2AutomateSettingsTab" >
                         <PlugIns {...this.props} />
                     </Tab>
                 </Tabs>

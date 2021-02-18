@@ -81,66 +81,25 @@ export default class PlugIns extends Component {
         //win.webContents.openDevTools();
     };
 
-    render() {
-        const library = {
-            "allow2automate-battle.net": {
-                name: "allow2automate-battle.net",
-                publisher: "allow2",
-                releases: {
-                    latest: "1.0.0"
-                },
-                description: "Enable Allow2Automate management of World of Warcraft parental controls",
-                main: "./lib/battle.net",
-                repository: {
-                    type: "git",
-                    url: "https://github.com/Allow2/allow2automate-battle.net"
-                },
-                keywords: [
-                    'allow2automate', 'battle.net', 'wow', 'world of warcraft'
-                ]
-            },
-            "allow2automate-ssh": {
-                name: "allow2automate-ssh",
-                publisher: "allow2",
-                releases: {
-                    latest: "1.0.0"
-                },
-                description: "Enable Allow2Automate the ability to use ssh to configure devices",
-                main: "./lib/ssh",
-                repository: {
-                    type: "git",
-                    url: "https://github.com/Allow2/allow2automate-ssh"
-                },
-                keywords : [
-                    'allow2automate', 'allow2', 'ssh'
-                ]
-            },
-            "mcafee-safefamily": {
-                name: "mcafee-safefamily",
-                publisher: "mcafee",
-                releases: {
-                    latest: "1.0.0"
-                },
-                description: "Enable Allow2Automate management of McAfee Safe Family parental controls",
-                repository: {
-                    type: "git",
-                    url: "https://github.com/McAfee/allow2automate-safefamily"
-                },
-                keywords : [
-                    'allow2automate', 'mcafee', 'safefamily'
-                ]
-            }
-        };
-        let plugins = sortedVisibleConfigurationsByPluginSelector(this.props);
-        let installed = epm.list(dir, { version: true }).reduce(function(memo, plugin) {
-            const parts = plugin.split('@');
-            memo[parts[0]] = {
-                version: parts[1]
-            }
-            return memo;
-        }, {});
-        console.log(installed);
+    installPlugin = (plugin) => {
 
+    };
+
+    deletePlugin = () => {
+
+    };
+
+    toggleCheckbox = (device, isChecked) => {
+        // this.props.onDeviceActive( device.device.UDN, true );
+        // ipc.send('setBinaryState', {
+        //     UDN: device.device.UDN,
+        //     state: isChecked ? 1 : 0
+        // });
+    };
+
+    render() {
+        let plugins = sortedVisibleConfigurationsByPluginSelector(this.props);
+        console.log(plugins);
         return (
             <div>
                 <div style={{ textAlign: "center" }}>
@@ -149,35 +108,50 @@ export default class PlugIns extends Component {
                 { plugins.length > 0 &&
                 <Table>
                     <TableHeader>
-                        <TableHeaderColumn> <span>Plugin</span> </TableHeaderColumn>
-                        <TableHeaderColumn> <span>Installed Version</span> </TableHeaderColumn>
-                        <TableHeaderColumn> <span>Enable</span> </TableHeaderColumn>
-                        <TableHeaderColumn> <span></span> </TableHeaderColumn>
+                        <TableRow key="HeaderRow">
+                            <TableHeaderColumn> <span>Plugin</span> </TableHeaderColumn>
+                            <TableHeaderColumn> <span>Installed Version</span> </TableHeaderColumn>
+                            <TableHeaderColumn> <span>Enable</span> </TableHeaderColumn>
+                            <TableHeaderColumn> <span>x</span> </TableHeaderColumn>
+                        </TableRow>
                     </TableHeader>
                     <TableBody
                         displayRowCheckbox={false}
                         showRowHover={true}
                         stripedRows={true}>
                         { plugins.map(function (plugin) {
-                                return (
-                                    <TableRow
-                                        key={plugin.name}
-                                        selectable={true}>
-                                        <TableRowColumn>
-                                            <span>{plugin.name}</span>
-                                        </TableRowColumn>
-                                        <TableRowColumn>
-                                            <span>version</span>
-                                        </TableRowColumn>
-                                        <TableRowColumn>
-                                            <span>Switch</span>
-                                        </TableRowColumn>
-                                        <TableRowColumn>
-                                            <span>Delete</span>
-                                        </TableRowColumn>
-                                    </TableRow>
-                                );
-                            }.bind(this)
+                            let version = (plugin.installed && plugin.installed.version) || "";
+
+                            return (
+                                <TableRow
+                                    key={plugin.name}
+                                    selectable={true}>
+                                    <TableRowColumn>
+                                        <span>{plugin.name}</span>
+                                    </TableRowColumn>
+                                    <TableRowColumn>
+                                        {plugin.installed &&
+                                        <span>{version}</span>
+                                        }
+                                        { !plugin.installed &&
+                                        <FlatButton label="Install" onClick={this.installPlugin.bind(this, plugin)}/>
+                                        }
+                                    </TableRowColumn>
+                                    <TableRowColumn style={{textAlign: 'center'}}>
+                                        { plugin.installed &&
+                                        <Checkbox
+                                            label=''
+                                            isChecked={!plugin.disabled}
+                                            handleCheckboxChange={this.toggleCheckbox.bind(this, plugin)}
+                                        />
+                                        }
+                                    </TableRowColumn>
+                                    <TableRowColumn>
+                                        <FlatButton label="Delete" onClick={this.deletePlugin.bind(this, plugin)}/>
+                                    </TableRowColumn>
+                                </TableRow>
+                            );
+                        }.bind(this)
                         )}
                     </TableBody>
                 </Table>

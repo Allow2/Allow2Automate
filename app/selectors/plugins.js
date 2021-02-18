@@ -12,15 +12,23 @@ const sortedVisibleConfigurationsSelector = createSelector(
 );
 
 const visibleConfigurationsByPluginSelector = createSelector(
-    [state => state.plugins, state => state.configurations],
-    (plugins, configurations) => {
-        if (!plugins || !configurations) { return []; }
+    [state => state.plugins, state => state.configurations, state => state.installedPlugins, state => state.pluginLibrary],
+    (plugins, configurations, stateInstalled, stateLibrary) => {
+        if (!plugins || !configurations ) { return []; }
+        const installedPlugins = stateInstalled || {};
+        const library = stateLibrary || {};     // not needed?
 
         var initialPlugins = Object.entries(plugins).reduce(function(memo, [key, plugin]) {
-            memo[key] = {
+            const installed = installedPlugins[key] || null;
+            const available = library[key] || null;
+            var newPlugin = {
                 ...plugin,
-                configurations: {}
+                configurations: {},
+                installed: installed,
+                available: available
             };
+
+            memo[key] = newPlugin;
             return memo;
         }, {});
         // console.log('initialPlugins', initialPlugins);
@@ -43,8 +51,9 @@ const visibleConfigurationsByActivePluginSelector = createSelector(
     [visibleConfigurationsByPluginSelector],
     (configurationsByPlugin) => {
         if (!configurationsByPlugin) { return {}; }
+        console.log('1', configurationsByPlugin);
         return Object.entries(configurationsByPlugin).reduce((memo, [key, plugin]) => {
-            if (!plugin.id || plugin.disabled) {
+            if (!plugin.installed || plugin.disabled) {
                 return memo;
             }
             memo[key] = plugin;
