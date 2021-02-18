@@ -1,3 +1,5 @@
+import {sortedVisibleConfigurationsByPluginSelector} from "./selectors";
+
 const fs = require('fs');
 const path = require('path');
 
@@ -137,7 +139,73 @@ module.exports = function(app) {
         }
     }
 
-    initPlugins();
+    //initPlugins();
+
+    plugins.getLibrary = function(callback) {
+        callback(null, {
+            "allow2automate-battle.net": {
+                name: "allow2automate-battle.net",
+                shortName: "battle.net",
+                publisher: "allow2",
+                releases: {
+                    latest: "1.0.0"
+                },
+                description: "Enable Allow2Automate management of World of Warcraft parental controls",
+                main: "./lib/battle.net",
+                repository: {
+                    type: "git",
+                    url: "https://github.com/Allow2/allow2automate-battle.net"
+                },
+                keywords: [
+                    'allow2automate', 'battle.net', 'wow', 'world of warcraft'
+                ]
+            },
+            "allow2automate-ssh": {
+                name: "allow2automate-ssh",
+                shortName: "ssh",
+                publisher: "allow2",
+                releases: {
+                    latest: "1.0.0"
+                },
+                description: "Enable Allow2Automate the ability to use ssh to configure devices",
+                main: "./lib/ssh",
+                repository: {
+                    type: "git",
+                    url: "https://github.com/Allow2/allow2automate-ssh"
+                },
+                keywords : [
+                    'allow2automate', 'allow2', 'ssh'
+                ]
+            },
+            "mcafee-safefamily": {
+                name: "mcafee-safefamily",
+                shortName: "Safe Family",
+                publisher: "mcafee",
+                releases: {
+                    latest: "1.0.0"
+                },
+                description: "Enable Allow2Automate management of McAfee Safe Family parental controls",
+                repository: {
+                    type: "git",
+                    url: "https://github.com/McAfee/allow2automate-safefamily"
+                },
+                keywords : [
+                    'allow2automate', 'mcafee', 'safefamily'
+                ]
+            }
+        });
+    };
+
+    plugins.getInstalled = function(epm, pluginDir, callback) {
+        const installedPlugins = epm.list(pluginDir, { version: true }).reduce(function(memo, plugin) {
+            const parts = plugin.split('@');
+            memo[parts[0]] = {
+                version: parts[1]
+            };
+            return memo;
+        }, {});
+        callback(null, installedPlugins);
+    };
 
     return plugins;
 };

@@ -38,6 +38,23 @@ actions.timezoneGuess(moment.tz.guess());
 
 var plugins = require('./plugins')(app);
 
+plugins.getLibrary((err, pluginLibrary) => {
+    // console.log('pluginLibrary', pluginLibrary);
+    if (err) {
+        console.log('plugins.getLibrary', err);
+        return;
+    }
+    actions.libraryReplace(pluginLibrary);
+});
+
+plugins.getInstalled(epm, dir, (err, installedPlugins) => {
+    // console.log('installedPlugins', installedPlugins);
+    if (err) {
+        console.log('plugins.getInstalled', err);
+        return;
+    }
+    actions.installedPluginReplace(installedPlugins);
+});
 
 // seed test data
 function testData() {
@@ -425,6 +442,6 @@ app.on('ready', async () => {
     //
     // * test loading a library
     //
-    epm.load(dir, 'allow2automate-battle.net');
-    var plugin = require('allow2automate-battle.net')({ allow2: "testing" });
+    //epm.load(dir, 'allow2automate-battle.net');
+    //var plugin = require('allow2automate-battle.net')({ allow2: "testing" });
 });

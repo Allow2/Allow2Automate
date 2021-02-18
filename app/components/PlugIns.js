@@ -145,16 +145,20 @@ export default class PlugIns extends Component {
             <div>
                 <div style={{ textAlign: "center" }}>
                     <FlatButton label="Add Plugin" onClick={this.addPlugin.bind(this)}/>
-                    <p style={{ width:"75%", margin: "auto" }}>Configure a plugin to control other devices.</p>
                 </div>
                 { plugins.length > 0 &&
                 <Table>
+                    <TableHeader>
+                        <TableHeaderColumn> <span>Plugin</span> </TableHeaderColumn>
+                        <TableHeaderColumn> <span>Installed Version</span> </TableHeaderColumn>
+                        <TableHeaderColumn> <span>Enable</span> </TableHeaderColumn>
+                        <TableHeaderColumn> <span></span> </TableHeaderColumn>
+                    </TableHeader>
                     <TableBody
                         displayRowCheckbox={false}
                         showRowHover={true}
                         stripedRows={true}>
                         { plugins.map(function (plugin) {
-                                let imageName = 'test.png';
                                 return (
                                     <TableRow
                                         key={plugin.name}
@@ -162,7 +166,15 @@ export default class PlugIns extends Component {
                                         <TableRowColumn>
                                             <span>{plugin.name}</span>
                                         </TableRowColumn>
-
+                                        <TableRowColumn>
+                                            <span>version</span>
+                                        </TableRowColumn>
+                                        <TableRowColumn>
+                                            <span>Switch</span>
+                                        </TableRowColumn>
+                                        <TableRowColumn>
+                                            <span>Delete</span>
+                                        </TableRowColumn>
                                     </TableRow>
                                 );
                             }.bind(this)
@@ -176,6 +188,7 @@ export default class PlugIns extends Component {
     }
 }
 
+// <p style={{ width:"75%", margin: "auto" }}>Configure a plugin to control other devices.</p>
 // <Table>
 //                     <TableBody
 //                         displayRowCheckbox={false}
