@@ -11,6 +11,7 @@ var allow2 = require('allow2');
 import Wemo from './util/Wemo';
 var moment = require('moment-timezone');
 const epm = require('electron-plugin-manager');
+const appConfig = require('electron-settings');
 
 // Make React faster
 //const { resourcePath, devMode } = getWindowLoadSettings();
@@ -236,6 +237,46 @@ app.on('window-all-closed', () => {
     }
 });
 
+function windowStateKeeper(windowName) {
+    let window, windowState;
+    function setBounds() {
+        // Restore from appConfig
+        if (appConfig.has(`windowState.${windowName}`)) {
+            windowState = appConfig.get(`windowState.${windowName}`);
+            return;
+        }
+        // Default
+        windowState = {
+            x: undefined,
+            y: undefined,
+            width: 1000,    //660
+            height: 800
+        };
+    }
+    function saveState() {
+        if (!windowState.isMaximized) {
+            windowState = window.getBounds();
+        }
+        windowState.isMaximized = window.isMaximized();
+        appConfig.set(`windowState.${windowName}`, windowState);
+    }
+    function track(win) {
+        window = win;
+        ['resize', 'move', 'close'].forEach(event => {
+            win.on(event, saveState);
+        });
+    }
+    setBounds();
+    return({
+        x: windowState.x,
+        y: windowState.y,
+        width: windowState.width,
+        height: windowState.height,
+        isMaximized: windowState.isMaximized,
+        track,
+    });
+}
+
 app.on('ready', async () => {
 
     // Run this on the ready event to setup everything
@@ -272,13 +313,17 @@ app.on('ready', async () => {
         Menu.setApplicationMenu(menu)
     }
 
+    const mainWindowStateKeeper = windowStateKeeper('main');
+
     function showMainWindow() {
         if (mainWindow) {
             return mainWindow.show();
         }
         mainWindow = new BrowserWindow({
-            width: 660,
-            height: 800,
+            x: mainWindowStateKeeper.x,
+            y: mainWindowStateKeeper.y,
+            width: mainWindowStateKeeper.width,
+            height: mainWindowStateKeeper.height,
             minWidth: 640,
             minHeight: 480,
             show: false,
@@ -291,6 +336,8 @@ app.on('ready', async () => {
             protocol: 'file:',
             slashes: true
         }));
+
+        mainWindowStateKeeper.track(mainWindow);
 
         // show window once on first load
         mainWindow.webContents.once('did-finish-load', () => {

@@ -14,7 +14,7 @@ export default {
     devices,
     installedPlugins,
     pairings,
-    plugins,
+    //plugins,
     pluginLibrary,
     user,
     util

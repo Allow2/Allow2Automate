@@ -1,7 +1,6 @@
 import {sortedVisibleConfigurationsByPluginSelector} from "./selectors";
-
-const fs = require('fs');
-const path = require('path');
+import path from 'path';
+import fs from 'fs';
 
 module.exports = function(app) {
     var plugins = {
@@ -216,9 +215,18 @@ module.exports = function(app) {
     plugins.getInstalled = function(epm, pluginDir, callback) {
         const installedPlugins = epm.list(pluginDir, { version: true }).reduce(function(memo, plugin) {
             const parts = plugin.split('@');
-            memo[parts[0]] = {
-                version: parts[1]
-            };
+            const pluginName = parts[0];
+            memo[pluginName] = { version: parts[1] };
+            try {
+                let jsonString = fs.readFileSync(path.join(pluginDir, 'PlugIns', pluginName, 'package.json'), 'utf8');
+                console.log(jsonString);
+                let packageJson = JSON.parse(jsonString);
+                packageJson.name = pluginName;
+                packageJson.shortName = packageJson.shortName || pluginName;
+                memo[pluginName] = packageJson;
+            } catch (err) {
+                console.log('Error parsing JSON string', err);
+            }
             return memo;
         }, {});
         callback(null, installedPlugins);

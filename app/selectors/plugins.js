@@ -12,19 +12,16 @@ const sortedVisibleConfigurationsSelector = createSelector(
 );
 
 const visibleConfigurationsByPluginSelector = createSelector(
-    [state => state.plugins, state => state.configurations, state => state.installedPlugins, state => state.pluginLibrary],
-    (plugins, configurations, stateInstalled, stateLibrary) => {
+    [state => state.installedPlugins, state => state.configurations, state => state.pluginLibrary],
+    (plugins, configurations, stateLibrary) => {
         if (!plugins || !configurations ) { return []; }
-        const installedPlugins = stateInstalled || {};
         const library = stateLibrary || {};     // not needed?
 
         var initialPlugins = Object.entries(plugins).reduce(function(memo, [key, plugin]) {
-            const installed = installedPlugins[key] || null;
             const available = library[key] || null;
             var newPlugin = {
                 ...plugin,
                 configurations: {},
-                installed: installed,
                 available: available
             };
 
@@ -34,8 +31,10 @@ const visibleConfigurationsByPluginSelector = createSelector(
         // console.log('initialPlugins', initialPlugins);
         var configurationsByPlugin = Object.values(configurations).reduce(function (memo, configuration) {
             var plugin = memo[configuration.plugin] || {
-                 name: configuration.plugin,
-                 configurations: {}
+                name: configuration.plugin,
+                shortName: configuration.plugin,
+                configurations: {},
+                missing: true
             };
             plugin.configurations = [...plugin.configurations, configuration];
             memo[configuration.plugin] = plugin;
@@ -51,9 +50,9 @@ const visibleConfigurationsByActivePluginSelector = createSelector(
     [visibleConfigurationsByPluginSelector],
     (configurationsByPlugin) => {
         if (!configurationsByPlugin) { return {}; }
-        console.log('1', configurationsByPlugin);
+        // console.log('1', configurationsByPlugin);
         return Object.entries(configurationsByPlugin).reduce((memo, [key, plugin]) => {
-            if (!plugin.installed || plugin.disabled) {
+            if (plugin.disabled || plugin.missing) {
                 return memo;
             }
             memo[key] = plugin;
