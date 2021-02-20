@@ -70,19 +70,21 @@ export default class PlugIns extends Component {
     };
 
 
-    addPlugin = () => {
-        const pluginName = this.state.pluginName;
+    installPlugin = (pluginName) => {
         const onPluginInstalled = this.props.onPluginInstalled.bind(this);
+        console.log('reinstall', pluginName);
         ipc.on('epm-installed-' + pluginName, (event, err, pluginPath) => {
-            console.log(event, err, pluginPath);
+            //console.log(event, err, pluginPath);
             if (err) {
+                dialogs.alert("Unable to find " + pluginName + ': ' + JSON.stringify(err));
                 return;
             }
             epm.load(dir, pluginName, remote.require);
             // In renderer process
             fs.readFile(path.join(pluginPath, 'package.json'), 'utf8', (err, jsonString) => {
                 if (err) {
-                    console.log("File read failed:", err);
+                    console.log("Package.json read failed:", err);
+                    dialogs.alert("Package.json read failed:", err.toString());
                     return
                 }
                 try {
@@ -93,10 +95,21 @@ export default class PlugIns extends Component {
 
                 } catch(err) {
                     console.log('Error parsing JSON string', err, jsonString);
+                    dialogs.alert("Error reading package.json:", err.toString());
                 }
             });
         });
         ipc.send('epm-install', dir, this.state.pluginName, 'latest');
+    };
+
+    addPlugin = () => {
+        const pluginName = this.state.pluginName;
+
+        if (this.props.installedPlugins[pluginName]) {
+            dialogs.alert(pluginName + ' is already installed. Remove it first if you want to reinstall it.');
+            return;
+        }
+        this.installPlugin(pluginName);
         return;
 
         //let onPaired = this.props.onPaired;
@@ -128,37 +141,63 @@ export default class PlugIns extends Component {
     };
 
     reinstallPlugin = (plugin) => {
-
+        console.log(plugin.name);
+        this.installPlugin(plugin.name);
     };
 
     deletePlugin = (plugin) => {
-        console.log(JSON.stringify(plugin));
-        dialogs.confirm('Are you sure you want to delete ' + plugin.name + '?', function(ok) {
+        const onPluginRemoved = this.props.onPluginRemoved.bind(this);
+        const pluginName = plugin.name;
+        const hasConfigurations = Object.values(this.props.configurations).find((configuration) => {
+            return configuration.plugin === pluginName;
+        });
+
+        const actualDelete = function(removeConfiguration) {
+            // need to decommission if the plugin is operational
+            // then unload it?
+            console.log('unload', plugin.name);
+            epm.unload(dir, plugin.name, remote.require);
+            // then delete it.
+            console.log('uninstalling', pluginName);
+            ipc.on('epm-uninstalled-' + pluginName, (event, err) => {
+                console.log('uninstalled', event, err);
+                if (err) {
+                    dialogs.alert(err.toString());
+                    return;
+                }
+                onPluginRemoved({ pluginName : pluginName, removeConfiguration : removeConfiguration });
+            });
+            ipc.send('epm-uninstall', dir, pluginName);
+        };
+
+        if (plugin.missing) {
+            dialogs.confirm('Are you sure you want to remove ' + plugin.name + ' configurations?', function(ok) {
+                if (!ok) {
+                    return
+                }
+                onPluginRemoved({ pluginName : plugin.name, removeConfiguration : true });
+            }.bind(this));
+            return;
+        }
+        dialogs.confirm('Are you sure you want to delete the ' + plugin.name + ' plugin?', function(ok) {
             if (!ok) {
                 return
             }
-            console.log('delete');
-        }.bind(this));
+            if (!hasConfigurations) {
+                return actualDelete(true);
+            }
+            dialogs.confirm('Keep your  ' + plugin.name + ' configurations?', function(ok) {
+                if (ok) {
+                    return actualDelete(false);
+                }
 
-        return;
-        // need to decommission if the plugin is operational
-        // then unload it?
-        epm.unload(dir, plugin.name, remote.require);
-        // then delete it.
-        ipc.on('epm-uninstalled-' + pluginName, (event, err, pluginPath) => {
-            console.log(event, err, pluginPath);
-            if (err) {
-                return;
-            }
-            try {
-                const packageJson = JSON.parse(jsonString);
-                //console.log("package.json:", packageJson); // => "Customer address is: Infinity Loop Drive"
-                onPluginRemoved({ pluginName : packageJson });
-            } catch(err) {
-                console.log('Error parsing JSON string', err, jsonString);
-            }
-        });
-        ipc.send('epm-uninstalled', dir, this.state.pluginName, 'latest');
+                dialogs.confirm('So delete the ' + plugin.name + 'plugin, and associated configurations?', function(ok) {
+                    if (ok) {
+                        return actualDelete(true);
+                    }
+                }.bind(this));
+            }.bind(this));
+        }.bind(this));
     };
 
     toggleCheckbox = (device, isChecked) => {
@@ -171,7 +210,6 @@ export default class PlugIns extends Component {
 
     render() {
         let plugins = sortedVisibleConfigurationsByPluginSelector(this.props);
-        console.log(plugins);
         return (
             <div>
                 <div style={{ textAlign: "center" }}>
@@ -203,15 +241,15 @@ export default class PlugIns extends Component {
                                         <span>{plugin.name}</span>
                                     </TableRowColumn>
                                     <TableRowColumn>
-                                        {plugin.version &&
-                                        <span>{plugin.version}</span>
+                                        {!plugin.missing &&
+                                        <span>{version}</span>
                                         }
-                                        { !plugin.version &&
-                                        <FlatButton label="Install" onClick={this.reinstallPlugin.bind(this, plugin)}/>
+                                        { plugin.missing &&
+                                        <FlatButton label="Reinstall" onClick={this.reinstallPlugin.bind(this, plugin)}/>
                                         }
                                     </TableRowColumn>
                                     <TableRowColumn style={{textAlign: 'center'}}>
-                                        { plugin.installed &&
+                                        { !plugin.missing &&
                                         <Checkbox
                                             label=''
                                             isChecked={!plugin.disabled}
@@ -220,7 +258,9 @@ export default class PlugIns extends Component {
                                         }
                                     </TableRowColumn>
                                     <TableRowColumn>
-                                        <FlatButton label="Delete" onClick={this.deletePlugin.bind(this, plugin)}/>
+
+                                        <FlatButton label={ plugin.missing ? "Remove" : "Delete" }
+                                            onClick={this.deletePlugin.bind(this, plugin)}/>
                                     </TableRowColumn>
                                 </TableRow>
                             );

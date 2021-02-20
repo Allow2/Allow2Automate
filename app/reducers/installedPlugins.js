@@ -13,7 +13,8 @@ export default handleActions({
 
     [actions.installedPluginRemove]: (state, action) => {
         var newState = Object.assign({}, state);
-        delete newState[action.payload];
+        delete newState[action.payload.pluginName];
+        console.log(action, state, newState);
         return newState;
     }
 

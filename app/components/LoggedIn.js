@@ -9,7 +9,6 @@ import { allow2Request, allow2AvatarURL } from '../util';
 import Dialogs from 'dialogs';
 import Checkbox from './Checkbox';
 import PlugIns from './PlugIns';
-//import deviceActions from '../actions/device';
 import modal from 'electron-modal';
 import path from 'path';
 import url from 'url';
@@ -117,6 +116,14 @@ var deviceImages = {
 
 export default class Plugins extends Component {
 
+    constructor(...args) {
+        super(...args);
+
+        this.state = {
+            currentTab: 'Allow2AutomateSettingsTab'
+        };
+    }
+
     messageDevices = {};
 
     toggleCheckbox = (device, isChecked) => {
@@ -181,6 +188,12 @@ export default class Plugins extends Component {
         }.bind(this));
     };
 
+    handleTabChange = (newValue) => {
+        this.setState({
+            currentTab: newValue
+        });
+    };
+
     render() {
         let devices = sortedVisibleDevicesSelector(this.props).reduce(function(memo, device) {
             let token = deviceTokens[device.device.device.modelName];
@@ -205,8 +218,8 @@ export default class Plugins extends Component {
                     iconElementLeft={avatar}
                     iconElementRight={<FlatButton label="Log Off" onClick={this.handleLogout} />}
                     />
-                <Tabs>
-                    <Tab label="Devices" key="Devices" >
+                <Tabs value={this.state.currentTab} onChange={this.handleTabChange.bind(this)} >
+                    <Tab label="Devices" key="Devices" value="Devices" >
                         { devices.supported.length < 1 &&
                             <div style={{ textAlign: "center" }}>
                                 <h1>No Devices Found</h1>
@@ -276,7 +289,7 @@ export default class Plugins extends Component {
                         }
                     </Tab>
                     { devices.notSupported.length > 0 &&
-                    <Tab label="Unsupported" key="Unsupported" >
+                    <Tab label="Unsupported" key="Unsupported" value="Unsupported" >
                         <div>
                             <h2>Unsupported Devices</h2>
                             If you would like any of these devices supported, please contact us at support@allow2.com.
@@ -284,7 +297,7 @@ export default class Plugins extends Component {
                                 <Table>
                                     <TableBody
                                         displayRowCheckbox={false}
-                                        showRowHover={true}
+                                        showRowHover={false}
                                         stripedRows={true}>
                                     { devices.notSupported.map( (device) => {
                                         let imageName = deviceImages[device.device.device.modelName];
@@ -318,13 +331,13 @@ export default class Plugins extends Component {
 
                     { plugins.map(function (plugin) {
                         return (
-                            <Tab label={ plugin.shortName } key={ plugin.name } >
-                                {plugin.name}
+                            <Tab label={ plugin.shortName || plugin.name } key={ plugin.name } value={ plugin.name } >
+                                { plugin.name }
                             </Tab>
                         );
                     })
                     }
-                    <Tab label="Settings" key="Allow2AutomateSettingsTab" >
+                    <Tab label="Settings" key="Allow2AutomateSettingsTab" value="Allow2AutomateSettingsTab" >
                         <PlugIns {...this.props} />
                     </Tab>
                 </Tabs>

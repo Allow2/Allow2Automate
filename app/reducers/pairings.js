@@ -1,15 +1,19 @@
 import { handleActions } from 'redux-actions';
-import pairing from '../actions';
+import actions from '../actions';
 
 export default handleActions({
-    [pairing.pairingUpdate]: (state, action) => {
+    [actions.pairingUpdate]: (state, action) => {
         return { ...state, ...action.payload };
     },
 
-    [pairing.pairingRemove]: (state, action) => {
+    [actions.pairingRemove]: (state, action) => {
         var newState = Object.assign({}, state);
         delete newState[action.payload];
         return newState;
+    },
+
+    [actions.pairingWipe]: (state, action) => {
+        return null;
     }
 
 }, {});

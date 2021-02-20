@@ -31,6 +31,10 @@ const mapDispatchToProps = (dispatch) => { // eslint-disable-line no-unused-vars
 
         onPluginInstalled: (data) => {
             actions.installedPluginUpdate(data);
+        },
+
+        onPluginRemoved: (data) => {
+            actions.installedPluginRemove(data);
         }
 
     };

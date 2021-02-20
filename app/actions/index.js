@@ -5,7 +5,6 @@ import deviceActions from './device';
 import configurationActions from './configuration';
 import installedPluginsActions from './installedPlugins';
 import pairingActions from './pairing';
-import pluginActions from './plugin';
 import pluginLibraryActions from './pluginLibrary';
 import userActions from './user';
 import utilActions from './util';
@@ -16,7 +15,6 @@ export default {
     ...deviceActions,
     ...installedPluginsActions,
     ...pairingActions,
-    ...pluginActions,
     ...pluginLibraryActions,
     ...userActions,
     ...utilActions,

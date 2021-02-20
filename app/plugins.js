@@ -50,29 +50,7 @@ module.exports = function(app) {
     };
 
     function installPlugin(plugin, callback) {
-        // give this a plugin spec (from the catalogue) and it will pull it down as a package and install it (also runs npm for sub dependencies).
-        // have a look at how nodered does this maybe? Might have a best practice approach.
-//         var fs = require('fs')
-//         var resolve = require('path').resolve
-//         var join = require('path').join
-//         var cp = require('child_process')
-//         var os = require('os')
-//
-// // get library path
-//         var lib = resolve(__dirname, '../lib/')
-//
-//         fs.readdirSync(lib)
-//             .forEach(function (mod) {
-//                 var modPath = join(lib, mod)
-// // ensure path has package.json
-//                 if (!fs.existsSync(join(modPath, 'package.json'))) return
-//
-// // npm binary based on OS
-//                 var npmCmd = os.platform().startsWith('win') ? 'npm.cmd' : 'npm'
-//
-// // install folder
-//                 cp.spawn(npmCmd, ['i'], { env: process.env, cwd: modPath, stdio: 'inherit' })
-//             })
+
     }
 
     function initPlugins() {
@@ -212,14 +190,14 @@ module.exports = function(app) {
         });
     };
 
-    plugins.getInstalled = function(epm, pluginDir, callback) {
-        const installedPlugins = epm.list(pluginDir, { version: true }).reduce(function(memo, plugin) {
+    plugins.getInstalled = function(callback) {
+        const installedPlugins = app.epm.list(app.appDataPath, { version: true }).reduce(function(memo, plugin) {
             const parts = plugin.split('@');
             const pluginName = parts[0];
             memo[pluginName] = { version: parts[1] };
             try {
-                let jsonString = fs.readFileSync(path.join(pluginDir, 'PlugIns', pluginName, 'package.json'), 'utf8');
-                console.log(jsonString);
+                let jsonString = fs.readFileSync(path.join(app.appDataPath, 'plugIns', pluginName, 'package.json'), 'utf8');
+                //console.log(jsonString);
                 let packageJson = JSON.parse(jsonString);
                 packageJson.name = pluginName;
                 packageJson.shortName = packageJson.shortName || pluginName;

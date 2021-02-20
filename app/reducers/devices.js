@@ -24,6 +24,10 @@ export default handleActions({
             memo[key] = device;
             return memo;
         }, {});
+    },
+
+    [actions.deviceWipe]: (state, action) => {
+        return null;
     }
 
 }, {});

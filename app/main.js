@@ -10,8 +10,9 @@ const async = require('async');
 var allow2 = require('allow2');
 import Wemo from './util/Wemo';
 var moment = require('moment-timezone');
-const epm = require('electron-plugin-manager');
+app.epm = require('electron-plugin-manager');
 const appConfig = require('electron-settings');
+import { v4 as uuidv4 } from 'uuid';
 
 // Make React faster
 //const { resourcePath, devMode } = getWindowLoadSettings();
@@ -27,9 +28,8 @@ let forceQuit = false;
 const store = configureStore();
 const actions = bindActionCreators(allActions, store.dispatch);
 
-const dir = path.join(app.getPath('appData'), 'allow2automate');
-
-epm.manager(ipc);
+app.appDataPath = path.join(app.getPath('appData'), 'allow2automate');
+app.epm.manager(ipc);
 // epm.install(dir, 'is-number', 'latest', (err, pluginPath) => {
 //     console.log('is-number: ', err, pluginPath);
 // });
@@ -48,7 +48,7 @@ plugins.getLibrary((err, pluginLibrary) => {
     actions.libraryReplace(pluginLibrary);
 });
 
-plugins.getInstalled(epm, dir, (err, installedPlugins) => {
+plugins.getInstalled((err, installedPlugins) => {
     // console.log('installedPlugins', installedPlugins);
     if (err) {
         console.log('plugins.getInstalled', err);
@@ -59,52 +59,6 @@ plugins.getInstalled(epm, dir, (err, installedPlugins) => {
 
 // seed test data
 function testData() {
-    actions.pluginReplace({
-        "allow2automate-battle.net": {
-            name: "allow2automate-battle.net",
-            shortName: "battle.net",
-            publisher: "allow2",
-            version: "1.0.0",
-            description: "Enable Allow2Automate management of World of Warcraft parental controls",
-            main: "./lib/battle.net",
-            repository: {
-                type: "git",
-                url: "https://github.com/Allow2/allow2automate-battle.net"
-            },
-            keywords: [
-                'allow2automate', 'battle.net', 'wow', 'world of warcraft'
-            ]
-        },
-        "allow2automate-ssh": {
-            name: "allow2automate-ssh",
-            shortName: "ssh",
-            publisher: "allow2",
-            version: "1.0.0",
-            description: "Enable Allow2Automate the ability to use ssh to configure devices",
-            main: "./lib/ssh",
-            repository: {
-                type: "git",
-                url: "https://github.com/Allow2/allow2automate-ssh"
-            },
-            keywords: [
-                'allow2automate', 'allow2', 'ssh'
-            ]
-        },
-        "mcafee-safefamily": {
-            name: "mcafee-safefamily",
-            shortName: "Safe Family",
-            publisher: "mcafee",
-            version: "1.0.0",
-            description: "Enable Allow2Automate management of McAfee Safe Family parental controls",
-            repository: {
-                type: "git",
-                url: "https://github.com/McAfee/allow2automate-safefamily"
-            },
-            keywords: [
-                'allow2automate', 'mcafee', 'safefamily'
-            ]
-        }
-    });
 
     actions.configurationUpdate({
         "d23eb9da-19d6-4898-b56c-02a5a8ca477f": {
@@ -153,6 +107,34 @@ function testData() {
 }
 
 testData();
+
+function migrateWemo() {
+    let state = store.getState();
+    let uuid = uuidv4();
+    if ( state.devices || state.pairings ) {
+        console.log('migration needed', uuid);
+    }
+return;
+    if (state.devices || state.pairings) {
+        // move data into the wemo configuration
+        actions.configurationUpdate({
+            [uuid]: {
+                id: uuid,
+                plugin: "allow2automate-wemo",
+                data: {
+                    devices: state.devices,
+                    pairings: state.pairings
+                }
+            }
+        });
+        // clean up
+        actions.pairingWipe();
+        actions.deviceWipe();
+    }
+}
+
+migrateWemo();
+
 var devices = new Wemo(
     {
         onDeviceUpdate: (data) => {
