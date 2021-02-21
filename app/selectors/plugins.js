@@ -101,10 +101,39 @@ const sortedVisibleConfigurationsByActivePluginSelector = createSelector(
     }
 );
 
+//
+// filtered sub-data suitable to supply to plugins
+//
+const pluginDataSelector = createSelector(
+    [state => state.user, state => state.children],
+    (user, children) => {
+        if (!user || !children) { return {}; }
+        return {
+            children: Object.values(children).reduce((memo, child) => {
+                memo[child.id] = {
+                    name: child.name,
+                    avatar: (child.Account && child.Account.avatar) || child.avatar
+                };
+                return memo;
+            }, {}),
+            user: {
+                id: user.user.id,
+                firstName: user.user.firstName,
+                lastName: user.user.lastName,
+                fullName: user.user.fullName,
+                avatar: user.user.avatar,
+                region: user.user.region
+            }
+        };
+    }
+);
+
+
 module.exports = {
     sortedVisibleConfigurationsSelector,
     visibleConfigurationsByPluginSelector,
     visibleConfigurationsByActivePluginSelector,
     sortedVisibleConfigurationsByPluginSelector,
-    sortedVisibleConfigurationsByActivePluginSelector
+    sortedVisibleConfigurationsByActivePluginSelector,
+    pluginDataSelector
 };

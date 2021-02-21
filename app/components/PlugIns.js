@@ -72,7 +72,6 @@ export default class PlugIns extends Component {
 
     installPlugin = (pluginName) => {
         const onPluginInstalled = this.props.onPluginInstalled.bind(this);
-        console.log('reinstall', pluginName);
         ipc.on('epm-installed-' + pluginName, (event, err, pluginPath) => {
             //console.log(event, err, pluginPath);
             if (err) {
@@ -99,16 +98,17 @@ export default class PlugIns extends Component {
                 }
             });
         });
-        ipc.send('epm-install', dir, this.state.pluginName, 'latest');
+        ipc.send('epm-install', dir, pluginName, 'latest');
     };
 
     addPlugin = () => {
-        const pluginName = this.state.pluginName;
+        const pluginName = 'allow2automate-' + this.state.pluginName;
 
         if (this.props.installedPlugins[pluginName]) {
             dialogs.alert(pluginName + ' is already installed. Remove it first if you want to reinstall it.');
             return;
         }
+        console.log('install', pluginName);
         this.installPlugin(pluginName);
         return;
 
@@ -141,7 +141,7 @@ export default class PlugIns extends Component {
     };
 
     reinstallPlugin = (plugin) => {
-        console.log(plugin.name);
+        console.log('reinstall', plugin.name);
         this.installPlugin(plugin.name);
     };
 
@@ -155,10 +155,9 @@ export default class PlugIns extends Component {
         const actualDelete = function(removeConfiguration) {
             // need to decommission if the plugin is operational
             // then unload it?
-            console.log('unload', plugin.name);
-            epm.unload(dir, plugin.name, remote.require);
+            console.log('unload', pluginName);
+            epm.unload(dir, pluginName, remote.require);
             // then delete it.
-            console.log('uninstalling', pluginName);
             ipc.on('epm-uninstalled-' + pluginName, (event, err) => {
                 console.log('uninstalled', event, err);
                 if (err) {
@@ -167,6 +166,7 @@ export default class PlugIns extends Component {
                 }
                 onPluginRemoved({ pluginName : pluginName, removeConfiguration : removeConfiguration });
             });
+            console.log('uninstalling', pluginName);
             ipc.send('epm-uninstall', dir, pluginName);
         };
 
@@ -213,6 +213,7 @@ export default class PlugIns extends Component {
         return (
             <div>
                 <div style={{ textAlign: "center" }}>
+                    allow2automate-
                     <TextField id="pluginName" label="Plugin" value={this.state.pluginName} onChange={this.handleChange.bind(this)} />
                     <FlatButton label="Add Plugin" onClick={this.addPlugin.bind(this)}/>
                 </div>
