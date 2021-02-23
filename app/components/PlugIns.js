@@ -206,8 +206,8 @@ export default class PlugIns extends Component {
         }.bind(this));
     };
 
-    toggleCheckbox = (device, isChecked) => {
-        // this.props.onDeviceActive( device.device.UDN, true );
+    toggleCheckbox = (plugin, isChecked) => {
+        this.props.onSetPluginEnabled( plugin.name, isChecked );
         // ipc.send('setBinaryState', {
         //     UDN: device.device.UDN,
         //     state: isChecked ? 1 : 0
@@ -216,12 +216,6 @@ export default class PlugIns extends Component {
 
     render() {
         let plugins = sortedVisibleConfigurationsByPluginSelector(this.props);
-        console.log('plugin list', plugins);
-        console.log('a', sortedVisibleConfigurationsByPluginSelector(this.props));
-        console.log('b', sortedVisibleConfigurationsSelector(this.props));
-        console.log('c', visibleConfigurationsByPluginSelector(this.props));
-        console.log('d', visibleConfigurationsByActivePluginSelector(this.props));
-        console.log('e', sortedVisibleConfigurationsByActivePluginSelector(this.props));
         return (
             <div>
                 <div style={{ textAlign: "center" }}>
@@ -244,7 +238,8 @@ export default class PlugIns extends Component {
                         showRowHover={true}
                         stripedRows={true}>
                         { plugins.map(function (plugin) {
-                            let version = (plugin.installed && plugin.version) || "";
+                            console.log(plugin);
+                            let version = (plugin.version) || "";
 
                             return (
                                 <TableRow

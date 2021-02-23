@@ -39,7 +39,7 @@ const visibleConfigurationsByPluginSelector = createSelector(
             memo[configuration.plugin] = plugin;
             return memo;
         }, initialPlugins);
-        console.log('1', configurationsByPlugin);
+        //console.log('1', configurationsByPlugin);
 
         return configurationsByPlugin;
     }
@@ -48,7 +48,7 @@ const visibleConfigurationsByPluginSelector = createSelector(
 const visibleConfigurationsByActivePluginSelector = createSelector(
     [visibleConfigurationsByPluginSelector],
     (configurationsByPlugin) => {
-        console.log('2', configurationsByPlugin);
+        //console.log('2', configurationsByPlugin);
         if (!configurationsByPlugin) { return {}; }
         return Object.entries(configurationsByPlugin).reduce((memo, [key, plugin]) => {
             if (plugin.disabled || plugin.missing) {
@@ -63,7 +63,7 @@ const visibleConfigurationsByActivePluginSelector = createSelector(
 const sortedVisibleConfigurationsByPluginSelector = createSelector(
     [visibleConfigurationsByPluginSelector],
     (configurationsByPlugin) => {
-        console.log('3', configurationsByPlugin);
+        //console.log('3', configurationsByPlugin);
         if (!configurationsByPlugin) { return []; }
         var result = Object.values(configurationsByPlugin).sort((a,b) => {
             return a.name .localeCompare(b.name);

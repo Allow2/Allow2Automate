@@ -29,6 +29,14 @@ const mapDispatchToProps = (dispatch) => { // eslint-disable-line no-unused-vars
             });
         },
 
+        onSetPluginEnabled: ( pluginName, isChecked ) => {
+            console.log(pluginName, isChecked);
+            actions.setPluginEnabled({
+                pluginName: pluginName,
+                isChecked: isChecked
+            });
+        },
+
         onPluginInstalled: (data) => {
             actions.installedPluginUpdate(data);
         },

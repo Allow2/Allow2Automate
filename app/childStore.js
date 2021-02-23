@@ -46,7 +46,7 @@ export default function configureStore(routerHistory) {
     }
     replayActionRenderer(store);
 
-    console.log('client state:', store.getState());
+    //console.log('client state:', store.getState());
 
     return store;
 }
