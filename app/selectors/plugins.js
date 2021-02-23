@@ -65,16 +65,7 @@ const sortedVisibleConfigurationsByPluginSelector = createSelector(
     [visibleConfigurationsByPluginSelector],
     (configurationsByPlugin) => {
         if (!configurationsByPlugin) { return []; }
-        var sortedConfigurations = Object.values(configurationsByPlugin).reduce(function (memo, plugin) {
-            memo[plugin.name] = {
-                ...plugin,
-                configurations: Object.values(plugin.configurations).sort((a, b) => {
-                    return a.data.name.localeCompare(b.data.name);
-                })
-            };
-            return memo;
-        }, {});
-        var result = Object.values(sortedConfigurations).sort((a,b) => {
+        var result = Object.values(configurationsByPlugin).sort((a,b) => {
             return a.name .localeCompare(b.name);
         }); // todo: better sorting
         return result;
@@ -85,26 +76,46 @@ const sortedVisibleConfigurationsByActivePluginSelector = createSelector(
     [visibleConfigurationsByActivePluginSelector],
     (configurationsByPlugin) => {
         if (!configurationsByPlugin) { return []; }
-        var sortedConfigurations = Object.values(configurationsByPlugin).reduce(function (memo, plugin) {
-            memo[plugin.name] = {
-                ...plugin,
-                configurations: Object.values(plugin.configurations).sort((a, b) => {
-                    return a.data.name.localeCompare(b.data.name);
-                })
-            };
-            return memo;
-        }, {});
-        var result = Object.values(sortedConfigurations).sort((a,b) => {
+        var result = Object.values(configurationsByPlugin).sort((a,b) => {
             return a.name .localeCompare(b.name);
         }); // todo: better sorting
         return result;
     }
 );
 
+//
+// filtered sub-data suitable to supply to plugins
+//
+const pluginDataSelector = createSelector(
+    [state => state.user, state => state.children],
+    (user, children) => {
+        if (!user || !children) { return {}; }
+        return {
+            children: Object.values(children).reduce((memo, child) => {
+                memo[child.id] = {
+                    name: child.name,
+                    avatar: (child.Account && child.Account.avatar) || child.avatar
+                };
+                return memo;
+            }, {}),
+            user: {
+                id: user.user.id,
+                firstName: user.user.firstName,
+                lastName: user.user.lastName,
+                fullName: user.user.fullName,
+                avatar: user.user.avatar,
+                region: user.user.region
+            }
+        };
+    }
+);
+
+
 module.exports = {
     sortedVisibleConfigurationsSelector,
     visibleConfigurationsByPluginSelector,
     visibleConfigurationsByActivePluginSelector,
     sortedVisibleConfigurationsByPluginSelector,
-    sortedVisibleConfigurationsByActivePluginSelector
+    sortedVisibleConfigurationsByActivePluginSelector,
+    pluginDataSelector
 };
