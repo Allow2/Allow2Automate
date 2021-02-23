@@ -105,6 +105,7 @@ function testData() {
         }
     });
 }
+testData();
 
 function migrateWemo() {
     let state = store.getState();
@@ -112,7 +113,7 @@ function migrateWemo() {
     if ( state.devices || state.pairings ) {
         console.log('migration needed', uuid);
     }
-
+return;
     if (state.devices || state.pairings) {
         // move data into the wemo configuration
         actions.configurationUpdate({
