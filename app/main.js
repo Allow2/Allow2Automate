@@ -49,7 +49,7 @@ plugins.getLibrary((err, pluginLibrary) => {
 });
 
 plugins.getInstalled((err, installedPlugins) => {
-    // console.log('installedPlugins', installedPlugins);
+    //console.log('installedPlugins', installedPlugins);
     if (err) {
         console.log('plugins.getInstalled', err);
         return;
@@ -106,15 +106,13 @@ function testData() {
     });
 }
 
-testData();
-
 function migrateWemo() {
     let state = store.getState();
     let uuid = uuidv4();
     if ( state.devices || state.pairings ) {
         console.log('migration needed', uuid);
     }
-return;
+
     if (state.devices || state.pairings) {
         // move data into the wemo configuration
         actions.configurationUpdate({

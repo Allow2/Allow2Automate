@@ -2,7 +2,13 @@ import React, { Component } from 'react';
 import Avatar from 'material-ui/Avatar';
 import FlatButton from 'material-ui/FlatButton';
 import TextField from 'material-ui/TextField';
-import { sortedVisibleConfigurationsByPluginSelector } from '../selectors';
+import {
+    sortedVisibleConfigurationsByPluginSelector,
+    sortedVisibleConfigurationsSelector,
+    visibleConfigurationsByPluginSelector,
+    visibleConfigurationsByActivePluginSelector,
+    sortedVisibleConfigurationsByActivePluginSelector
+} from '../selectors';
 import { allow2Request, allow2AvatarURL } from '../util';
 import Dialogs from 'dialogs';
 import Checkbox from './Checkbox';
@@ -210,6 +216,12 @@ export default class PlugIns extends Component {
 
     render() {
         let plugins = sortedVisibleConfigurationsByPluginSelector(this.props);
+        console.log('plugin list', plugins);
+        console.log('a', sortedVisibleConfigurationsByPluginSelector(this.props));
+        console.log('b', sortedVisibleConfigurationsSelector(this.props));
+        console.log('c', visibleConfigurationsByPluginSelector(this.props));
+        console.log('d', visibleConfigurationsByActivePluginSelector(this.props));
+        console.log('e', sortedVisibleConfigurationsByActivePluginSelector(this.props));
         return (
             <div>
                 <div style={{ textAlign: "center" }}>
@@ -275,25 +287,3 @@ export default class PlugIns extends Component {
 
     }
 }
-
-// <p style={{ width:"75%", margin: "auto" }}>Configure a plugin to control other devices.</p>
-// <Table>
-//                     <TableBody
-//                         displayRowCheckbox={false}
-//                         showRowHover={true}
-//                         stripedRows={true}>
-//                         { installed.map(function (plugin) {
-//                                 return (
-//                                     <TableRow
-//                                         key={plugin}
-//                                         selectable={false}>
-//                                         <TableRowColumn>
-//                                             <span>{plugin}</span>
-//                                         </TableRowColumn>
-//
-//                                     </TableRow>
-//                                 );
-//                             }.bind(this)
-//                         )}
-//                     </TableBody>
-//                 </Table>

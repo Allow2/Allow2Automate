@@ -16,8 +16,7 @@ const visibleConfigurationsByPluginSelector = createSelector(
     (plugins, configurations, stateLibrary) => {
         if (!plugins || !configurations ) { return []; }
         const library = stateLibrary || {};     // not needed?
-
-        var initialPlugins = Object.entries(plugins).reduce(function(memo, [key, plugin]) {
+        const initialPlugins = Object.entries(plugins).reduce(function(memo, [key, plugin]) {
             const available = library[key] || null;
             var newPlugin = {
                 ...plugin,
@@ -29,7 +28,7 @@ const visibleConfigurationsByPluginSelector = createSelector(
             return memo;
         }, {});
         // console.log('initialPlugins', initialPlugins);
-        var configurationsByPlugin = Object.values(configurations).reduce(function (memo, configuration) {
+        const configurationsByPlugin = Object.values(configurations).reduce(function (memo, configuration) {
             var plugin = memo[configuration.plugin] || {
                 name: configuration.plugin,
                 shortName: configuration.plugin,
@@ -40,7 +39,7 @@ const visibleConfigurationsByPluginSelector = createSelector(
             memo[configuration.plugin] = plugin;
             return memo;
         }, initialPlugins);
-        // console.log('configurationsByPlugin', configurationsByPlugin);
+        console.log('1', configurationsByPlugin);
 
         return configurationsByPlugin;
     }
@@ -49,8 +48,8 @@ const visibleConfigurationsByPluginSelector = createSelector(
 const visibleConfigurationsByActivePluginSelector = createSelector(
     [visibleConfigurationsByPluginSelector],
     (configurationsByPlugin) => {
+        console.log('2', configurationsByPlugin);
         if (!configurationsByPlugin) { return {}; }
-        // console.log('1', configurationsByPlugin);
         return Object.entries(configurationsByPlugin).reduce((memo, [key, plugin]) => {
             if (plugin.disabled || plugin.missing) {
                 return memo;
@@ -64,19 +63,12 @@ const visibleConfigurationsByActivePluginSelector = createSelector(
 const sortedVisibleConfigurationsByPluginSelector = createSelector(
     [visibleConfigurationsByPluginSelector],
     (configurationsByPlugin) => {
+        console.log('3', configurationsByPlugin);
         if (!configurationsByPlugin) { return []; }
-        var sortedConfigurations = Object.values(configurationsByPlugin).reduce(function (memo, plugin) {
-            memo[plugin.name] = {
-                ...plugin,
-                configurations: Object.values(plugin.configurations).sort((a, b) => {
-                    return a.data.name.localeCompare(b.data.name);
-                })
-            };
-            return memo;
-        }, {});
-        var result = Object.values(sortedConfigurations).sort((a,b) => {
+        var result = Object.values(configurationsByPlugin).sort((a,b) => {
             return a.name .localeCompare(b.name);
-        }); // todo: better sorting
+        });
+        // todo better sorting
         return result;
     }
 );
@@ -85,16 +77,7 @@ const sortedVisibleConfigurationsByActivePluginSelector = createSelector(
     [visibleConfigurationsByActivePluginSelector],
     (configurationsByPlugin) => {
         if (!configurationsByPlugin) { return []; }
-        var sortedConfigurations = Object.values(configurationsByPlugin).reduce(function (memo, plugin) {
-            memo[plugin.name] = {
-                ...plugin,
-                configurations: Object.values(plugin.configurations).sort((a, b) => {
-                    return a.data.name.localeCompare(b.data.name);
-                })
-            };
-            return memo;
-        }, {});
-        var result = Object.values(sortedConfigurations).sort((a,b) => {
+        var result = Object.values(configurationsByPlugin).sort((a,b) => {
             return a.name .localeCompare(b.name);
         }); // todo: better sorting
         return result;

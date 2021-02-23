@@ -196,12 +196,16 @@ module.exports = function(app) {
             const pluginName = parts[0];
             memo[pluginName] = { version: parts[1] };
             try {
-                let jsonString = fs.readFileSync(path.join(app.appDataPath, 'plugIns', pluginName, 'package.json'), 'utf8');
+                const fullPath = path.join(app.appDataPath, 'plugIns', pluginName);
+                let jsonString = fs.readFileSync(path.join(fullPath, 'package.json'), 'utf8');
                 //console.log(jsonString);
                 let packageJson = JSON.parse(jsonString);
                 packageJson.name = pluginName;
                 packageJson.shortName = packageJson.shortName || pluginName;
+                //packageJson.fullPath = fullpath;
                 memo[pluginName] = packageJson;
+                console.log('loading', pluginName);
+                //console.log(app.epm.load(app.appDataPath, pluginName));
             } catch (err) {
                 console.log('Error parsing JSON string', err);
             }

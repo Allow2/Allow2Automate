@@ -16,10 +16,22 @@ export default class Login extends Component {
     // static propTypes = {
     //     onLogin: PropTypes.func.isRequired
     // };
+    //var loadedPlugin = { missing: true, enabled: false };
+
+    constructor(...args) {
+        super(...args);
+
+        this.state = {
+            // loadedPlugin: require(this.props.plugin.name),
+            token: null,
+            pairing: false,
+            pluginName: ''
+        };
+    }
 
     render() {
-        console.log('tab props', this.props);
-        console.log('plugin', this.props.plugin);
+        //console.log('tab props', this.props);
+        //console.log('plugin', this.props.plugin);
         const plugin = this.props.plugin;
         return (
             <div>
