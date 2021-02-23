@@ -65,20 +65,25 @@ function testData() {
             id: "d23eb9da-19d6-4898-b56c-02a5a8ca477f",
             plugin: "allow2automate-battle.net",
             data: {
-                name: "Cody",
-                url: "https://us.battle.net/account/parental-controls/manage.html?key=GF5C30A125702AC5BADF93B43805BA86975B883EDBAD0926ECDA278D640CE3847",
-                key: "GF5C30A125702AC5BADF93B43805BA86975B883EDBAD0926ECDA278D640CE3847",
-                childId: 3
+                cody: {
+                    name: "Cody",
+                    url: "https://us.battle.net/account/parental-controls/manage.html?key=GF5C30A125702AC5BADF93B43805BA86975B883EDBAD0926ECDA278D640CE3847",
+                    key: "GF5C30A125702AC5BADF93B43805BA86975B883EDBAD0926ECDA278D640CE3847",
+                    childId: 3
+                },
+                mandy: {
+                    name: "Mandy",
+                    url: "https://us.battle.net/account/parental-controls/manage.html?key=dF5C30A125702AC5BADF93B43805BA86975B883EDBAD0926ECDA278D640CE3847",
+                    key: "dF5C30A125702AC5BADF93B43805BA86975B883EDBAD0926ECDA278D640CE3847",
+                    childId: 4
+                }
             }
         },
         "2742b8a4-c6e9-416b-9d30-cc7618f5d1b5": {
             id: "2742b8a4-c6e9-416b-9d30-cc7618f5d1b5",
-            plugin: "allow2automate-battle.net",
+            plugin: "allow2automate-blah.net",
             data: {
-                name: "Mandy",
-                url: "https://us.battle.net/account/parental-controls/manage.html?key=dF5C30A125702AC5BADF93B43805BA86975B883EDBAD0926ECDA278D640CE3847",
-                key: "dF5C30A125702AC5BADF93B43805BA86975B883EDBAD0926ECDA278D640CE3847",
-                childId: 4
+                name: "dfred"
             }
         },
         "9710629a-b82b-436c-8e3c-635861347ba0": {
@@ -105,7 +110,7 @@ function testData() {
         }
     });
 }
-testData();
+//testData();
 
 function migrateWemo() {
     let state = store.getState();
@@ -113,7 +118,7 @@ function migrateWemo() {
     if ( state.devices || state.pairings ) {
         console.log('migration needed', uuid);
     }
-return;
+
     if (state.devices || state.pairings) {
         // move data into the wemo configuration
         actions.configurationUpdate({
@@ -131,25 +136,24 @@ return;
         actions.deviceWipe();
     }
 }
-
 migrateWemo();
 
-var devices = new Wemo(
-    {
-        onDeviceUpdate: (data) => {
-            console.log('deviceUpdate');
-            actions.deviceUpdate(data);
-        }
-    }
-);
-
-ipc.on('setBinaryState', function(event, params) {
-    console.log('setBinaryState', params);
-    devices.setBinaryState(params.UDN, params.state, function(err, response) {
-        console.log('response:', params.UDN, response);
-        event.sender.send('setBinaryStateResponse', params.UDN, err, response);
-    }.bind(this));
-});
+// var devices = new Wemo(
+//     {
+//         onDeviceUpdate: (data) => {
+//             console.log('deviceUpdate');
+//             actions.deviceUpdate(data);
+//         }
+//     }
+// );
+//
+// ipc.on('setBinaryState', function(event, params) {
+//     console.log('setBinaryState', params);
+//     devices.setBinaryState(params.UDN, params.state, function(err, response) {
+//         console.log('response:', params.UDN, response);
+//         event.sender.send('setBinaryStateResponse', params.UDN, err, response);
+//     }.bind(this));
+// });
 
 ipc.on('saveState', function(event, params) {
     store.save();
@@ -415,57 +419,57 @@ app.on('ready', async () => {
     function pollUsage() {
         let state = store.getState();
 
-        let activeDevices = Object.values(state.devices).filter(function(device) {
-            return device.state;
-        });
-        let pollDevices = activeDevices.reduce(function(memo, device) {
-            let pairing = state.pairings[device.device.UDN];
-            if (pairing) {
-                pairing.device = device.device;
-                memo.push(pairing);
-            }
-            return memo;
-        }, []);
-        async.each(pollDevices, function(device, callback) {
-            console.log('poll', device.name);
-            const params = {
-                userId: device.controllerId,
-                pairId: device.id,
-                deviceToken: device.deviceToken,
-                pairToken: device.pairToken,
-                childId: device.ChildId,
-                tz: state.util.timezoneGuess,
-                activities: [{
-                    id: 7,
-                    log: true
-                }],
-                //log: true 			// default is true,
-                //staging: true		// default is production
-            };
-
-            //console.log(params);
-
-            allow2.check(params, function(err, result) {
-                if (err) { return; }    // simple bail out if any errors occur to avoid user not being able to turn on things
-
-                if (!result.allowed) {
-                    // only need to grab the client to turn it off
-                    if (result.error && (result.error == 'invalid pairToken' )) {
-                        actions.pairingRemove(device.device.UDN);
-                        store.save();
-                        return;
-                    }
-                    console.log( device.device.device.friendlyName, ' not allowed ', result );
-                    devices.setBinaryState(device.device.UDN, 0, () => {});
-                    return;
-                }
-                console.log(device.name, ' is on / running');
-                // interpret the result and if not allowed, turn the light back off again!
-            });
-            callback(null);
-        }, function(err) {
-            console.log('poll done', err);
-        });
+        // let activeDevices = Object.values(state.devices).filter(function(device) {
+        //     return device.state;
+        // });
+        // let pollDevices = activeDevices.reduce(function(memo, device) {
+        //     let pairing = state.pairings[device.device.UDN];
+        //     if (pairing) {
+        //         pairing.device = device.device;
+        //         memo.push(pairing);
+        //     }
+        //     return memo;
+        // }, []);
+        // async.each(pollDevices, function(device, callback) {
+        //     console.log('poll', device.name);
+        //     const params = {
+        //         userId: device.controllerId,
+        //         pairId: device.id,
+        //         deviceToken: device.deviceToken,
+        //         pairToken: device.pairToken,
+        //         childId: device.ChildId,
+        //         tz: state.util.timezoneGuess,
+        //         activities: [{
+        //             id: 7,
+        //             log: true
+        //         }],
+        //         //log: true 			// default is true,
+        //         //staging: true		// default is production
+        //     };
+        //
+        //     //console.log(params);
+        //
+        //     allow2.check(params, function(err, result) {
+        //         if (err) { return; }    // simple bail out if any errors occur to avoid user not being able to turn on things
+        //
+        //         if (!result.allowed) {
+        //             // only need to grab the client to turn it off
+        //             if (result.error && (result.error == 'invalid pairToken' )) {
+        //                 actions.pairingRemove(device.device.UDN);
+        //                 store.save();
+        //                 return;
+        //             }
+        //             console.log( device.device.device.friendlyName, ' not allowed ', result );
+        //             devices.setBinaryState(device.device.UDN, 0, () => {});
+        //             return;
+        //         }
+        //         console.log(device.name, ' is on / running');
+        //         // interpret the result and if not allowed, turn the light back off again!
+        //     });
+        //     callback(null);
+        // }, function(err) {
+        //     console.log('poll done', err);
+        // });
     }
     pollUsage();
     usageTimer = setInterval(pollUsage, 10000);

@@ -246,7 +246,7 @@ export default class Plugins extends Component {
                     })
                     }
                     <Tab label="Settings" key="Allow2AutomateSettingsTab" value="Allow2AutomateSettingsTab" >
-                        <PlugIns />
+                        <PlugIns {...this.props} />
                     </Tab>
                 </Tabs>
             </div>
