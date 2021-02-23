@@ -205,7 +205,8 @@ module.exports = function(app) {
                 //packageJson.fullPath = fullpath;
                 memo[pluginName] = packageJson;
                 console.log('loading', pluginName);
-                console.log(app.epm.load(app.appDataPath, pluginName));
+                app.epm.load(app.appDataPath, pluginName);
+                //console.log();
             } catch (err) {
                 console.log('Error parsing JSON string', err);
             }

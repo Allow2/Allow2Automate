@@ -108,7 +108,7 @@ export default class PlugIns extends Component {
     };
 
     addPlugin = () => {
-        const pluginName = 'allow2automate-' + this.state.pluginName;
+        const pluginName = /*'allow2automate-' +*/ this.state.pluginName;
 
         if (this.props.installedPlugins[pluginName]) {
             dialogs.alert(pluginName + ' is already installed. Remove it first if you want to reinstall it.');
