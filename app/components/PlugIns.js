@@ -84,7 +84,7 @@ export default class PlugIns extends Component {
                 dialogs.alert("Unable to find " + pluginName + ': ' + JSON.stringify(err));
                 return;
             }
-            epm.load(dir, pluginName, remote.require);
+            //epm.load(dir, pluginName, remote.require);
             // In renderer process
             fs.readFile(path.join(pluginPath, 'package.json'), 'utf8', (err, jsonString) => {
                 if (err) {
@@ -108,7 +108,7 @@ export default class PlugIns extends Component {
     };
 
     addPlugin = () => {
-        const pluginName = /*'allow2automate-' +*/ this.state.pluginName;
+        const pluginName = 'allow2automate-' + this.state.pluginName;
 
         if (this.props.installedPlugins[pluginName]) {
             dialogs.alert(pluginName + ' is already installed. Remove it first if you want to reinstall it.');
@@ -216,6 +216,7 @@ export default class PlugIns extends Component {
 
     render() {
         let plugins = sortedVisibleConfigurationsByPluginSelector(this.props);
+        let customStyle = {width: 80, textAlign: 'center'};
         return (
             <div>
                 <div style={{ textAlign: "center" }}>
@@ -228,9 +229,9 @@ export default class PlugIns extends Component {
                     <TableHeader>
                         <TableRow key="HeaderRow">
                             <TableHeaderColumn> <span>Plugin</span> </TableHeaderColumn>
-                            <TableHeaderColumn> <span>Installed Version</span> </TableHeaderColumn>
-                            <TableHeaderColumn> <span>Enable</span> </TableHeaderColumn>
-                            <TableHeaderColumn> <span>x</span> </TableHeaderColumn>
+                            <TableHeaderColumn style={customStyle}> <span>Installed Version</span> </TableHeaderColumn>
+                            <TableHeaderColumn style={customStyle}> <span>Enabled</span> </TableHeaderColumn>
+                            <TableHeaderColumn style={customStyle}> <span>Delete</span> </TableHeaderColumn>
                         </TableRow>
                     </TableHeader>
                     <TableBody
@@ -248,7 +249,7 @@ export default class PlugIns extends Component {
                                     <TableRowColumn>
                                         <span>{plugin.name}</span>
                                     </TableRowColumn>
-                                    <TableRowColumn>
+                                    <TableRowColumn style={customStyle}>
                                         {!plugin.missing &&
                                         <span>{version}</span>
                                         }
@@ -256,7 +257,7 @@ export default class PlugIns extends Component {
                                         <FlatButton label="Reinstall" onClick={this.reinstallPlugin.bind(this, plugin)}/>
                                         }
                                     </TableRowColumn>
-                                    <TableRowColumn style={{textAlign: 'center'}}>
+                                    <TableRowColumn style={customStyle}>
                                         { !plugin.missing &&
                                         <Checkbox
                                             label=''
@@ -265,8 +266,7 @@ export default class PlugIns extends Component {
                                         />
                                         }
                                     </TableRowColumn>
-                                    <TableRowColumn>
-
+                                    <TableRowColumn style={customStyle}>
                                         <FlatButton label={ plugin.missing ? "Remove" : "Delete" }
                                             onClick={this.deletePlugin.bind(this, plugin)}/>
                                     </TableRowColumn>
