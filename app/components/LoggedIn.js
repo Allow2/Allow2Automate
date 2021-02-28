@@ -27,22 +27,8 @@ import {
     } from 'material-ui/Table';
 import {Tabs, Tab} from 'material-ui/Tabs';
 
-const apiUrl = 'https://api.allow2.com/';
-
 var dialogs = Dialogs({});
 
-var deviceTokens = {
-    LightSwitch: 'TczDIlwkOxMVlCTJ',
-    Socket: 'Bw6tUTmmHVykUxGM'
-};
-
-var deviceImages = {
-    LightSwitch: 'wemo_lightswitch',
-    Socket: 'wemo_switch',
-    Maker: 'wemo_maker',
-    Smart: 'wemo_smart_switch',
-    Bulb: 'wemo_bulb'
-};
 
 //class DeviceRow extends Component {
 //
@@ -130,14 +116,6 @@ export default class Plugins extends Component {
 
     messageDevices = {};
 
-    toggleCheckbox = (device, isChecked) => {
-        this.props.onDeviceActive( device.device.UDN, true );
-        ipc.send('setBinaryState', {
-            UDN: device.device.UDN,
-            state: isChecked ? 1 : 0
-        });
-    };
-
     componentDidMount = () => {
         ipc.on('setBinaryStateResponse', function (event, UDN, err, response) {
             let device = this.props.devices[UDN];
@@ -154,36 +132,6 @@ export default class Plugins extends Component {
         }.bind(this));
     };
 
-
-    assign = (device, token) => {
-        //let onPaired = this.props.onPaired;
-        //function openModal() {
-        let win = new remote.BrowserWindow({
-            parent: remote.getCurrentWindow(),
-            modal: true,
-            width: 500,
-            height: 600,
-            minWidth: 500,
-            maxWidth: 500,
-            minHeight: 600,
-            maxHeight: 800
-        });
-
-
-        //win.loadURL(theUrl);
-        win.loadURL(url.format({
-            pathname: path.join(__dirname, '../pairModal.html'),
-            protocol: 'file:',
-            slashes: true
-        }));
-
-        win.webContents.on('did-finish-load', () => {
-            win.webContents.send('device', { device: device, token: token });
-        });
-
-        //win.webContents.openDevTools();
-    };
-
     handleLogout = () => {
         dialogs.confirm('Are you sure you want to log off?', function(ok) {
             if (ok) {
@@ -193,21 +141,13 @@ export default class Plugins extends Component {
     };
 
     handleTabChange = (newValue) => {
+        console.log(newValue);
         this.setState({
             currentTab: newValue
         });
     };
 
     render() {
-        let devices = sortedVisibleDevicesSelector(this.props).reduce(function(memo, device) {
-            let token = deviceTokens[device.device.device.modelName];
-            if (token) {
-                memo.supported.push(device);
-            } else {
-                memo.notSupported.push(device);
-            }
-            return memo;
-        }, { supported: [], notSupported: [] });
         let user = this.props.user;
         let name = ( user.user && user.user.firstName ) || "...";
         let avatarUrl = allow2AvatarURL(user && user.user, null);
@@ -215,7 +155,6 @@ export default class Plugins extends Component {
             <Avatar icon={<Person />} />;
         let plugins = sortedVisibleConfigurationsByActivePluginSelector(this.props);
         let pluginData = pluginDataSelector(this.props);
-
         return (
             <div>
                 <AppBar

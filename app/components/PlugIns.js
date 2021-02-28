@@ -30,7 +30,7 @@ const epm = require('electron-plugin-manager');
 const dir = path.join(remote.app.getPath('appData'), 'allow2automate');
 const fs = require('fs');
 
-const apiUrl = 'https://api.allow2.com/';
+// const apiUrl = 'https://api.allow2.com/';
 
 var dialogs = Dialogs({});
 
@@ -52,29 +52,6 @@ export default class PlugIns extends Component {
             pluginName: ''
         };
     }
-    messageDevices = {};
-
-    toggleCheckbox = (device, isChecked) => {
-        this.props.onDeviceActive( device.device.UDN, true );
-        ipc.send('setBinaryState', {
-            UDN: device.device.UDN,
-            state: isChecked ? 1 : 0
-        });
-    };
-
-    componentDidMount = () => {
-        ipc.on('setBinaryStateResponse', function (event, UDN, err, response) {
-            let device = this.props.devices[UDN];
-            this.props.onDeviceActive(UDN, false);
-            if (err || ( response.BinaryState == undefined )) {
-                return;
-            }
-            device.active = false;
-            device.state = ( response.BinaryState != '0' );
-            this.props.onDeviceUpdate({[UDN]: device});
-        }.bind(this));
-    };
-
 
     installPlugin = (pluginName) => {
         const onPluginInstalled = this.props.onPluginInstalled.bind(this);
@@ -208,10 +185,6 @@ export default class PlugIns extends Component {
 
     toggleCheckbox = (plugin, isChecked) => {
         this.props.onSetPluginEnabled( plugin.name, isChecked );
-        // ipc.send('setBinaryState', {
-        //     UDN: device.device.UDN,
-        //     state: isChecked ? 1 : 0
-        // });
     };
 
     render() {
@@ -239,7 +212,7 @@ export default class PlugIns extends Component {
                         showRowHover={true}
                         stripedRows={true}>
                         { plugins.map(function (plugin) {
-                            console.log(plugin);
+                            //console.log(plugin);
                             let version = (plugin.version) || "";
 
                             return (
