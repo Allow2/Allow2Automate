@@ -1,7 +1,5 @@
 import React, { Component } from 'react';
-import Avatar from 'material-ui/Avatar';
-import FlatButton from 'material-ui/FlatButton';
-import TextField from 'material-ui/TextField';
+import { Avatar, TextField, Button } from '@material-ui/core';
 import {
     sortedVisibleConfigurationsByPluginSelector,
     sortedVisibleConfigurationsSelector,
@@ -24,8 +22,8 @@ import {
     TableHeaderColumn,
     TableRow,
     TableRowColumn,
-    } from 'material-ui/Table';
-import {Tabs, Tab} from 'material-ui/Tabs';
+    } from '@material-ui/core';
+//import {Tabs, Tab} from '@material-ui/core';
 const epm = require('electron-plugin-manager');
 const dir = path.join(remote.app.getPath('appData'), 'allow2automate');
 const fs = require('fs');
@@ -195,7 +193,7 @@ export default class PlugIns extends Component {
                 <div style={{ textAlign: "center" }}>
                     allow2automate-
                     <TextField id="pluginName" label="Plugin" value={this.state.pluginName} onChange={this.handleChange.bind(this)} />
-                    <FlatButton label="Add Plugin" onClick={this.addPlugin.bind(this)}/>
+                    <Button label="Add Plugin" onClick={this.addPlugin.bind(this)}/>
                 </div>
                 { plugins.length > 0 &&
                 <Table>
@@ -227,7 +225,7 @@ export default class PlugIns extends Component {
                                         <span>{version}</span>
                                         }
                                         { plugin.missing &&
-                                        <FlatButton label="Reinstall" onClick={this.reinstallPlugin.bind(this, plugin)}/>
+                                        <Button label="Reinstall" onClick={this.reinstallPlugin.bind(this, plugin)}/>
                                         }
                                     </TableRowColumn>
                                     <TableRowColumn style={customStyle}>
@@ -240,7 +238,7 @@ export default class PlugIns extends Component {
                                         }
                                     </TableRowColumn>
                                     <TableRowColumn style={customStyle}>
-                                        <FlatButton label={ plugin.missing ? "Remove" : "Delete" }
+                                        <Button label={ plugin.missing ? "Remove" : "Delete" }
                                             onClick={this.deletePlugin.bind(this, plugin)}/>
                                     </TableRowColumn>
                                 </TableRow>

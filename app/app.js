@@ -5,7 +5,7 @@ import { ConnectedRouter } from 'react-router-redux';
 import { createMemoryHistory } from 'history';
 import routes from './routes';
 import configureStore from './childStore';
-import MuiThemeProvider from 'material-ui/styles/MuiThemeProvider'
+import { ThemeProvider as MuiThemeProvider } from '@material-ui/core/styles';
 
 const syncHistoryWithStore = (store, history) => {
   const { routing } = store.getState();
@@ -20,14 +20,15 @@ syncHistoryWithStore(store, routerHistory);
 
 const rootElement = document.querySelector(document.currentScript.getAttribute('data-container'));
 
+//<MuiThemeProvider theme={}>
 ReactDOM.render(
-    <MuiThemeProvider>
+
         <Provider store={store}>
             <ConnectedRouter history={routerHistory}>
                 {routes}
             </ConnectedRouter>
         </Provider>
-    </MuiThemeProvider>,
+    ,
     rootElement
 );
 

@@ -4,7 +4,7 @@ import { Provider } from 'react-redux';
 import { createMemoryHistory } from 'history';
 import configureStore from './childStore';
 import PairModalPage from './containers/PairModalPage.js';
-import MuiThemeProvider from 'material-ui/styles/MuiThemeProvider'
+import { ThemeProvider as MuiThemeProvider } from '@material-ui/core/styles';
 
 const store = configureStore(null);
 

@@ -1,9 +1,11 @@
 import React, { Component } from 'react';
 import { push } from 'react-router-redux';
-import Avatar from 'material-ui/Avatar';
-import FlatButton from 'material-ui/FlatButton';
-import AppBar from 'material-ui/AppBar';
-import Person from 'material-ui/svg-icons/social/person';
+import {
+    Avatar,
+    Button,
+    AppBar,
+    Toolbar } from '@material-ui/core';
+import { SocialPerson } from '@material-ui/icons';
 import {
     sortedVisibleDevicesSelector,
     sortedVisibleConfigurationsByActivePluginSelector,
@@ -24,8 +26,8 @@ import {
     TableHeaderColumn,
     TableRow,
     TableRowColumn,
-    } from 'material-ui/Table';
-import {Tabs, Tab} from 'material-ui/Tabs';
+    } from '@material-ui/core';
+import {Tabs, Tab, Box } from '@material-ui/core';
 
 var dialogs = Dialogs({});
 
@@ -104,6 +106,26 @@ var dialogs = Dialogs({});
 //    }
 //}
 
+function TabPanel(props) {
+    const { children, value, index, ...other } = props;
+
+    return (
+        <div
+            role="tabpanel"
+            hidden={value !== index}
+            id={`simple-tabpanel-${index}`}
+            aria-labelledby={`simple-tab-${index}`}
+            {...other}
+        >
+            {value === index && (
+                <Box p={3}>
+                    {children}
+                </Box>
+            )}
+        </div>
+    );
+}
+
 export default class Plugins extends Component {
 
     constructor(...args) {
@@ -140,10 +162,10 @@ export default class Plugins extends Component {
         }.bind(this));
     };
 
-    handleTabChange = (newValue) => {
-        console.log(newValue);
+    handleTabChange = (el, tab) => {
+        //console.log(newValue, tab);
         this.setState({
-            currentTab: newValue
+            currentTab: tab
         });
     };
 
@@ -157,38 +179,51 @@ export default class Plugins extends Component {
         let pluginData = pluginDataSelector(this.props);
         return (
             <div>
-                <AppBar
-                    title={name}
-                    iconElementLeft={avatar}
-                    iconElementRight={<FlatButton label="Log Off" onClick={this.handleLogout} />}
-                    />
+                <AppBar position="static">
+                    <Toolbar>
+                        {avatar}
+                        {name}
+                        <Button label="Log Off" onClick={this.handleLogout} />
+                    </Toolbar>
+                </AppBar>
                 <Tabs value={this.state.currentTab} onChange={this.handleTabChange.bind(this)} >
                     { plugins.map(function (plugin) {
-                        const pluginDetail = {
-                            name: plugin.name,
-                            shortName: plugin.shortName,
-                            version: plugin.version
-                        };
-                        const data = Object.values(plugin.configurations).reduce((memo, configuration) => {
-                            memo[configuration.id] = configuration.data;
-                            return memo;
-                        }, {});
                         return (
-                            <Tab label={ plugin.shortName || plugin.name } key={ plugin.name } value={ plugin.name } >
-                                <PlugInTab
-                                    plugin={pluginDetail}
-                                    data={data}
-                                    children={pluginData.children}
-                                    user={pluginData.user} />
-                            </Tab>
+                            <Tab label={ plugin.shortName || plugin.name } key={ plugin.name } value={ plugin.name } />
                         );
                     })
                     }
-                    <Tab label="Settings" key="Allow2AutomateSettingsTab" value="Allow2AutomateSettingsTab" >
-                        <PlugIns {...this.props} />
-                    </Tab>
+                    <Tab label="Settings" key="Allow2AutomateSettingsTab" value="Allow2AutomateSettingsTab" />
                 </Tabs>
+
+                { plugins.map(function (plugin) {
+                    const pluginDetail = {
+                        name: plugin.name,
+                        shortName: plugin.shortName,
+                        version: plugin.version
+                    };
+                    const data = Object.values(plugin.configurations).reduce((memo, configuration) => {
+                        memo[configuration.id] = configuration.data;
+                        return memo;
+                    }, {});
+                    return (
+                        <TabPanel index={ plugin.name } key={ plugin.name } value={this.state.currentTab} >
+                            <PlugInTab
+                                plugin={pluginDetail}
+                                data={data}
+                                children={pluginData.children}
+                                user={pluginData.user} />
+                        </TabPanel>
+                    );
+                }.bind(this))
+                }
+
+                <TabPanel index="Allow2AutomateSettingsTab" value={this.state.currentTab} >
+                    <PlugIns {...this.props} />
+                </TabPanel>
+
             </div>
         );
     }
 }
+

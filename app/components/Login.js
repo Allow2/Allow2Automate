@@ -2,11 +2,14 @@ import React, { Component } from 'react';
 import PropTypes from 'prop-types';
 import { allow2Login } from '../util';
 import Dialogs from 'dialogs';
-import RaisedButton from 'material-ui/RaisedButton';
-import TextField from 'material-ui/TextField';
-import Avatar from 'material-ui/Avatar';
-import AppBar from 'material-ui/AppBar';
-import Person from 'material-ui/svg-icons/social/person';
+//import RaisedButton from 'material-ui/RaisedButton';
+import {
+    Button,
+    TextField,
+    Avatar,
+    AppBar
+} from '@material-ui/core';
+import { SocialPerson } from '@material-ui/icons';
 
 var dialogs = Dialogs({});
 
@@ -64,9 +67,9 @@ export default class Login extends Component {
                     onChange={this.handleChange}
                     name="password"
                     value={this.state.password} />
-                <RaisedButton onClick={this.handleLogin}>
+                <Button variant="contained" onClick={this.handleLogin}>
                     Log In
-                </RaisedButton>
+                </Button>
             </div>
         );
     }

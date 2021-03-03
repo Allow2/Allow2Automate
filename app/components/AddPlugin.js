@@ -3,13 +3,14 @@ import PropTypes from 'prop-types';
 import { allow2Request, allow2AvatarURL } from '../util';
 import Dialogs from 'dialogs';
 import { sortedVisibleChildrenSelector } from '../selectors';
-import AppBar from 'material-ui/AppBar';
-import IconButton from 'material-ui/IconButton';
-import NavigationClose from 'material-ui/svg-icons/navigation/close';
-import CircularProgress from 'material-ui/CircularProgress';
-import LinearProgress from 'material-ui/LinearProgress';
-import FlatButton from 'material-ui/FlatButton';
-import Avatar from 'material-ui/Avatar';
+import {
+    AppBar,
+    IconButton,
+    NavigationClose,
+    CircularProgress,
+    LinearProgress,
+    Button,
+    Avatar } from '@material-ui/core';
 import {
     Table,
     TableBody,
@@ -17,7 +18,7 @@ import {
     TableHeaderColumn,
     TableRow,
     TableRowColumn,
-    } from 'material-ui/Table';
+    } from '@material-ui/core';
 
 import { remote, ipcRenderer as ipc } from 'electron';
 
@@ -146,7 +147,7 @@ export default class Pair extends Component {
         //let leftButton = this.state.pairing || !this.state.device ? <CircularProgress /> :
         //    <IconButton disabled={this.state.pairing} onClick={this.handleCancel}><NavigationClose /></IconButton>;
         //let rightButton = this.state.pairing || !this.state.device ? <CircularProgress /> :
-        //    <FlatButton disabled={this.state.pairing} onClick={this.handleCancel} label="Cancel" />;
+        //    <Button disabled={this.state.pairing} onClick={this.handleCancel} label="Cancel" />;
         let progress = <LinearProgress mode="indeterminate" />;
         let imageName = this.state.device && deviceImages[this.state.device.device.modelName];
         return (
@@ -154,7 +155,7 @@ export default class Pair extends Component {
                 <AppBar
                     title={ title }
                     iconElementLeft={<IconButton disabled={this.state.pairing} onClick={this.handleCancel}><NavigationClose /></IconButton>}
-                    iconElementRight={<FlatButton disabled={this.state.pairing} onClick={this.handleCancel} label="Cancel" />}
+                    iconElementRight={<Button disabled={this.state.pairing} onClick={this.handleCancel} label="Cancel" />}
                     />
                 { imageName &&
                 <div align="center">

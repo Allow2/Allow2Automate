@@ -1,5 +1,5 @@
 import React, { Component, PropTypes } from 'react';
-import Toggle from 'material-ui/Toggle';
+import { Toggle } from '@material-ui/core';
 
 class Checkbox extends Component {
 
