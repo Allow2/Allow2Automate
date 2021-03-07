@@ -1,5 +1,5 @@
 import React, { Component } from 'react';
-import { Avatar, TextField, Button } from '@material-ui/core';
+import { Avatar, TextField, IconButton, Button } from '@material-ui/core';
 import {
     sortedVisibleConfigurationsByPluginSelector,
     sortedVisibleConfigurationsSelector,
@@ -16,13 +16,15 @@ import path from 'path';
 import url from 'url';
 import { remote, ipcRenderer as ipc } from 'electron';
 import {
+    TableContainer,
+    Paper,
     Table,
     TableBody,
-    TableHeader,
-    TableHeaderColumn,
+    TableHead,
     TableRow,
-    TableRowColumn,
+    TableCell
     } from '@material-ui/core';
+import { Delete, CloudDownload } from '@material-ui/icons';
 //import {Tabs, Tab} from '@material-ui/core';
 const epm = require('electron-plugin-manager');
 const dir = path.join(remote.app.getPath('appData'), 'allow2automate');
@@ -193,60 +195,60 @@ export default class PlugIns extends Component {
                 <div style={{ textAlign: "center" }}>
                     allow2automate-
                     <TextField id="pluginName" label="Plugin" value={this.state.pluginName} onChange={this.handleChange.bind(this)} />
-                    <Button label="Add Plugin" onClick={this.addPlugin.bind(this)}/>
+                    <IconButton color="primary" aria-label="install plugin" component="span" onClick={this.addPlugin.bind(this)} >
+                        <CloudDownload />
+                    </IconButton>
                 </div>
                 { plugins.length > 0 &&
-                <Table>
-                    <TableHeader>
-                        <TableRow key="HeaderRow">
-                            <TableHeaderColumn> <span>Plugin</span> </TableHeaderColumn>
-                            <TableHeaderColumn style={customStyle}> <span>Installed Version</span> </TableHeaderColumn>
-                            <TableHeaderColumn style={customStyle}> <span>Enabled</span> </TableHeaderColumn>
-                            <TableHeaderColumn style={customStyle}> <span>Delete</span> </TableHeaderColumn>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody
-                        displayRowCheckbox={false}
-                        showRowHover={true}
-                        stripedRows={true}>
-                        { plugins.map(function (plugin) {
-                            //console.log(plugin);
-                            let version = (plugin.version) || "";
+                <TableContainer component={Paper}>
+                    <Table>
+                        <TableHead>
+                            <TableRow key="HeaderRow">
+                                <TableCell> <span>Plugin</span> </TableCell>
+                                <TableCell style={customStyle}> <span>Installed Version</span> </TableCell>
+                                <TableCell style={customStyle}> <span>Enabled</span> </TableCell>
+                                <TableCell style={customStyle}> <span>Delete</span> </TableCell>
+                            </TableRow>
+                        </TableHead>
+                        <TableBody>
+                            { plugins.map(function (plugin) {
+                                    //console.log(plugin);
+                                    let version = (plugin.version) || "";
 
-                            return (
-                                <TableRow
-                                    key={plugin.name}
-                                    selectable={true}>
-                                    <TableRowColumn>
-                                        <span>{plugin.name}</span>
-                                    </TableRowColumn>
-                                    <TableRowColumn style={customStyle}>
-                                        {!plugin.missing &&
-                                        <span>{version}</span>
-                                        }
-                                        { plugin.missing &&
-                                        <Button label="Reinstall" onClick={this.reinstallPlugin.bind(this, plugin)}/>
-                                        }
-                                    </TableRowColumn>
-                                    <TableRowColumn style={customStyle}>
-                                        { !plugin.missing &&
-                                        <Checkbox
-                                            label=''
-                                            isChecked={!plugin.disabled}
-                                            handleCheckboxChange={this.toggleCheckbox.bind(this, plugin)}
-                                        />
-                                        }
-                                    </TableRowColumn>
-                                    <TableRowColumn style={customStyle}>
-                                        <Button label={ plugin.missing ? "Remove" : "Delete" }
-                                            onClick={this.deletePlugin.bind(this, plugin)}/>
-                                    </TableRowColumn>
-                                </TableRow>
-                            );
-                        }.bind(this)
-                        )}
-                    </TableBody>
-                </Table>
+                                    return (
+                                        <TableRow key={plugin.name}>
+                                            <TableCell>
+                                                <span>{plugin.name}</span>
+                                            </TableCell>
+                                            <TableCell style={customStyle}>
+                                                {!plugin.missing &&
+                                                <span>{version}</span>
+                                                }
+                                                { plugin.missing &&
+                                                <Button label="Reinstall" onClick={this.reinstallPlugin.bind(this, plugin)}/>
+                                                }
+                                            </TableCell>
+                                            <TableCell style={customStyle}>
+                                                { !plugin.missing &&
+                                                <Checkbox
+                                                    label=''
+                                                    isChecked={!plugin.disabled}
+                                                    handleCheckboxChange={this.toggleCheckbox.bind(this, plugin)}
+                                                />
+                                                }
+                                            </TableCell>
+                                            <TableCell style={customStyle}>
+                                                <IconButton color="primary" aria-label="delete plugin" component="span" onClick={this.deletePlugin.bind(this, plugin)}>
+                                                    <Delete />
+                                                </IconButton>
+                                            </TableCell>
+                                        </TableRow>
+                                    );
+                                }.bind(this)
+                            )}
+                        </TableBody>
+                    </Table>
+                </TableContainer>
                 }
             </div>
         );

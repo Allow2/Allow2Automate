@@ -1,8 +1,24 @@
 import {sortedVisibleConfigurationsByPluginSelector} from "./selectors";
 import path from 'path';
 import fs from 'fs';
+var Module = require("module");
 
 module.exports = function(app) {
+
+    //
+    // magically insert our node_modules path to plugin module search paths
+    //
+    const reactPath = require.resolve('react');
+    const modulesIndex = reactPath.lastIndexOf("node_modules");
+    const ourModulesPath = path.join(reactPath.substring(0, modulesIndex), 'node_modules');
+    console.log("injecting ourModulesPath: ", ourModulesPath);
+    (function(moduleWrapCopy) {
+        Module.wrap = function(script) {
+            script = "module.paths.push('" + ourModulesPath + "');" + script;
+            return moduleWrapCopy(script);
+        };
+    })(Module.wrap);
+
     var plugins = {
         library: {},
         installed: {},
@@ -191,6 +207,7 @@ module.exports = function(app) {
     };
 
     plugins.getInstalled = function(callback) {
+
         const installedPlugins = app.epm.list(app.appDataPath, { version: true }).reduce(function(memo, plugin) {
             const parts = plugin.split('@');
             const pluginName = parts[0];

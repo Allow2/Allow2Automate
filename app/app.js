@@ -5,7 +5,7 @@ import { ConnectedRouter } from 'react-router-redux';
 import { createMemoryHistory } from 'history';
 import routes from './routes';
 import configureStore from './childStore';
-import { ThemeProvider as MuiThemeProvider } from '@material-ui/core/styles';
+import MuiThemeProvider from '@material-ui/core/styles/MuiThemeProvider'
 
 const syncHistoryWithStore = (store, history) => {
   const { routing } = store.getState();

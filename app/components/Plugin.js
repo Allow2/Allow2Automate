@@ -4,8 +4,8 @@ import { allow2AvatarURL } from '../util';
 import Dialogs from 'dialogs';
 import path from 'path';
 import { remote, ipcRenderer } from 'electron';
+var Module = require("module");
 
-//const epm = require('electron-plugin-manager');
 const dir = path.join(remote.app.getPath('appData'), 'allow2automate', 'plugins');
 
 export default class Login extends Component {
@@ -16,10 +16,24 @@ export default class Login extends Component {
     constructor(...args) {
         super(...args);
 
+        //
+        // magically insert our node_modules path to plugin module search paths
+        //
+        const reactPath = require.resolve('react');
+        const modulesIndex = reactPath.lastIndexOf("node_modules");
+        const ourModulesPath = path.join(reactPath.substring(0, modulesIndex), 'node_modules');
+        console.log("injecting ourModulesPath: ", ourModulesPath);
+        (function(moduleWrapCopy) {
+            Module.wrap = function(script) {
+                script = "module.paths.push('" + ourModulesPath + "');" + script;
+                return moduleWrapCopy(script);
+            };
+        })(Module.wrap);
+
         //const plugin = epm.load(dir, this.props.plugin.name, remote.require);
-        console.log(dir);
+        // console.log(dir);
         const pluginPath = path.join(dir, this.props.plugin.name);
-        var plugin = require(pluginPath);
+        var plugin = require(pluginPath).plugin;
         //console.log('gui', this.props.plugin.name, plugin);
         if (plugin.default) {
             plugin = plugin.default;
@@ -66,7 +80,7 @@ export default class Login extends Component {
         const plugin = this.props.plugin;
         const TabContent = this.plugin.TabContent;
 
-        console.log('TabContent', plugin.name, this.props.data);
+        // console.log('TabContent', plugin.name, this.props.data);
         if (this.state.hasError) {
             //console.log(this.state);
             return (<div>
@@ -87,8 +101,8 @@ export default class Login extends Component {
         // }
 
         const ipc = {
-            send: (channel, ...args) => { ipcRenderer.send( pluginName + '.' + channel, ...args)},
-            on: (channel, listener) => { ipcRenderer.on( pluginName + '.' + channel, listener)}
+            send: (channel, ...args) => { ipcRenderer.send( plugin.name + '.' + channel, ...args)},
+            on: (channel, listener) => { ipcRenderer.on( plugin.name + '.' + channel, listener)}
         };
 
         return (

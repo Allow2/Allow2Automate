@@ -1,5 +1,5 @@
 import React, { Component, PropTypes } from 'react';
-import { Toggle } from '@material-ui/core';
+import { Switch } from '@material-ui/core';
 
 class Checkbox extends Component {
 
@@ -12,10 +12,10 @@ class Checkbox extends Component {
         //let disabled = isDisabled ? { disabled : true} : {};
 
         return (
-            <Toggle
+            <Switch
                 value={label}
-                toggled={isChecked == true}
-                onToggle={this.toggleCheckboxChange}
+                checked={isChecked == true}
+                onChange={this.toggleCheckboxChange}
                 disabled={isDisabled}
                 />
         );

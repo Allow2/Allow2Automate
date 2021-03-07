@@ -176,16 +176,11 @@ export default class Pair extends Component {
                             <TableHeaderColumn>Select a Child for this device</TableHeaderColumn>
                         </TableRow>
                     </TableHeader>
-                    <TableBody
-                        displayRowCheckbox={false}
-                        showRowHover={true}
-                        stripedRows={false}
-                        >
+                    <TableBody>
                     { children.map((child) => {
                             let url = allow2AvatarURL(null, child);
                             return (
-                                <TableRow key={ child.id }
-                                          selectable={!this.state.pairing && (this.state.token != null)}>
+                                <TableRow key={ child.id }>
                                     <TableRowColumn>
                                         <Avatar src={url} />
                                     </TableRowColumn>
@@ -204,3 +199,4 @@ export default class Pair extends Component {
         );
     }
 }
+//selectable={!this.state.pairing && (this.state.token != null)}
