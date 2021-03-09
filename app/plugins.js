@@ -222,8 +222,25 @@ module.exports = function(app) {
                 //packageJson.fullPath = fullpath;
                 memo[pluginName] = packageJson;
                 console.log('loading', pluginName);
-                app.epm.load(app.appDataPath, pluginName);
-                //console.log();
+                var loadedPlugin = app.epm.load(app.appDataPath, pluginName);
+                console.log(loadedPlugin.plugin);
+
+                const ipc = {
+                    send: (channel, ...args) => { app.ipc.send( plugin.name + '.' + channel, ...args)},
+                    on: (channel, listener) => { app.ipc.on( plugin.name + '.' + channel, listener)}
+                };
+
+                const configurationUpdate = function(newConfiguration) {
+                    console.log("updateConfiguration: ", plugin.name, " = ", newConfiguration);
+                };
+
+                const installedPlugin = loadedPlugin.plugin({
+                    isMain: true,
+                    ipc: ipc,
+                    configurationUpdate: configurationUpdate
+                });
+                plugins.installed[pluginName] = installedPlugin;
+                installedPlugin.onLoad && installedPlugin.onLoad();
             } catch (err) {
                 console.log('Error parsing JSON string', err);
             }

@@ -8,7 +8,6 @@ import { allow2Request } from './util';
 import { bindActionCreators } from 'redux';
 const async = require('async');
 var allow2 = require('allow2');
-import Wemo from './util/Wemo';
 var moment = require('moment-timezone');
 app.epm = require('electron-plugin-manager');
 const appConfig = require('electron-settings');
@@ -29,6 +28,7 @@ const store = configureStore();
 const actions = bindActionCreators(allActions, store.dispatch);
 
 app.appDataPath = path.join(app.getPath('appData'), 'allow2automate');
+app.ipc = ipc;
 app.epm.manager(ipc);
 // epm.install(dir, 'is-number', 'latest', (err, pluginPath) => {
 //     console.log('is-number: ', err, pluginPath);
@@ -137,23 +137,6 @@ function migrateWemo() {
     }
 }
 migrateWemo();
-
-// var devices = new Wemo(
-//     {
-//         onDeviceUpdate: (data) => {
-//             console.log('deviceUpdate');
-//             actions.deviceUpdate(data);
-//         }
-//     }
-// );
-//
-// ipc.on('setBinaryState', function(event, params) {
-//     console.log('setBinaryState', params);
-//     devices.setBinaryState(params.UDN, params.state, function(err, response) {
-//         console.log('response:', params.UDN, response);
-//         event.sender.send('setBinaryStateResponse', params.UDN, err, response);
-//     }.bind(this));
-// });
 
 ipc.on('saveState', function(event, params) {
     store.save();

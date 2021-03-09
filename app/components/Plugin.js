@@ -22,7 +22,7 @@ export default class Login extends Component {
         const reactPath = require.resolve('react');
         const modulesIndex = reactPath.lastIndexOf("node_modules");
         const ourModulesPath = path.join(reactPath.substring(0, modulesIndex), 'node_modules');
-        console.log("injecting ourModulesPath: ", ourModulesPath);
+        //console.log("injecting ourModulesPath: ", ourModulesPath);
         (function(moduleWrapCopy) {
             Module.wrap = function(script) {
                 script = "module.paths.push('" + ourModulesPath + "');" + script;
@@ -30,19 +30,13 @@ export default class Login extends Component {
             };
         })(Module.wrap);
 
-        //const plugin = epm.load(dir, this.props.plugin.name, remote.require);
-        // console.log(dir);
         const pluginPath = path.join(dir, this.props.plugin.name);
-        var plugin = require(pluginPath).plugin;
-        //console.log('gui', this.props.plugin.name, plugin);
-        if (plugin.default) {
-            plugin = plugin.default;
-        }
+        this.plugin = require(pluginPath);
+        console.log('gui', this.props.plugin.name, this.plugin);
+        // if (plugin.default) {
+        //     plugin = plugin.default;
+        // }
 
-        this.plugin = plugin({
-            updateData: function(data) {
-            }
-        });
         //console.log('plugin', this.plugin);
         this.state = {
             hasError: false,
@@ -105,6 +99,10 @@ export default class Login extends Component {
             on: (channel, listener) => { ipcRenderer.on( plugin.name + '.' + channel, listener)}
         };
 
+        const configurationUpdate = function(newConfiguration) {
+            console.log("updateConfiguration: ", plugin.name, " = ", newConfiguration);
+        };
+
         return (
             <TabContent
                 plugin={this.props.plugin}
@@ -114,6 +112,7 @@ export default class Login extends Component {
                 pluginPath={this.state.pluginPath}
                 remote={remote}
                 ipc={ipc}
+                configurationUpdate={configurationUpdate}
                 allow2={{
                     avatarURL: allow2AvatarURL
                 }}
