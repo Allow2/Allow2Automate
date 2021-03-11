@@ -18,8 +18,11 @@ const visibleConfigurationsByPluginSelector = createSelector(
         const library = stateLibrary || {};     // not needed?
         const initialPlugins = Object.entries(plugins).reduce(function(memo, [key, plugin]) {
             const available = library[key] || null;
-            var newPlugin = {
-                ...plugin,
+            var newPlugin =     {
+                name: plugin.name,
+                shortName: plugin.shortName,
+                version: plugin.version,
+                packageJson: plugin,
                 configurations: {},
                 available: available
             };

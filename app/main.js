@@ -37,7 +37,7 @@ app.epm.manager(ipc);
 actions.deviceInit();
 actions.timezoneGuess(moment.tz.guess());
 
-var plugins = require('./plugins')(app);
+var plugins = require('./plugins')(app, store);
 
 plugins.getLibrary((err, pluginLibrary) => {
     // console.log('pluginLibrary', pluginLibrary);

@@ -2,8 +2,11 @@ import {sortedVisibleConfigurationsByPluginSelector} from "./selectors";
 import path from 'path';
 import fs from 'fs';
 var Module = require("module");
+import {
+    visibleConfigurationsByPluginSelector
+} from './selectors';
 
-module.exports = function(app) {
+module.exports = function(app, store) {
 
     //
     // magically insert our node_modules path to plugin module search paths
@@ -64,6 +67,20 @@ module.exports = function(app) {
             }
         }
     };
+
+    function handleStateChange() {
+        let nextState = visibleConfigurationsByPluginSelector(store.getState());
+        for (let plugin of Object.values(plugins.installed)) {
+            let currentPluginState = plugin.currentState;
+            let nextPluginState = nextState[plugin.name];
+            if (nextPluginState !== currentPluginState) {
+                plugin.plugin && plugin.plugin.newState && plugin.plugin.newState(nextPluginState);
+                plugin.currentState = nextPluginState;
+            }
+        }
+    }
+
+    let unsubscribe = store.subscribe(handleStateChange);
 
     function installPlugin(plugin, callback) {
 
@@ -207,7 +224,7 @@ module.exports = function(app) {
     };
 
     plugins.getInstalled = function(callback) {
-
+        let currentState = visibleConfigurationsByPluginSelector(store.getState());
         const installedPlugins = app.epm.list(app.appDataPath, { version: true }).reduce(function(memo, plugin) {
             const parts = plugin.split('@');
             const pluginName = parts[0];
@@ -223,7 +240,7 @@ module.exports = function(app) {
                 memo[pluginName] = packageJson;
                 console.log('loading', pluginName);
                 var loadedPlugin = app.epm.load(app.appDataPath, pluginName);
-                console.log(loadedPlugin.plugin);
+                //console.log(loadedPlugin.plugin);
 
                 const ipc = {
                     send: (channel, ...args) => { app.ipc.send( plugin.name + '.' + channel, ...args)},
@@ -232,6 +249,7 @@ module.exports = function(app) {
 
                 const configurationUpdate = function(newConfiguration) {
                     console.log("updateConfiguration: ", plugin.name, " = ", newConfiguration);
+
                 };
 
                 const installedPlugin = loadedPlugin.plugin({
@@ -239,8 +257,15 @@ module.exports = function(app) {
                     ipc: ipc,
                     configurationUpdate: configurationUpdate
                 });
-                plugins.installed[pluginName] = installedPlugin;
-                installedPlugin.onLoad && installedPlugin.onLoad();
+
+                let currentPluginState = currentState[pluginName];
+                installedPlugin.onLoad && installedPlugin.onLoad(currentPluginState);
+                plugins.installed[pluginName] = {
+                    name: pluginName,
+                    plugin: installedPlugin,
+                    currentState: null
+                };
+
             } catch (err) {
                 console.log('Error parsing JSON string', err);
             }

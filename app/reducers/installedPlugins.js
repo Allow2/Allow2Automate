@@ -19,7 +19,7 @@ export default handleActions({
     },
 
     [actions.setPluginEnabled]: (state, action) => {
-        console.log(action, state);
+        //console.log(action, state);
         var newState = Object.assign({}, state);
         var plugin = newState[action.payload.pluginName];
         plugin.disabled = !action.payload.isChecked;
