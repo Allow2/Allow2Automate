@@ -99,8 +99,10 @@ export default class Login extends Component {
             on: (channel, listener) => { ipcRenderer.on( plugin.name + '.' + channel, listener)}
         };
 
+        const pluginName = this.props.plugin.name;
+        const onUpdateConfiguration = this.props.onUpdateConfiguration;
         const configurationUpdate = function(newConfiguration) {
-            console.log("updateConfiguration: ", plugin.name, " = ", newConfiguration);
+            onUpdateConfiguration(pluginName, newConfiguration);
         };
 
         return (

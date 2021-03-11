@@ -22,10 +22,9 @@ const mapDispatchToProps = (dispatch) => { // eslint-disable-line no-unused-vars
             actions.deviceUpdate(data);
         },
 
-        onDeviceActive: (UDN, active) => {
-            actions.deviceActive({
-                UDN: UDN,
-                active: active
+        onUpdateConfiguration: (pluginName, configuration) => {
+            actions.configurationUpdate({
+                [pluginName]: configuration
             });
         },
 

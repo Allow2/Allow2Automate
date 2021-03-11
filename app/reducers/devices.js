@@ -1,6 +1,8 @@
 import { handleActions } from 'redux-actions';
 import actions from '../actions';
 
+// TODO: delete me
+
 export default handleActions({
     [actions.deviceUpdate]: (state, action) => {
         return state;

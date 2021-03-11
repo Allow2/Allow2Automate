@@ -11,7 +11,6 @@ var allow2 = require('allow2');
 var moment = require('moment-timezone');
 app.epm = require('electron-plugin-manager');
 const appConfig = require('electron-settings');
-import { v4 as uuidv4 } from 'uuid';
 
 // Make React faster
 //const { resourcePath, devMode } = getWindowLoadSettings();
@@ -39,6 +38,33 @@ actions.timezoneGuess(moment.tz.guess());
 
 var plugins = require('./plugins')(app, store);
 
+//
+// migrate configurations < v2.0.0
+//
+function migrateWemo() {
+    let state = store.getState();
+    if ( state.devices || state.pairings ) {
+        console.log('migration needed');
+    }
+
+    if (state.devices || state.pairings) {
+        // move data into the wemo configuration
+        actions.configurationUpdate({
+            "allow2automate-wemo": {
+                devices: state.devices,
+                pairings: state.pairings
+            }
+        });
+        // clean up
+        actions.pairingWipe();
+        actions.deviceWipe();
+    }
+}
+migrateWemo();
+
+//
+// load plugins
+//
 plugins.getLibrary((err, pluginLibrary) => {
     // console.log('pluginLibrary', pluginLibrary);
     if (err) {
@@ -61,8 +87,7 @@ plugins.getInstalled((err, installedPlugins) => {
 function testData() {
 
     actions.configurationUpdate({
-        "d23eb9da-19d6-4898-b56c-02a5a8ca477f": {
-            id: "d23eb9da-19d6-4898-b56c-02a5a8ca477f",
+        "allow2automate-battle.net": {
             plugin: "allow2automate-battle.net",
             data: {
                 cody: {
@@ -79,15 +104,13 @@ function testData() {
                 }
             }
         },
-        "2742b8a4-c6e9-416b-9d30-cc7618f5d1b5": {
-            id: "2742b8a4-c6e9-416b-9d30-cc7618f5d1b5",
+        "allow2automate-blah.net": {
             plugin: "allow2automate-blah.net",
             data: {
                 name: "dfred"
             }
         },
-        "9710629a-b82b-436c-8e3c-635861347ba0": {
-            id: "9710629a-b82b-436c-8e3c-635861347ba0",
+        "allow2automate-ssh": {
             plugin: "allow2automate-ssh",
             data: {
                 name: "Router",
@@ -111,32 +134,6 @@ function testData() {
     });
 }
 //testData();
-
-function migrateWemo() {
-    let state = store.getState();
-    let uuid = uuidv4();
-    if ( state.devices || state.pairings ) {
-        console.log('migration needed', uuid);
-    }
-
-    if (state.devices || state.pairings) {
-        // move data into the wemo configuration
-        actions.configurationUpdate({
-            [uuid]: {
-                id: uuid,
-                plugin: "allow2automate-wemo",
-                data: {
-                    devices: state.devices,
-                    pairings: state.pairings
-                }
-            }
-        });
-        // clean up
-        actions.pairingWipe();
-        actions.deviceWipe();
-    }
-}
-migrateWemo();
 
 ipc.on('saveState', function(event, params) {
     store.save();

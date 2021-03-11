@@ -1,59 +1,35 @@
 import { createSelector } from 'reselect';
 
-const sortedVisibleConfigurationsSelector = createSelector(
-    [state => state.configurations],
-    (configurations) => {
-        if (!configurations) { return []; }
-        var result = Object.values(configurations).sort((a,b) => {
-            return (a.plugin + "|" + (a.data.name || a.id)).localeCompare(b.plugin + "|" + (b.data.name || b.id))
-        });
-        return result;
-    }
-);
-
-const visibleConfigurationsByPluginSelector = createSelector(
+const pluginSelector = createSelector(
     [state => state.installedPlugins, state => state.configurations, state => state.pluginLibrary],
     (plugins, configurations, stateLibrary) => {
         if (!plugins || !configurations ) { return []; }
         const library = stateLibrary || {};     // not needed?
-        const initialPlugins = Object.entries(plugins).reduce(function(memo, [key, plugin]) {
+        const pluginsWithConfigurations = Object.entries(plugins).reduce(function(memo, [key, plugin]) {
             const available = library[key] || null;
             var newPlugin =     {
                 name: plugin.name,
                 shortName: plugin.shortName,
                 version: plugin.version,
                 packageJson: plugin,
-                configurations: {},
+                configuration: configurations[plugin.name] || {},
                 available: available
             };
 
             memo[key] = newPlugin;
             return memo;
         }, {});
-        // console.log('initialPlugins', initialPlugins);
-        const configurationsByPlugin = Object.values(configurations).reduce(function (memo, configuration) {
-            var plugin = memo[configuration.plugin] || {
-                name: configuration.plugin,
-                shortName: configuration.plugin,
-                configurations: {},
-                missing: true
-            };
-            plugin.configurations = [...plugin.configurations, configuration];
-            memo[configuration.plugin] = plugin;
-            return memo;
-        }, initialPlugins);
-        //console.log('1', configurationsByPlugin);
 
-        return configurationsByPlugin;
+        return pluginsWithConfigurations;
     }
 );
 
-const visibleConfigurationsByActivePluginSelector = createSelector(
-    [visibleConfigurationsByPluginSelector],
-    (configurationsByPlugin) => {
-        //console.log('2', configurationsByPlugin);
-        if (!configurationsByPlugin) { return {}; }
-        return Object.entries(configurationsByPlugin).reduce((memo, [key, plugin]) => {
+const activePluginSelector = createSelector(
+    [pluginSelector],
+    (pluginsWithConfigurations) => {
+        console.log('2', pluginsWithConfigurations);
+        if (!pluginsWithConfigurations) { return {}; }
+        return Object.entries(pluginsWithConfigurations).reduce((memo, [key, plugin]) => {
             if (plugin.disabled || plugin.missing) {
                 return memo;
             }
@@ -63,12 +39,12 @@ const visibleConfigurationsByActivePluginSelector = createSelector(
     }
 );
 
-const sortedVisibleConfigurationsByPluginSelector = createSelector(
-    [visibleConfigurationsByPluginSelector],
-    (configurationsByPlugin) => {
+const sortedPluginSelector = createSelector(
+    [pluginSelector],
+    (pluginsWithConfigurations) => {
         //console.log('3', configurationsByPlugin);
-        if (!configurationsByPlugin) { return []; }
-        var result = Object.values(configurationsByPlugin).sort((a,b) => {
+        if (!pluginsWithConfigurations) { return []; }
+        var result = Object.values(pluginsWithConfigurations).sort((a,b) => {
             return a.name .localeCompare(b.name);
         });
         // todo better sorting
@@ -76,11 +52,11 @@ const sortedVisibleConfigurationsByPluginSelector = createSelector(
     }
 );
 
-const sortedVisibleConfigurationsByActivePluginSelector = createSelector(
-    [visibleConfigurationsByActivePluginSelector],
-    (configurationsByPlugin) => {
-        if (!configurationsByPlugin) { return []; }
-        var result = Object.values(configurationsByPlugin).sort((a,b) => {
+const sortedActivePluginSelector = createSelector(
+    [activePluginSelector],
+    (pluginsWithConfigurations) => {
+        if (!pluginsWithConfigurations) { return []; }
+        var result = Object.values(pluginsWithConfigurations).sort((a,b) => {
             return a.name .localeCompare(b.name);
         }); // todo: better sorting
         return result;
@@ -116,10 +92,9 @@ const pluginDataSelector = createSelector(
 
 
 module.exports = {
-    sortedVisibleConfigurationsSelector,
-    visibleConfigurationsByPluginSelector,
-    visibleConfigurationsByActivePluginSelector,
-    sortedVisibleConfigurationsByPluginSelector,
-    sortedVisibleConfigurationsByActivePluginSelector,
+    pluginSelector,
+    activePluginSelector,
+    sortedPluginSelector,
+    sortedActivePluginSelector,
     pluginDataSelector
 };

@@ -8,7 +8,7 @@ import {
 import { SocialPerson } from '@material-ui/icons';
 import {
     sortedVisibleDevicesSelector,
-    sortedVisibleConfigurationsByActivePluginSelector,
+    sortedActivePluginSelector,
     pluginDataSelector } from '../selectors';
 import { allow2Request, allow2AvatarURL } from '../util';
 import Dialogs from 'dialogs';
@@ -31,80 +31,6 @@ import {Tabs, Tab, Box } from '@material-ui/core';
 
 var dialogs = Dialogs({});
 
-
-//class DeviceRow extends Component {
-//
-//    toggleCheckbox = (device, isChecked) => {
-//        this.props.onDeviceActive( device.device.UDN, true );
-//        device.device.setBinaryState(isChecked ? 1 : 0, function(err, response) {
-//            this.props.onDeviceActive(device.device.UDN, false);
-//            if (err || ( response.BinaryState == undefined )) {
-//                return;
-//            }
-//            device.state = ( response.BinaryState != '0' );
-//            this.props.onDeviceUpdate({ [device.device.UDN]: device });
-//
-//        }.bind(this));
-//    };
-//
-//
-//    assign = (device) => {
-//        //let onPaired = this.props.onPaired;
-//        //function openModal() {
-//        let win = new remote.BrowserWindow({
-//            parent: remote.getCurrentWindow(),
-//            modal: true
-//        });
-//
-//
-//        //win.loadURL(theUrl);
-//        win.loadURL(url.format({
-//            pathname: path.join(__dirname, '../pairModal.html'),
-//            protocol: 'file:',
-//            slashes: true
-//        }));
-//
-//        win.webContents.openDevTools();
-//    };
-//
-//    render() {
-//        let device = this.props.device;
-//        let token = deviceTokens[device.device.device.modelName];
-//        let paired = this.props.pairings[device.device.UDN];
-//        console.log(device);
-//        return (
-//            <TableRow>
-//                <TableRowColumn>
-//                    { token &&
-//                    <span>{ device.device.device.friendlyName }</span>
-//                    }
-//                    { !token &&
-//                    <span><i style={{ color: '#555555' }}>{ device.device.device.friendlyName }</i></span>
-//                    }
-//                </TableRowColumn>
-//                <TableRowColumn>
-//                    <Checkbox
-//                        label=''
-//                        isChecked={device.state}
-//                        isDisabled={!token || device.active ? true : false}
-//                        handleCheckboxChange={this.toggleCheckbox.bind(this, device)}
-//                        />
-//                </TableRowColumn>
-//                <TableRowColumn>
-//                    { paired &&
-//                        <b>Paired</b>
-//                    }
-//                    { !paired && token &&
-//                        <button onClick={this.assign.bind(this, device.device)}>Assign { token }</button>
-//                    }
-//                    { !token &&
-//                        <i style={{ color: '#555555' }}>Device not yet supported</i>
-//                    }
-//                </TableRowColumn>
-//            </TableRow>
-//        );
-//    }
-//}
 
 function TabPanel(props) {
     const { children, value, index, ...other } = props;
@@ -165,7 +91,7 @@ export default class Plugins extends Component {
         let avatarUrl = allow2AvatarURL(user && user.user, null);
         let avatar = ( user.user && <Avatar src={ avatarUrl } />) ||
             <Avatar icon={<Person />} />;
-        let plugins = sortedVisibleConfigurationsByActivePluginSelector(this.props);
+        let plugins = sortedActivePluginSelector(this.props);
         let pluginData = pluginDataSelector(this.props);
         return (
             <div>
@@ -192,17 +118,14 @@ export default class Plugins extends Component {
                         shortName: plugin.shortName,
                         version: plugin.version
                     };
-                    const data = Object.values(plugin.configurations).reduce((memo, configuration) => {
-                        memo[configuration.id] = configuration.data;
-                        return memo;
-                    }, {});
                     return (
                         <TabPanel index={ plugin.name } key={ plugin.name } value={this.state.currentTab} >
                             <PlugInTab
                                 plugin={pluginDetail}
-                                data={data}
+                                data={plugin.configuration}
                                 children={pluginData.children}
-                                user={pluginData.user} />
+                                user={pluginData.user}
+                                onUpdateConfiguration={this.props.onUpdateConfiguration} />
                         </TabPanel>
                     );
                 }.bind(this))

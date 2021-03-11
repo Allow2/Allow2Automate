@@ -1,11 +1,9 @@
 import React, { Component } from 'react';
 import { Avatar, TextField, IconButton, Button } from '@material-ui/core';
 import {
-    sortedVisibleConfigurationsByPluginSelector,
-    sortedVisibleConfigurationsSelector,
-    visibleConfigurationsByPluginSelector,
-    visibleConfigurationsByActivePluginSelector,
-    sortedVisibleConfigurationsByActivePluginSelector
+    sortedPluginSelector,
+    activePluginSelector,
+    sortedActivePluginSelector
 } from '../selectors';
 import { allow2Request, allow2AvatarURL } from '../util';
 import Dialogs from 'dialogs';
@@ -117,7 +115,7 @@ export default class PlugIns extends Component {
         }));
 
         win.webContents.on('did-finish-load', () => {
-            win.webContents.send('data', { plugins: visibleConfigurationsByPluginSelector(this.props) });
+            win.webContents.send('data', { plugins: activePluginSelector(this.props) });
         });
 
         //win.webContents.openDevTools();
@@ -188,7 +186,7 @@ export default class PlugIns extends Component {
     };
 
     render() {
-        let plugins = sortedVisibleConfigurationsByPluginSelector(this.props);
+        let plugins = sortedPluginSelector(this.props);
         let customStyle = {width: 80, textAlign: 'center'};
         return (
             <div>

@@ -1,9 +1,9 @@
-import {sortedVisibleConfigurationsByPluginSelector} from "./selectors";
 import path from 'path';
 import fs from 'fs';
 var Module = require("module");
 import {
-    visibleConfigurationsByPluginSelector
+    pluginSelector,
+    sortedPluginSelector
 } from './selectors';
 
 module.exports = function(app, store) {
@@ -69,10 +69,11 @@ module.exports = function(app, store) {
     };
 
     function handleStateChange() {
-        let nextState = visibleConfigurationsByPluginSelector(store.getState());
+        let nextState = store.getState().configurations;
         for (let plugin of Object.values(plugins.installed)) {
             let currentPluginState = plugin.currentState;
             let nextPluginState = nextState[plugin.name];
+            console.log(plugin.name, nextPluginState);
             if (nextPluginState !== currentPluginState) {
                 plugin.plugin && plugin.plugin.newState && plugin.plugin.newState(nextPluginState);
                 plugin.currentState = nextPluginState;
@@ -81,9 +82,9 @@ module.exports = function(app, store) {
     }
 
     let unsubscribe = store.subscribe(handleStateChange);
+    // TODO: call unsubscribe when shutting down
 
     function installPlugin(plugin, callback) {
-
     }
 
     function initPlugins() {
@@ -224,7 +225,7 @@ module.exports = function(app, store) {
     };
 
     plugins.getInstalled = function(callback) {
-        let currentState = visibleConfigurationsByPluginSelector(store.getState());
+        let currentState = store.getState().configurations;
         const installedPlugins = app.epm.list(app.appDataPath, { version: true }).reduce(function(memo, plugin) {
             const parts = plugin.split('@');
             const pluginName = parts[0];
