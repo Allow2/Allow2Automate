@@ -6,7 +6,7 @@ import {
     sortedPluginSelector
 } from './selectors';
 
-module.exports = function(app, store) {
+module.exports = function(app, store, actions) {
 
     //
     // magically insert our node_modules path to plugin module search paths
@@ -244,13 +244,14 @@ module.exports = function(app, store) {
                 //console.log(loadedPlugin.plugin);
 
                 const ipc = {
-                    send: (channel, ...args) => { app.ipc.send( plugin.name + '.' + channel, ...args)},
-                    on: (channel, listener) => { app.ipc.on( plugin.name + '.' + channel, listener)}
+                    send: (channel, ...args) => { console.log('main plugin send', pluginName + '.' + channel); app.ipc.send( pluginName + '.' + channel, ...args)},
+                    on: (channel, listener) => { console.log('main plugin ipc on', pluginName + '.' + channel); app.ipc.on( pluginName + '.' + channel, listener)}
                 };
 
                 const configurationUpdate = function(newConfiguration) {
-                    console.log("updateConfiguration: ", plugin.name, " = ", newConfiguration);
-
+                    console.log("updateConfiguration: ", pluginName, " = ", newConfiguration);
+                    actions.configurationUpdate({ [pluginName]:newConfiguration });
+                    store.save();
                 };
 
                 const installedPlugin = loadedPlugin.plugin({

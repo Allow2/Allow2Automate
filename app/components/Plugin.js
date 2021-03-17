@@ -95,8 +95,8 @@ export default class Login extends Component {
         // }
 
         const ipc = {
-            send: (channel, ...args) => { ipcRenderer.send( plugin.name + '.' + channel, ...args)},
-            on: (channel, listener) => { ipcRenderer.on( plugin.name + '.' + channel, listener)}
+            send: (channel, ...args) => { console.log('plugin send to', plugin.name + '.' + channel); ipcRenderer.send( plugin.name + '.' + channel, ...args)},
+            on: (channel, listener) => { console.log('plugin ipc on', plugin.name + '.' + channel); ipcRenderer.on( plugin.name + '.' + channel, listener)}
         };
 
         const pluginName = this.props.plugin.name;

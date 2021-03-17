@@ -36,7 +36,7 @@ app.epm.manager(ipc);
 actions.deviceInit();
 actions.timezoneGuess(moment.tz.guess());
 
-var plugins = require('./plugins')(app, store);
+var plugins = require('./plugins')(app, store, actions);
 
 //
 // migrate configurations < v2.0.0
