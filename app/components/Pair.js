@@ -5,20 +5,22 @@ import Dialogs from 'dialogs';
 import { sortedVisibleChildrenSelector } from '../selectors';
 import {
     AppBar,
+    Toolbar,
     IconButton,
-    NavigationClose,
     CircularProgress,
     LinearProgress,
     Button,
-    Avatar } from 'material-ui/Avatar';
+    Avatar } from '@material-ui/core';
 import {
+    Paper,
     Table,
     TableBody,
-    TableHeader,
-    TableHeaderColumn,
+    TableHead,
+    TableContainer,
     TableRow,
-    TableRowColumn,
-    } from 'material-ui/Table';
+    TableCell,
+    } from '@material-ui/core';
+import { Close } from '@material-ui/icons';
 
 import { remote, ipcRenderer as ipc } from 'electron';
 
@@ -160,50 +162,99 @@ export default class Pair extends Component {
         let imageName = this.state.device && deviceImages[this.state.device.device.modelName];
         return (
             <div>
-                <AppBar
-                    title={ title }
-                    iconElementLeft={<IconButton disabled={this.state.pairing} onClick={this.handleCancel}><NavigationClose /></IconButton>}
-                    iconElementRight={<Button disabled={this.state.pairing} onClick={this.handleCancel} label="Cancel" />}
-                    />
+                <AppBar position="static">
+                    <Toolbar>
+                        <IconButton
+                            color="primary"
+                            aria-label="install plugin"
+                            component="span"
+                            disabled={this.state.pairing}
+                            onClick={this.handleCancel} >
+                            <Close />
+                        </IconButton>
+                        { title }
+                        <Button disabled={this.state.pairing} onClick={this.handleCancel} label="Cancel">Cancel</Button>
+                    </Toolbar>
+                </AppBar>
                 { imageName &&
                 <div align="center">
                     <img width="200" height="200" src={ 'assets/img/' + imageName + '.png' } />
-                    </div>
+                </div>
                 }
                 { (this.state.pairing || !this.state.device) && progress}
                 { children.length < 1 &&
-                    <p>
-                        Could not see any children in your account. Please set up some children and try again.
-                        <a href="https://app.allow.com/children">Go to Allow2</a>
-                    </p>
+                <p>
+                    Could not see any children in your account. Please set up some children and try again.
+                    <a href="https://app.allow.com/children">Go to Allow2</a>
+                </p>
                 }
-                { children.length > 0 &&
-                <Table onRowSelection={this.handlePair.bind(this, children)}>
-                    <TableHeader displaySelectAll={false}>
-                        <TableRow>
-                            <TableHeaderColumn>Select a Child for this device</TableHeaderColumn>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                    { children.map((child) => {
-                            let url = allow2AvatarURL(null, child);
-                            return (
-                                <TableRow key={ child.id }>
-                                    <TableRowColumn>
-                                        <Avatar src={url} />
-                                    </TableRowColumn>
-                                    <TableRowColumn>
-                                        { child.name }
-                                    </TableRowColumn>
-                                </TableRow>
-                            );
-                        }
-                    )}
-                    </TableBody>
-                </Table>
+                { //onRowSelection={this.handlePair.bind(this, children)}
+                    children.length > 0 &&
+                <TableContainer component={Paper}>
+                    <Table>
+                        <TableHead displaySelectAll={false}>
+                            <TableRow key="HeaderRow">
+                                <TableCell>Select a Child for this device</TableCell>
+                            </TableRow>
+                        </TableHead>
+                        <TableBody>
+                            { children.map((child) => {
+                                    let url = allow2AvatarURL(null, child);
+                                    return (
+                                        <TableRow key={ child.id }>
+                                            <TableCell>
+                                                <Avatar src={url} />
+                                            </TableCell>
+                                            <TableCell>
+                                                { child.name }
+                                            </TableCell>
+                                        </TableRow>
+                                    );
+                                }
+                            )}
+                        </TableBody>
+                    </Table>
+                </TableContainer>
                 }
             </div>
         );
     }
 }
 // selectable={!this.state.pairing && (this.state.token != null)}
+// { imageName &&
+// <div align="center">
+//     <img width="200" height="200" src={ 'assets/img/' + imageName + '.png' } />
+// </div>
+// }
+// { (this.state.pairing || !this.state.device) && progress}
+// { children.length < 1 &&
+// <p>
+//     Could not see any children in your account. Please set up some children and try again.
+//     <a href="https://app.allow.com/children">Go to Allow2</a>
+// </p>
+// }
+// { children.length > 0 &&
+// <Table onRowSelection={this.handlePair.bind(this, children)}>
+//     <TableHeader displaySelectAll={false}>
+//         <TableRow>
+//             <TableHeaderColumn>Select a Child for this device</TableHeaderColumn>
+//         </TableRow>
+//     </TableHeader>
+//     <TableBody>
+//         { children.map((child) => {
+//                 let url = allow2AvatarURL(null, child);
+//                 return (
+//                     <TableRow key={ child.id }>
+//                         <TableRowColumn>
+//                             <Avatar src={url} />
+//                         </TableRowColumn>
+//                         <TableRowColumn>
+//                             { child.name }
+//                         </TableRowColumn>
+//                     </TableRow>
+//                 );
+//             }
+//         )}
+//     </TableBody>
+// </Table>
+// }

@@ -17,7 +17,6 @@ import PlugIns from './PlugIns';
 import PlugInTab from '../containers/PluginTab';
 import modal from 'electron-modal';
 import path from 'path';
-import url from 'url';
 import { remote, ipcRenderer as ipc } from 'electron';
 import {
     Table,

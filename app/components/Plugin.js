@@ -4,6 +4,7 @@ import { allow2AvatarURL } from '../util';
 import Dialogs from 'dialogs';
 import path from 'path';
 import { remote, ipcRenderer } from 'electron';
+import url from 'url';
 var Module = require("module");
 
 const dir = path.join(remote.app.getPath('appData'), 'allow2automate', 'plugins');
@@ -66,6 +67,34 @@ export default class Login extends Component {
         return this.plugin !== undefined && this.plugin.TabContent !== undefined
     }
 
+    assign(device, token) {
+        //let onPaired = this.props.onPaired;
+        //function openModal() {
+        let win = new remote.BrowserWindow({
+            parent: remote.getCurrentWindow(),
+            modal: true,
+            width: 500,
+            height: 600,
+            minWidth: 500,
+            maxWidth: 500,
+            minHeight: 600,
+            maxHeight: 800
+        });
+
+        //win.loadURL(theUrl);
+        win.loadURL(url.format({
+            pathname: path.join(__dirname, '../pairModal.html'),
+            protocol: 'file:',
+            slashes: true
+        }));
+
+        win.webContents.on('did-finish-load', () => {
+            win.webContents.send('device', { device: device, token: token });
+        });
+
+        win.webContents.openDevTools();
+    }
+
     render() {
         // console.log('tab props 1', this.props);
         // console.log(JSON.parse(JSON.stringify(this.plugin)));
@@ -105,6 +134,7 @@ export default class Login extends Component {
             onUpdateConfiguration(pluginName, newConfiguration);
         };
 
+
         return (
             <TabContent
                 plugin={this.props.plugin}
@@ -115,6 +145,7 @@ export default class Login extends Component {
                 remote={remote}
                 ipc={ipc}
                 configurationUpdate={configurationUpdate}
+                assign={this.assign.bind(this)}
                 allow2={{
                     avatarURL: allow2AvatarURL
                 }}
