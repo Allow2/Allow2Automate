@@ -4,6 +4,9 @@ Allow2Automate
 This is a userspace app for Mac OSX, Linux and Windows that can be deployed to all relevant
 App Stores for these platforms.
 
+[https://apps.apple.com/au/app/allow2automate/id1369546793?mt=12](Download for Mac)
+
+
 The intention is:
 1. Provide a base, self contained Electron User Space App that:
     * Provides a fully self-contained app to run in user space with no elevated privileges.
