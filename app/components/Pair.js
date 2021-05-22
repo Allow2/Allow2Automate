@@ -7,10 +7,11 @@ import {
     AppBar,
     Toolbar,
     IconButton,
-    CircularProgress,
+//    Typography,
     LinearProgress,
     Button,
     Avatar } from '@material-ui/core';
+//mport { makeStyles } from '@material-ui/core/styles';
 import {
     Paper,
     Table,
@@ -33,6 +34,18 @@ var deviceImages = {
     Smart: 'wemo_smart_switch',
     Bulb: 'wemo_bulb'
 };
+
+// const useStyles = makeStyles((theme) => ({
+//     root: {
+//         flexGrow: 1,
+//     },
+//     closeButton: {
+//         marginRight: theme.spacing(2),
+//     },
+//     title: {
+//         flexGrow: 1,
+//     },
+// }));
 
 
 export default class Pair extends Component {
@@ -151,6 +164,7 @@ export default class Pair extends Component {
     };
 
     render() {
+        // const classes = useStyles();
         let user = this.props.user;
         let children = sortedVisibleChildrenSelector(this.props);
         let title = this.state.device ? this.state.device.device.friendlyName : 'Loading...';
@@ -165,15 +179,15 @@ export default class Pair extends Component {
                 <AppBar position="static">
                     <Toolbar>
                         <IconButton
-                            color="primary"
-                            aria-label="install plugin"
-                            component="span"
+                            edge="start"
+                            aria-label="close"
+                            color="inherit"
                             disabled={this.state.pairing}
                             onClick={this.handleCancel} >
                             <Close />
                         </IconButton>
                         { title }
-                        <Button disabled={this.state.pairing} onClick={this.handleCancel} label="Cancel">Cancel</Button>
+                        <Button color="inherit" disabled={this.state.pairing} onClick={this.handleCancel} label="Cancel">Cancel</Button>
                     </Toolbar>
                 </AppBar>
                 { imageName &&
@@ -188,11 +202,12 @@ export default class Pair extends Component {
                     <a href="https://app.allow.com/children">Go to Allow2</a>
                 </p>
                 }
-                { //onRowSelection={this.handlePair.bind(this, children)}
+                {   //<Table onRowSelection={this.handlePair.bind(this, children)}>
+                    //<TableHead displaySelectAll={false}>
                     children.length > 0 &&
                 <TableContainer component={Paper}>
                     <Table>
-                        <TableHead displaySelectAll={false}>
+                        <TableHead>
                             <TableRow key="HeaderRow">
                                 <TableCell>Select a Child for this device</TableCell>
                             </TableRow>
@@ -221,40 +236,3 @@ export default class Pair extends Component {
     }
 }
 // selectable={!this.state.pairing && (this.state.token != null)}
-// { imageName &&
-// <div align="center">
-//     <img width="200" height="200" src={ 'assets/img/' + imageName + '.png' } />
-// </div>
-// }
-// { (this.state.pairing || !this.state.device) && progress}
-// { children.length < 1 &&
-// <p>
-//     Could not see any children in your account. Please set up some children and try again.
-//     <a href="https://app.allow.com/children">Go to Allow2</a>
-// </p>
-// }
-// { children.length > 0 &&
-// <Table onRowSelection={this.handlePair.bind(this, children)}>
-//     <TableHeader displaySelectAll={false}>
-//         <TableRow>
-//             <TableHeaderColumn>Select a Child for this device</TableHeaderColumn>
-//         </TableRow>
-//     </TableHeader>
-//     <TableBody>
-//         { children.map((child) => {
-//                 let url = allow2AvatarURL(null, child);
-//                 return (
-//                     <TableRow key={ child.id }>
-//                         <TableRowColumn>
-//                             <Avatar src={url} />
-//                         </TableRowColumn>
-//                         <TableRowColumn>
-//                             { child.name }
-//                         </TableRowColumn>
-//                     </TableRow>
-//                 );
-//             }
-//         )}
-//     </TableBody>
-// </Table>
-// }
