@@ -11,7 +11,7 @@
   "license": "ISC",
   "dependencies": {
     "allow2": "^0.8.2",
-    "async": "^2.1.4",
+    "async": "^3.2.2",
     "co": "^4.6.0",
     "co-prompt": "^1.0.0",
     "commander": "^2.9.0",
