@@ -20,10 +20,13 @@ export default handleActions({
 
     [actions.setPluginEnabled]: (state, action) => {
         //console.log(action, state);
-        var newState = Object.assign({}, state);
-        var plugin = newState[action.payload.pluginName];
-        plugin.disabled = !action.payload.isChecked;
-        newState[action.payload.pluginName] = plugin;
+        const plugin = Object.assign({}, state[action.payload.pluginName], {
+            disabled : !action.payload.isChecked
+        });
+        const newState = Object.assign({}, state, {
+            [action.payload.pluginName] : plugin
+        });
+        console.log(action.payload.pluginName, plugin, newState);
         return newState;
     }
 

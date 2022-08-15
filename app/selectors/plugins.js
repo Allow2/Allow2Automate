@@ -13,7 +13,8 @@ const pluginSelector = createSelector(
                 version: plugin.version,
                 packageJson: plugin,
                 configuration: configurations[plugin.name] || {},
-                available: available
+                available: available,
+                disabled: plugin.disabled
             };
 
             memo[key] = newPlugin;

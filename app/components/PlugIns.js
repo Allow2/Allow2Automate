@@ -210,7 +210,7 @@ export default class PlugIns extends Component {
                         </TableHead>
                         <TableBody>
                             { plugins.map(function (plugin) {
-                                    //console.log(plugin);
+                                    console.log(plugin);
                                     let version = (plugin.version) || "";
 
                                     return (

@@ -14,7 +14,7 @@ class Checkbox extends Component {
         return (
             <Switch
                 value={label}
-                checked={isChecked == true}
+                checked={isChecked === true}
                 onChange={this.toggleCheckboxChange}
                 disabled={isDisabled}
                 />
