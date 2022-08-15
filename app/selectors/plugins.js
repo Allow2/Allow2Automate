@@ -28,7 +28,7 @@ const pluginSelector = createSelector(
 const activePluginSelector = createSelector(
     [pluginSelector],
     (pluginsWithConfigurations) => {
-        console.log('2', pluginsWithConfigurations);
+        //console.log('2', pluginsWithConfigurations);
         if (!pluginsWithConfigurations) { return {}; }
         return Object.entries(pluginsWithConfigurations).reduce((memo, [key, plugin]) => {
             if (plugin.disabled || plugin.missing) {

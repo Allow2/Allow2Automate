@@ -26,7 +26,7 @@ export default handleActions({
         const newState = Object.assign({}, state, {
             [action.payload.pluginName] : plugin
         });
-        console.log(action.payload.pluginName, plugin, newState);
+        //console.log(action.payload.pluginName, plugin, newState);
         return newState;
     }
 
