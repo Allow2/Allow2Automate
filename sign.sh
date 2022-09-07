@@ -7,7 +7,8 @@ APP_PATH="./dist/mac/Allow2Automate.app"
 # The path to the location you want to put the signed package.
 RESULT_PATH="./dist/$APP.pkg"
 # The name of certificates you requested.
-APP_KEY="3rd Party Mac Developer Application: Allow2 Pty Ltd (L44G2T7U48)"
+#APP_KEY="3rd Party Mac Developer Application: Allow2 Pty Ltd (L44G2T7U48)"
+APP_KEY="Apple Distribution: Allow2 Pty Ltd (L44G2T7U48)"
 INSTALLER_KEY="3rd Party Mac Developer Installer: Allow2 Pty Ltd (L44G2T7U48)"
 # The path of your plist files.
 CHILD_PLIST="./child.plist"

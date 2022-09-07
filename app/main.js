@@ -257,7 +257,7 @@ app.on('ready', async () => {
 
     if (process.platform === 'darwin') {
         template.unshift({
-            label: app.getName(),
+            label: 'Allow2Automate', //app.getName(),
             submenu: [
                 {role: 'about'},
                 {type: 'separator'},
@@ -266,6 +266,8 @@ app.on('ready', async () => {
                     accelerator: 'CmdOrCtrl+,',
                     click () { showMainWindow() }
                 },
+                {type: 'separator'},
+                {role: 'services'},
                 {type: 'separator'},
                 {role: 'hide'},
                 {role: 'hideothers'},
