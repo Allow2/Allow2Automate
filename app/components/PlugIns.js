@@ -12,7 +12,7 @@ import Checkbox from './Checkbox';
 //import modal from 'electron-modal';
 import path from 'path';
 import url from 'url';
-import { remote, ipcRenderer as ipc } from 'electron';
+import { remote, ipcRenderer } from 'electron';
 import {
     TableContainer,
     Paper,
@@ -53,7 +53,7 @@ export default class PlugIns extends Component {
 
     installPlugin = (pluginName) => {
         const onPluginInstalled = this.props.onPluginInstalled.bind(this);
-        ipc.on('epm-installed-' + pluginName, (event, err, pluginPath) => {
+	    ipcRenderer.on('epm-installed-' + pluginName, (event, err, pluginPath) => {
             //console.log(event, err, pluginPath);
             if (err) {
                 dialogs.alert("Unable to find " + pluginName + ': ' + JSON.stringify(err));
@@ -79,7 +79,7 @@ export default class PlugIns extends Component {
                 }
             });
         });
-        ipc.send('epm-install', dir, pluginName, 'latest');
+	    ipcRenderer.send('epm-install', dir, pluginName, 'latest');
     };
 
     addPlugin = () => {
@@ -139,7 +139,7 @@ export default class PlugIns extends Component {
             console.log('unload', pluginName);
             epm.unload(dir, pluginName, remote.require);
             // then delete it.
-            ipc.on('epm-uninstalled-' + pluginName, (event, err) => {
+	        ipcRenderer.on('epm-uninstalled-' + pluginName, (event, err) => {
                 console.log('uninstalled', event, err);
                 if (err) {
                     dialogs.alert(err.toString());
@@ -148,7 +148,7 @@ export default class PlugIns extends Component {
                 onPluginRemoved({ pluginName : pluginName, removeConfiguration : removeConfiguration });
             });
             console.log('uninstalling', pluginName);
-            ipc.send('epm-uninstall', dir, pluginName);
+	        ipcRenderer.send('epm-uninstall', dir, pluginName);
         };
 
         if (plugin.missing) {

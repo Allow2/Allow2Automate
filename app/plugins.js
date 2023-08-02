@@ -1,10 +1,10 @@
 import path from 'path';
 import fs from 'fs';
-var Module = require("module");
 import {
     pluginSelector,
     sortedPluginSelector
 } from './selectors';
+var Module = require("module");
 
 module.exports = function(app, store, actions) {
 
@@ -239,14 +239,24 @@ module.exports = function(app, store, actions) {
                 packageJson.shortName = packageJson.shortName || pluginName;
                 //packageJson.fullPath = fullpath;
                 memo[pluginName] = packageJson;
-                console.log('loading', pluginName);
+                console.log('loading', pluginName, app.appDataPath);
                 var loadedPlugin = app.epm.load(app.appDataPath, pluginName);
                 //console.log(loadedPlugin.plugin);
 
-                const ipc = {
-                    send: (channel, ...args) => { console.log('main plugin send', pluginName + '.' + channel); app.ipc.send( pluginName + '.' + channel, ...args)},
-                    on: (channel, listener) => { console.log('main plugin ipc on', pluginName + '.' + channel); app.ipc.on( pluginName + '.' + channel, listener)}
+
+                const ipcRestricted = {
+                    send: (channel, ...args) => { app.ipcSend( `${pluginName}.${channel}`, ...args)},
+                    on: (channel, listener) => { app.ipcOn( `${pluginName}.${channel}`, listener)},
+	                invoke: async (channel, ...args) => { return await app.ipcInvoke( `${pluginName}.${channel}`, ...args)},
+	                handle: (channel, handler) => { app.ipcHandle( `${pluginName}.${channel}`, handler)}
                 };
+
+                // console.log(1, app.ipcSend);
+	            // //app.ipcSend( 'bob', 'fred');
+	            // app.ipcOn( 'bob', ()=>{});
+	            // // app.ipcHandle( 'fred', ()=>{});
+	            // // app.ipcInvoke( 'fred', ()=>{});
+	            // console.log(2);
 
                 const configurationUpdate = function(newConfiguration) {
                     console.log("updateConfiguration: ", pluginName, " = ", newConfiguration);
@@ -256,7 +266,7 @@ module.exports = function(app, store, actions) {
 
                 const installedPlugin = loadedPlugin.plugin({
                     isMain: true,
-                    ipc: ipc,
+	                ipcMain: ipcRestricted,
                     configurationUpdate: configurationUpdate
                 });
 

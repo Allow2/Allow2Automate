@@ -1,6 +1,6 @@
 import path from 'path';
 import url from 'url';
-import {app, crashReporter, BrowserWindow, Menu, ipcMain as ipc} from 'electron';
+import {app, crashReporter, BrowserWindow, Menu, ipcMain} from 'electron';
 import allActions from './actions';
 const modal = require('electron-modal');
 import configureStore from './mainStore';
@@ -27,11 +27,31 @@ const store = configureStore();
 const actions = bindActionCreators(allActions, store.dispatch);
 
 app.appDataPath = path.join(app.getPath('appData'), 'allow2automate');
-app.ipc = ipc;
-app.epm.manager(ipc);
-// epm.install(dir, 'is-number', 'latest', (err, pluginPath) => {
-//     console.log('is-number: ', err, pluginPath);
-// });
+
+//app.ipcMain = ipcMain;
+app.epm.manager(ipcMain);
+
+// IPC masking
+app.ipcSend = (channel, ...args) => {
+	console.log('plugin ipcMain send', channel, ipcMain.send);
+	ipcMain.send( channel, ...args)
+};
+
+app.ipcOn = (channel, listener) => {
+	console.log('plugin ipcMain on', channel);
+	ipcMain.on( channel, listener)
+};
+
+app.ipcInvoke = async (channel, ...args) => {
+	console.log('plugin ipcMain invoke', channel);
+	return await ipcMain.invoke( channel, ...args)
+};
+
+app.ipcHandle = (channel, handler) => {
+	console.log('plugin ipcMain handle', channel);
+	ipcMain.handle( channel, handler)
+};
+
 
 actions.deviceInit();
 actions.timezoneGuess(moment.tz.guess());
@@ -135,9 +155,17 @@ function testData() {
 }
 //testData();
 
-ipc.on('saveState', function(event, params) {
+console.log('setup 1', ipcMain.on, ipcMain.send, ipcMain.invoke, ipcMain.handle);
+ipcMain.on('saveState', function(event, params) {
     store.save();
 });
+// ipcMain.handle('handleTest', function(event, params) {
+// 	return 1;
+// });
+// ipcMain.send('sendTest', "bob");
+// ipcMain.invoke('invokeTest', "bob");
+
+console.log('setup 2');
 
 const installExtensions = async () => {
     const installer = require('electron-devtools-installer');
@@ -459,9 +487,4 @@ app.on('ready', async () => {
     pollUsage();
     usageTimer = setInterval(pollUsage, 10000);
 
-    //
-    // * test loading a library
-    //
-    //epm.load(dir, 'allow2automate-battle.net');
-    //var plugin = require('allow2automate-battle.net')({ allow2: "testing" });
 });

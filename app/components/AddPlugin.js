@@ -20,7 +20,7 @@ import {
     TableRowColumn,
     } from '@material-ui/core';
 
-import { remote, ipcRenderer as ipc } from 'electron';
+import { remote, ipcRenderer } from 'electron';
 
 var dialogs = Dialogs({});
 
@@ -43,8 +43,8 @@ export default class Pair extends Component {
 
     componentDidMount = () => {
 
-        const ipc = require('electron').ipcRenderer;
-        ipc.on('device', (event, message) => {
+        // const ipcRenderer = require('electron').ipcRenderer;
+	    ipcRenderer.on('device', (event, message) => {
             console.log(message);
             this.setState(message);
         });
@@ -124,7 +124,7 @@ export default class Pair extends Component {
                 onPaired({ [device.UDN] : data });
                 var window = remote.getCurrentWindow();
                 window.close();
-                ipc.send('setBinaryState');
+	            ipcRenderer.send('setBinaryState'); // todo: what is this doing?
             }.bind(this)
         );
     };

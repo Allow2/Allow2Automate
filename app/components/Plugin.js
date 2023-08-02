@@ -95,7 +95,28 @@ export default class Login extends Component {
         win.webContents.openDevTools();
     }
 
-    render() {
+    // IPC masking
+	ipcSend(channel, ...args) {
+		console.log('plugin ipcRenderer send', channel, ipcRenderer.send);
+		ipcRenderer.send( channel, ...args)
+	}
+
+	ipcOn(channel, listener) {
+		console.log('plugin ipcRenderer on', channel);
+		ipcRenderer.on( channel, listener)
+	}
+
+	async ipcInvoke(channel, ...args) {
+		console.log('plugin ipcRenderer invoke', channel);
+		return await ipcRenderer.invoke( channel, ...args)
+	}
+
+	ipcHandle(channel, handler) {
+		console.log('plugin ipcRenderer handle', channel);
+		ipcRenderer.handle( channel, handler)
+	}
+
+	render() {
         // console.log('tab props 1', this.props);
         // console.log(JSON.parse(JSON.stringify(this.plugin)));
         // console.log(this.plugin.test);
@@ -123,9 +144,11 @@ export default class Login extends Component {
         //   <key> : <data1>
         // }
 
-        const ipc = {
-            send: (channel, ...args) => { console.log('plugin send to', plugin.name + '.' + channel); ipcRenderer.send( plugin.name + '.' + channel, ...args)},
-            on: (channel, listener) => { console.log('plugin ipc on', plugin.name + '.' + channel); ipcRenderer.on( plugin.name + '.' + channel, listener)}
+        const ipcRestricted = {
+            send: (channel, ...args) => { ipcSend(`${plugin.name}.${channel}`, ...args) },
+            on: (channel, listener) => { ipcOn(`${plugin.name}.${channel}`, listener) },
+	        invoke: (channel, ...args) => { ipcInvoke(`${plugin.name}.${channel}`, ...args) },
+	        handle: (channel, handler) => { ipcHandle(`${plugin.name}.${channel}`, handler) }
         };
 
         const pluginName = this.props.plugin.name;
@@ -143,7 +166,7 @@ export default class Login extends Component {
                 user={this.props.user}
                 pluginPath={this.state.pluginPath}
                 remote={remote}
-                ipc={ipc}
+                ipcRenderer={ipcRestricted}
                 configurationUpdate={configurationUpdate}
                 assign={this.assign.bind(this)}
                 allow2={{

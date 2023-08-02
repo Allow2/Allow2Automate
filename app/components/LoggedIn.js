@@ -17,7 +17,7 @@ import PlugIns from './PlugIns';
 import PlugInTab from '../containers/PluginTab';
 import modal from 'electron-modal';
 import path from 'path';
-import { remote, ipcRenderer as ipc } from 'electron';
+import { remote, ipcRenderer } from 'electron';
 import {
     Table,
     TableBody,
@@ -64,7 +64,7 @@ export default class Plugins extends Component {
     messageDevices = {};
 
     componentDidMount = () => {
-        ipc.on('loggedOut', function(event) {
+	    ipcRenderer.on('loggedOut', function(event) {
             this.props.dispatch(push('/'));
         }.bind(this));
     };
