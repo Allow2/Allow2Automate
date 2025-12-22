@@ -15,7 +15,6 @@ import Dialogs from 'dialogs';
 import Checkbox from './Checkbox';
 import PlugIns from './PlugIns';
 import PlugInTab from '../containers/PluginTab';
-import modal from 'electron-modal';
 import path from 'path';
 import { remote, ipcRenderer } from 'electron';
 import {

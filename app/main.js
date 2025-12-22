@@ -1,8 +1,7 @@
 import path from 'path';
 import url from 'url';
-import {app, crashReporter, BrowserWindow, Menu, ipcMain} from 'electron';
+import { app, crashReporter, BrowserWindow, Menu, ipcMain } from 'electron';
 import allActions from './actions';
-const modal = require('electron-modal');
 import configureStore from './mainStore';
 import { allow2Request } from './util';
 import { bindActionCreators } from 'redux';
@@ -52,6 +51,7 @@ app.ipcHandle = (channel, handler) => {
 	ipcMain.handle( channel, handler)
 };
 
+ipcMain.on('getPath', () => app.getPath("appData"));
 
 actions.deviceInit();
 actions.timezoneGuess(moment.tz.guess());
@@ -155,7 +155,7 @@ function testData() {
 }
 //testData();
 
-console.log('setup 1', ipcMain.on, ipcMain.send, ipcMain.invoke, ipcMain.handle);
+//console.log('setup 1', ipcMain.on, ipcMain.send, ipcMain.invoke, ipcMain.handle);
 ipcMain.on('saveState', function(event, params) {
     store.save();
 });
@@ -165,7 +165,7 @@ ipcMain.on('saveState', function(event, params) {
 // ipcMain.send('sendTest', "bob");
 // ipcMain.invoke('invokeTest', "bob");
 
-console.log('setup 2');
+//console.log('setup 2');
 
 const installExtensions = async () => {
     const installer = require('electron-devtools-installer');
@@ -272,10 +272,6 @@ function windowStateKeeper(windowName) {
 
 app.on('ready', async () => {
 
-    // Run this on the ready event to setup everything
-    // needed on the main process.
-    modal.setup();
-
     var pollTimer = null;
     var usageTimer = null;
 
@@ -325,6 +321,8 @@ app.on('ready', async () => {
             title: 'Allow2Automate',
             icon: path.join(__dirname, 'assets/icons/png/64x64.png'),
             webPreferences: {
+	            nodeIntegration: true,
+	            contextIsolation: false,
                 enableRemoteModule: true
             }
         });

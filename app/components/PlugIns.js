@@ -9,10 +9,9 @@ import { allow2Request, allow2AvatarURL } from '../util';
 import Dialogs from 'dialogs';
 import Checkbox from './Checkbox';
 //import deviceActions from '../actions/plugin';
-//import modal from 'electron-modal';
 import path from 'path';
 import url from 'url';
-import { remote, ipcRenderer } from 'electron';
+import { ipcRenderer, BrowserWindow } from 'electron';
 import {
     TableContainer,
     Paper,
@@ -25,7 +24,6 @@ import {
 import { Delete, CloudDownload } from '@material-ui/icons';
 //import {Tabs, Tab} from '@material-ui/core';
 const epm = require('electron-plugin-manager');
-const dir = path.join(remote.app.getPath('appData'), 'allow2automate');
 const fs = require('fs');
 
 // const apiUrl = 'https://api.allow2.com/';
@@ -43,11 +41,14 @@ export default class PlugIns extends Component {
     constructor(...args) {
         super(...args);
 
+	    const appPath = ipcRenderer.sendSync('getPath');
+
         this.state = {
             device: null,
             token: null,
             pairing: false,
-            pluginName: ''
+            pluginName: '',
+	        dir: path.join(appPath, 'allow2automate')
         };
     }
 
@@ -59,7 +60,7 @@ export default class PlugIns extends Component {
                 dialogs.alert("Unable to find " + pluginName + ': ' + JSON.stringify(err));
                 return;
             }
-            //epm.load(dir, pluginName, remote.require);
+            //epm.load(this.state.dir, pluginName, remote.require);
             // In renderer process
             fs.readFile(path.join(pluginPath, 'package.json'), 'utf8', (err, jsonString) => {
                 if (err) {
@@ -79,7 +80,7 @@ export default class PlugIns extends Component {
                 }
             });
         });
-	    ipcRenderer.send('epm-install', dir, pluginName, 'latest');
+	    ipcRenderer.send('epm-install', this.state.dir, pluginName, 'latest');
     };
 
     addPlugin = () => {
@@ -95,15 +96,18 @@ export default class PlugIns extends Component {
 
         //let onPaired = this.props.onPaired;
         //function openModal() {
-        let win = new remote.BrowserWindow({
-            parent: remote.getCurrentWindow(),
+        let win = new BrowserWindow({
+            parent: BrowserWindow.getCurrentWindow(),
             modal: true,
             width: 500,
             height: 600,
             minWidth: 500,
             maxWidth: 500,
             minHeight: 600,
-            maxHeight: 800
+            maxHeight: 800,
+	        webPreferences: {
+		        enableRemoteModule: true
+	        }
         });
 
 
@@ -137,7 +141,7 @@ export default class PlugIns extends Component {
             // need to decommission if the plugin is operational
             // then unload it?
             console.log('unload', pluginName);
-            epm.unload(dir, pluginName, remote.require);
+            epm.unload(this.state.dir, pluginName, remote.require);
             // then delete it.
 	        ipcRenderer.on('epm-uninstalled-' + pluginName, (event, err) => {
                 console.log('uninstalled', event, err);
@@ -148,7 +152,7 @@ export default class PlugIns extends Component {
                 onPluginRemoved({ pluginName : pluginName, removeConfiguration : removeConfiguration });
             });
             console.log('uninstalling', pluginName);
-	        ipcRenderer.send('epm-uninstall', dir, pluginName);
+	        ipcRenderer.send('epm-uninstall', this.state.dir, pluginName);
         };
 
         if (plugin.missing) {

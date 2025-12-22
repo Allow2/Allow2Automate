@@ -1,24 +1,24 @@
-import { createStore, applyMiddleware, combineReducers, compose } from 'redux';
+import { legacy_createStore as createStore, applyMiddleware, combineReducers, compose } from 'redux';
 import { replace } from 'react-router-redux';
 import thunk from 'redux-thunk';
-import {
-    forwardToRenderer,
-    triggerAlias,               // nb: https://www.npmjs.com/package/electron-redux
-    replayActionMain,
-    } from 'electron-redux';
+import { stateSyncEnhancer } from 'electron-redux/main'
+// import {
+//     forwardToRenderer,
+//     triggerAlias,               // nb: https://www.npmjs.com/package/electron-redux
+//     replayActionMain,
+//     } from 'electron-redux';
 import reducers from './reducers';
-
-var LocalStorage = require('node-localstorage').LocalStorage;
+import { LocalStorage } from "node-localstorage";
 
 const localStorageKey = 'Allow2Automate';
 
 export default function configureStore() {
 
-    console.log('parent state init');
+    console.log('parent state init', stateSyncEnhancer, stateSyncEnhancer(), createStore);
 
     const middlewares = [
         thunk,
-        forwardToRenderer // IMPORTANT! This goes last
+	    stateSyncEnhancer() // IMPORTANT! This goes last
     ];
 
     const localStorage = new LocalStorage('./store');
@@ -28,7 +28,7 @@ export default function configureStore() {
     initialState.children = {};
     const store = createStore(rootReducer, initialState, applyMiddleware(...middlewares));
 
-    replayActionMain(store);
+    //replayActionMain(store);
 
     store.save = function() {
         //const stateForPersistence = rootReducer(store, { type: PERSISTING });

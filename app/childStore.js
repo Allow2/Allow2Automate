@@ -1,11 +1,12 @@
-import { createStore, applyMiddleware, combineReducers, compose } from 'redux';
+import { legacy_createStore as createStore, applyMiddleware, combineReducers, compose } from 'redux';
 import { routerMiddleware, routerReducer as routing, push, replace } from 'react-router-redux';
 import thunk from 'redux-thunk';
-import {
-    forwardToMain,
-    replayActionRenderer,               // nb: https://www.npmjs.com/package/electron-redux
-    getInitialStateRenderer
-    } from 'electron-redux';
+import { stateSyncEnhancer } from 'electron-redux/renderer'
+// import {
+//     forwardToMain,
+//     replayActionRenderer,               // nb: https://www.npmjs.com/package/electron-redux
+//     getInitialStateRenderer
+//     } from 'electron-redux';
 
 import reducers from './reducers';
 
@@ -20,7 +21,7 @@ export default function configureStore(routerHistory) {
     };
 
     const middlewares = [
-        forwardToMain, // IMPORTANT! This goes first
+	    stateSyncEnhancer(), // IMPORTANT! This goes first
         thunk
     ];
 

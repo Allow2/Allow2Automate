@@ -3,11 +3,10 @@ import PropTypes from 'prop-types';
 import { allow2AvatarURL } from '../util';
 import Dialogs from 'dialogs';
 import path from 'path';
-import { remote, ipcRenderer } from 'electron';
+import { ipcRenderer, BrowserWindow } from 'electron';
 import url from 'url';
-var Module = require("module");
+import Module from 'module';
 
-const dir = path.join(remote.app.getPath('appData'), 'allow2automate', 'plugins');
 
 export default class Login extends Component {
     // static propTypes = {
@@ -31,7 +30,10 @@ export default class Login extends Component {
             };
         })(Module.wrap);
 
-        const pluginPath = path.join(dir, this.props.plugin.name);
+        const appPath = ipcRenderer.sendSync('getPath');
+	    const dir = path.join(appPath, 'allow2automate', 'plugins');
+
+	    const pluginPath = path.join(dir, this.props.plugin.name);
         this.plugin = require(pluginPath);
         console.log('gui', this.props.plugin.name, this.plugin);
         // if (plugin.default) {
@@ -70,15 +72,18 @@ export default class Login extends Component {
     assign(device, token) {
         //let onPaired = this.props.onPaired;
         //function openModal() {
-        let win = new remote.BrowserWindow({
-            parent: remote.getCurrentWindow(),
+        let win = new BrowserWindow({
+            parent: BrowserWindow.getCurrentWindow(),
             modal: true,
             width: 500,
             height: 600,
             minWidth: 500,
             maxWidth: 500,
             minHeight: 600,
-            maxHeight: 800
+            maxHeight: 800,
+	        webPreferences: {
+		        enableRemoteModule: true
+	        }
         });
 
         //win.loadURL(theUrl);
@@ -165,7 +170,7 @@ export default class Login extends Component {
                 children={this.props.children}
                 user={this.props.user}
                 pluginPath={this.state.pluginPath}
-                remote={remote}
+                // remote={remote}
                 ipcRenderer={ipcRestricted}
                 configurationUpdate={configurationUpdate}
                 assign={this.assign.bind(this)}
