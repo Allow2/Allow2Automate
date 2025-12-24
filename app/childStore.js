@@ -2,11 +2,6 @@ import { legacy_createStore as createStore, applyMiddleware, combineReducers, co
 import { routerMiddleware, routerReducer as routing, push, replace } from 'react-router-redux';
 import thunk from 'redux-thunk';
 import { stateSyncEnhancer } from 'electron-redux/renderer'
-// import {
-//     forwardToMain,
-//     replayActionRenderer,               // nb: https://www.npmjs.com/package/electron-redux
-//     getInitialStateRenderer
-//     } from 'electron-redux';
 
 import reducers from './reducers';
 
@@ -21,7 +16,6 @@ export default function configureStore(routerHistory) {
     };
 
     const middlewares = [
-	    stateSyncEnhancer(), // IMPORTANT! This goes first
         thunk
     ];
 
@@ -37,15 +31,45 @@ export default function configureStore(routerHistory) {
         return compose;
     })();
 
-    const rootReducer = combineReducers(reducers);
-    const initialState = getInitialStateRenderer();
+    const rootReducer = combineReducers({
+        ...reducers,
+        routing
+    });
+    // electron-redux v2 handles initial state automatically via IPC
+    const initialState = {};
 
-    const store = createStore(rootReducer, initialState, composeEnhancers(applyMiddleware(...middlewares)));
+    const enhancers = composeEnhancers(
+        applyMiddleware(...middlewares),
+        stateSyncEnhancer()
+    );
 
-    if (initialState.user && initialState.user.user && initialState.user.user.id) {
-        store.dispatch(replace('/loggedin'));
-    }
-    replayActionRenderer(store);
+    const store = createStore(rootReducer, initialState, enhancers);
+
+    // Subscribe to store changes to detect login
+    let lastLoginState = false;
+    store.subscribe(() => {
+        const state = store.getState();
+        const isLoggedIn = !!(state.user && state.user.user && state.user.user.id);
+
+        // Only dispatch if login state changed from false to true
+        if (isLoggedIn && !lastLoginState) {
+            console.log('Login detected, redirecting to /loggedin');
+            console.log('Current routing state:', state.routing);
+
+            // Use both Redux action and direct history for compatibility
+            setTimeout(() => {
+                console.log('Dispatching Redux push action');
+                store.dispatch(push('/loggedin'));
+
+                // Also update history directly as fallback
+                if (routerHistory) {
+                    console.log('Also pushing to history directly');
+                    routerHistory.push('/loggedin');
+                }
+            }, 100);
+        }
+        lastLoginState = isLoggedIn;
+    });
 
     //console.log('client state:', store.getState());
 

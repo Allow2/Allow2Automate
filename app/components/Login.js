@@ -9,7 +9,7 @@ import {
     Avatar,
     AppBar
 } from '@material-ui/core';
-import { SocialPerson } from '@material-ui/icons';
+import Person from '@material-ui/icons/Person';
 
 var dialogs = Dialogs({});
 
@@ -23,6 +23,9 @@ export default class Login extends Component {
         email: '',
         password: ''
     };
+
+    emailRef = React.createRef();
+    passwordRef = React.createRef();
 
     handleLogin = () => {
         allow2Login({
@@ -48,26 +51,86 @@ export default class Login extends Component {
         });
     };
 
+    handleKeyPress = (e, currentField) => {
+        if (e.key === 'Enter') {
+            const { email, password } = this.state;
+            const hasEmail = email.trim().length > 0;
+            const hasPassword = password.trim().length > 0;
+
+            // Both fields have values - attempt login
+            if (hasEmail && hasPassword) {
+                this.handleLogin();
+                return;
+            }
+
+            // Handle field switching logic
+            if (currentField === 'email') {
+                if (!hasEmail) {
+                    // On empty email field - stay focused
+                    return;
+                }
+                // Email has value but password is empty - move to password
+                if (!hasPassword && this.passwordRef.current) {
+                    this.passwordRef.current.focus();
+                }
+            } else if (currentField === 'password') {
+                if (!hasPassword) {
+                    // On empty password field - stay focused
+                    return;
+                }
+                // Password has value but email is empty - move to email
+                if (!hasEmail && this.emailRef.current) {
+                    this.emailRef.current.focus();
+                }
+            }
+        }
+    };
+
     render() {
         return (
-            <div>
-                <AppBar
-                    title="Login to Allow2"
-                    iconElementLeft={<Avatar icon={<Person />} />}
-                    />
+            <div style={{padding: 20}}>
+                <AppBar position="static" style={{marginBottom: 20}}>
+                    <div style={{padding: 10, display: 'flex', alignItems: 'center'}}>
+                        <Avatar style={{marginRight: 10}}>
+                            <Person />
+                        </Avatar>
+                        <span>Login to Allow2</span>
+                    </div>
+                </AppBar>
                 <TextField
-                    floatingLabelText="Email"
+                    label="Email"
                     onChange={this.handleChange}
+                    onKeyPress={(e) => this.handleKeyPress(e, 'email')}
                     name="email"
-                    value={this.state.email} />
+                    type="email"
+                    fullWidth
+                    margin="normal"
+                    value={this.state.email}
+                    inputRef={this.emailRef}
+                    inputProps={{
+                        autoComplete: 'username email',
+                        autoCapitalize: 'none',
+                        autoCorrect: 'off',
+                        spellCheck: 'false'
+                    }} />
                 <TextField
                     type="password"
-                    hintText=""
-                    floatingLabelText="Password"
+                    label="Password"
                     onChange={this.handleChange}
+                    onKeyPress={(e) => this.handleKeyPress(e, 'password')}
                     name="password"
-                    value={this.state.password} />
-                <Button variant="contained" onClick={this.handleLogin}>
+                    fullWidth
+                    margin="normal"
+                    value={this.state.password}
+                    inputRef={this.passwordRef}
+                    inputProps={{
+                        autoComplete: 'current-password'
+                    }} />
+                <Button
+                    variant="contained"
+                    color="primary"
+                    style={{marginTop: 20}}
+                    onClick={this.handleLogin}>
                     Log In
                 </Button>
             </div>

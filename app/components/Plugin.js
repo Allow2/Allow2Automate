@@ -30,7 +30,7 @@ export default class Login extends Component {
             };
         })(Module.wrap);
 
-        const appPath = ipcRenderer.sendSync('getPath');
+        const appPath = ipcRenderer.sendSync('getPath', 'appData');
 	    const dir = path.join(appPath, 'allow2automate', 'plugins');
 
 	    const pluginPath = path.join(dir, this.props.plugin.name);

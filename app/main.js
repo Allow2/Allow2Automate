@@ -51,7 +51,9 @@ app.ipcHandle = (channel, handler) => {
 	ipcMain.handle( channel, handler)
 };
 
-ipcMain.on('getPath', () => app.getPath("appData"));
+ipcMain.on('getPath', (event, name) => {
+	event.returnValue = app.getPath(name || "appData");
+});
 
 actions.deviceInit();
 actions.timezoneGuess(moment.tz.guess());
@@ -323,7 +325,8 @@ app.on('ready', async () => {
             webPreferences: {
 	            nodeIntegration: true,
 	            contextIsolation: false,
-                enableRemoteModule: true
+                enableRemoteModule: true,
+                preload: path.join(__dirname, 'preload.js')
             }
         });
 

@@ -1,5 +1,5 @@
 import React, { Component } from 'react';
-import { Avatar, TextField, IconButton, Button } from '@material-ui/core';
+import { Avatar, TextField, IconButton, Button, Box, Typography } from '@material-ui/core';
 import {
     sortedPluginSelector,
     activePluginSelector,
@@ -21,7 +21,8 @@ import {
     TableRow,
     TableCell
     } from '@material-ui/core';
-import { Delete, CloudDownload } from '@material-ui/icons';
+import { Delete, CloudDownload, AddCircle } from '@material-ui/icons';
+import MarketplacePage from '../containers/MarketplacePage';
 //import {Tabs, Tab} from '@material-ui/core';
 const epm = require('electron-plugin-manager');
 const fs = require('fs');
@@ -41,16 +42,53 @@ export default class PlugIns extends Component {
     constructor(...args) {
         super(...args);
 
-	    const appPath = ipcRenderer.sendSync('getPath');
+	    const appPath = ipcRenderer.sendSync('getPath', 'appData');
 
         this.state = {
             device: null,
             token: null,
             pairing: false,
             pluginName: '',
-	        dir: path.join(appPath, 'allow2automate')
+	        dir: path.join(appPath, 'allow2automate'),
+            isMarketplaceOpen: false
         };
     }
+
+    componentDidMount() {
+        // Auto-open marketplace if no plugins installed
+        const installedPluginsCount = this.getInstalledPluginsCount();
+        if (installedPluginsCount === 0) {
+            this.setState({ isMarketplaceOpen: true });
+        }
+    }
+
+    componentDidUpdate(prevProps) {
+        // Check if plugins were just installed and close marketplace if needed
+        const prevCount = Object.keys(prevProps.installedPlugins || {}).length;
+        const currentCount = this.getInstalledPluginsCount();
+
+        // If we went from 0 to 1+ plugins, keep marketplace open but enable close button
+        if (prevCount === 0 && currentCount > 0) {
+            // Just a state update to re-render with close button enabled
+            this.forceUpdate();
+        }
+    }
+
+    getInstalledPluginsCount = () => {
+        return Object.keys(this.props.installedPlugins || {}).length;
+    };
+
+    handleOpenMarketplace = () => {
+        this.setState({ isMarketplaceOpen: true });
+    };
+
+    handleCloseMarketplace = () => {
+        const installedPluginsCount = this.getInstalledPluginsCount();
+        // Only allow closing if there are installed plugins
+        if (installedPluginsCount > 0) {
+            this.setState({ isMarketplaceOpen: false });
+        }
+    };
 
     installPlugin = (pluginName) => {
         const onPluginInstalled = this.props.onPluginInstalled.bind(this);
@@ -60,7 +98,7 @@ export default class PlugIns extends Component {
                 dialogs.alert("Unable to find " + pluginName + ': ' + JSON.stringify(err));
                 return;
             }
-            //epm.load(this.state.dir, pluginName, remote.require);
+            //epm.load(this.state.dir, pluginName, require);
             // In renderer process
             fs.readFile(path.join(pluginPath, 'package.json'), 'utf8', (err, jsonString) => {
                 if (err) {
@@ -137,11 +175,11 @@ export default class PlugIns extends Component {
             return configuration.plugin === pluginName;
         });
 
-        const actualDelete = function(removeConfiguration) {
+        const actualDelete = (removeConfiguration) => {
             // need to decommission if the plugin is operational
             // then unload it?
             console.log('unload', pluginName);
-            epm.unload(this.state.dir, pluginName, remote.require);
+            epm.unload(this.state.dir, pluginName, require);
             // then delete it.
 	        ipcRenderer.on('epm-uninstalled-' + pluginName, (event, err) => {
                 console.log('uninstalled', event, err);
@@ -192,8 +230,24 @@ export default class PlugIns extends Component {
     render() {
         let plugins = sortedPluginSelector(this.props);
         let customStyle = {width: 80, textAlign: 'center'};
+        const { isMarketplaceOpen } = this.state;
+        const installedPluginsCount = this.getInstalledPluginsCount();
+
         return (
             <div>
+                {/* Header with Add Plugin button */}
+                <Box display="flex" justifyContent="space-between" alignItems="center" mb={2} p={2}>
+                    <Typography variant="h5">Plugin Settings</Typography>
+                    <Button
+                        variant="contained"
+                        color="primary"
+                        startIcon={<AddCircle />}
+                        onClick={this.handleOpenMarketplace}
+                    >
+                        Add Plugin
+                    </Button>
+                </Box>
+
                 <div style={{ textAlign: "center" }}>
                     allow2automate-
                     <TextField id="pluginName" label="Plugin" value={this.state.pluginName} onChange={this.handleChange.bind(this)} />
@@ -252,6 +306,14 @@ export default class PlugIns extends Component {
                     </Table>
                 </TableContainer>
                 }
+
+                {/* Marketplace Modal Overlay */}
+                {isMarketplaceOpen && (
+                    <MarketplacePage
+                        showCloseButton={installedPluginsCount > 0}
+                        onClose={this.handleCloseMarketplace}
+                    />
+                )}
             </div>
         );
 

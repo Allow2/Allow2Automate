@@ -4,6 +4,7 @@ import childActions from './device';
 import deviceActions from './device';
 import configurationActions from './configuration';
 import installedPluginsActions from './installedPlugins';
+import marketplaceActions from './marketplace';
 import pairingActions from './pairing';
 import pluginLibraryActions from './pluginLibrary';
 import userActions from './user';
@@ -14,6 +15,7 @@ export default {
     ...configurationActions,
     ...deviceActions,
     ...installedPluginsActions,
+    ...marketplaceActions,
     ...pairingActions,
     ...pluginLibraryActions,
     ...userActions,

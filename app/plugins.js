@@ -4,9 +4,17 @@ import {
     pluginSelector,
     sortedPluginSelector
 } from './selectors';
+import { createRegistryLoader } from './registry';
+
 var Module = require("module");
 
 module.exports = function(app, store, actions) {
+
+    // Initialize registry loader
+    const registryLoader = createRegistryLoader({
+        developmentMode: process.env.NODE_ENV === 'development',
+        cacheTTL: 60000 // 1 minute cache
+    });
 
     //
     // magically insert our node_modules path to plugin module search paths
@@ -99,15 +107,17 @@ module.exports = function(app, store, actions) {
 
         // GET api.allow2.com/automate/packages?page=1&sort=downloads&direction=desc
 
+        // Legacy hardcoded library - deprecated in favor of registry loader
+        // Kept for backward compatibility only
         plugins.library = {
-            "allow2automate-battle.net": {
+            "@allow2/allow2automate-battle.net": {
                 name: "battle.net",
                 publisher: "allow2",
                 releases: {
-                    latest: "1.0.0"
+                    latest: "0.0.2"
                 },
-                description: "Enable Allow2Automate management of World of Warcraft parental controls",
-                main: "./lib/battle.net",
+                description: "Enable Allow2Automate management of Battle.Net parental controls",
+                main: "./dist/index.js",
                 repository: {
                     type: "git",
                     url: "https://github.com/Allow2/allow2automate-battle.net"
@@ -116,20 +126,36 @@ module.exports = function(app, store, actions) {
                     'allow2automate', 'battle.net', 'wow', 'world of warcraft'
                 ]
             },
-            "allow2automate-ssh": {
+            "@allow2/allow2automate-ssh": {
                 name: "ssh",
                 publisher: "allow2",
                 releases: {
-                    latest: "1.0.0"
+                    latest: "0.0.2"
                 },
                 description: "Enable Allow2Automate the ability to use ssh to configure devices",
-                main: "./lib/ssh",
+                main: "./dist/index.js",
                 repository: {
                     type: "git",
                     url: "https://github.com/Allow2/allow2automate-ssh"
                 },
                 keywords : [
                     'allow2automate', 'allow2', 'ssh'
+                ]
+            },
+            "@allow2/allow2automate-wemo": {
+                name: "wemo",
+                publisher: "allow2",
+                releases: {
+                    latest: "0.0.4"
+                },
+                description: "Enable Allow2Automate the ability to control wemo devices",
+                main: "./dist/index.js",
+                repository: {
+                    type: "git",
+                    url: "https://github.com/Allow2/allow2automate-wemo"
+                },
+                keywords : [
+                    'allow2automate', 'allow2', 'wemo'
                 ]
             },
             "mcafee-safefamily": {
@@ -152,76 +178,101 @@ module.exports = function(app, store, actions) {
 
     //initPlugins();
 
-    plugins.getLibrary = function(callback) {
-        callback(null, {
-            "allow2automate-battle.net": {
-                name: "allow2automate-battle.net",
-                shortName: "battle.net",
-                publisher: "allow2",
-                releases: {
-                    latest: "1.0.0"
-                },
-                description: "Enable Allow2Automate management of World of Warcraft parental controls",
-                main: "./lib/battle.net",
-                repository: {
-                    type: "git",
-                    url: "https://github.com/Allow2/allow2automate-battle.net"
-                },
-                keywords: [
-                    'allow2automate', 'battle.net', 'wow', 'world of warcraft'
-                ]
-            },
-            "allow2automate-ssh": {
-                name: "allow2automate-ssh",
-                shortName: "ssh",
-                publisher: "allow2",
-                releases: {
-                    latest: "1.0.0"
-                },
-                description: "Enable Allow2Automate the ability to use ssh to configure devices",
-                main: "./lib/ssh",
-                repository: {
-                    type: "git",
-                    url: "https://github.com/Allow2/allow2automate-ssh"
-                },
-                keywords : [
-                    'allow2automate', 'allow2', 'ssh'
-                ]
-            },
-            "allow2automate-wemo": {
-                "name": "allow2automate-wemo",
-                "shortName" : "wemo",
-                publisher: "allow2",
-                releases: {
-                    latest: "1.0.0"
-                },
-                "description": "Enable Allow2Automate the ability to control wemo devices",
-                "main": "./index.js",
-                "repository": {
-                    "type": "git",
-                        "url": "https://github.com/Allow2/allow2automate-wemo"
-                },
-                "keywords" : [
-                    "allow2automate", "allow2", "wemo"
-                ]
-            },
-            "mcafee-safefamily": {
-                name: "mcafee-safefamily",
-                shortName: "Safe Family",
-                publisher: "mcafee",
-                releases: {
-                    latest: "1.0.0"
-                },
-                description: "Enable Allow2Automate management of McAfee Safe Family parental controls",
-                repository: {
-                    type: "git",
-                    url: "https://github.com/McAfee/allow2automate-safefamily"
-                },
-                keywords : [
-                    'allow2automate', 'mcafee', 'safefamily'
-                ]
+    /**
+     * Get plugin library from registry
+     * Now uses registry loader for dynamic plugin discovery
+     */
+    plugins.getLibrary = async function(callback) {
+        try {
+            console.log('[Plugins] Loading library from registry...');
+            const library = await registryLoader.getLibrary();
+            console.log(`[Plugins] Loaded ${Object.keys(library).length} plugins from registry`);
+            callback(null, library);
+        } catch (error) {
+            console.error('[Plugins] Error loading library from registry:', error);
+            callback(error, null);
+        }
+    };
+
+    /**
+     * Search plugins in registry
+     * @param {Object} criteria - Search criteria (category, keyword, publisher, verified, sort)
+     * @param {Function} callback - Callback function
+     */
+    plugins.searchRegistry = async function(criteria, callback) {
+        try {
+            const results = await registryLoader.searchPlugins(criteria);
+            callback(null, results);
+        } catch (error) {
+            console.error('[Plugins] Error searching registry:', error);
+            callback(error, null);
+        }
+    };
+
+    /**
+     * Get plugin details from registry
+     * @param {string} pluginName - Plugin name
+     * @param {Function} callback - Callback function
+     */
+    plugins.getPluginDetails = async function(pluginName, callback) {
+        try {
+            const plugin = await registryLoader.getPlugin(pluginName);
+            callback(null, plugin);
+        } catch (error) {
+            console.error('[Plugins] Error getting plugin details:', error);
+            callback(error, null);
+        }
+    };
+
+    /**
+     * Reload registry (bypass cache)
+     * @param {Function} callback - Callback function
+     */
+    plugins.reloadRegistry = async function(callback) {
+        try {
+            await registryLoader.reloadRegistry();
+            console.log('[Plugins] Registry reloaded successfully');
+            callback(null, true);
+        } catch (error) {
+            console.error('[Plugins] Error reloading registry:', error);
+            callback(error, null);
+        }
+    };
+
+    /**
+     * Load specific plugin by namespace identifier
+     * @param {string} pluginIdentifier - Full plugin name (e.g., '@allow2/allow2automate-wemo')
+     * @param {Function} callback - Callback function
+     */
+    plugins.loadPluginByNamespace = async function(pluginIdentifier, callback) {
+        try {
+            const plugin = await registryLoader.loadPlugin(pluginIdentifier);
+            if (!plugin) {
+                console.warn(`[Plugins] Plugin not found: ${pluginIdentifier}`);
+                callback(new Error(`Plugin not found: ${pluginIdentifier}`), null);
+                return;
             }
-        });
+            console.log(`[Plugins] Loaded plugin: ${pluginIdentifier}`);
+            callback(null, plugin);
+        } catch (error) {
+            console.error('[Plugins] Error loading plugin:', error);
+            callback(error, null);
+        }
+    };
+
+    /**
+     * Find orphaned plugin files (plugins in namespace folders not in master registry)
+     * @param {Function} callback - Callback function
+     */
+    plugins.findOrphanedPlugins = async function(callback) {
+        try {
+            const orphans = await registryLoader.findOrphanedPlugins();
+            console.log(`[Plugins] Found ${orphans.length} orphaned plugins`);
+            callback(null, orphans);
+        } catch (error) {
+            console.error('[Plugins] Error finding orphaned plugins:', error);
+            callback(error, null);
+        }
     };
 
     plugins.getInstalled = function(callback) {

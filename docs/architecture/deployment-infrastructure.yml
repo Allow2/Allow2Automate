@@ -1,0 +1,625 @@
+# Allow2Automate Plugin Marketplace - Infrastructure as Code
+# Terraform/CloudFormation configuration template
+
+version: "1.0"
+provider: aws
+region: us-east-1
+
+# Network Configuration
+vpc:
+  cidr: "10.0.0.0/16"
+  enable_dns: true
+  enable_dns_hostnames: true
+
+  subnets:
+    public:
+      - cidr: "10.0.1.0/24"
+        az: us-east-1a
+      - cidr: "10.0.2.0/24"
+        az: us-east-1b
+
+    private:
+      - cidr: "10.0.11.0/24"
+        az: us-east-1a
+      - cidr: "10.0.12.0/24"
+        az: us-east-1b
+
+  nat_gateway:
+    enabled: true
+    count: 2  # High availability
+
+# Security Groups
+security_groups:
+  api_server:
+    ingress:
+      - port: 443
+        protocol: tcp
+        source: 0.0.0.0/0
+        description: HTTPS from internet
+      - port: 3000
+        protocol: tcp
+        source: sg-alb
+        description: HTTP from load balancer
+    egress:
+      - port: 0
+        protocol: -1
+        destination: 0.0.0.0/0
+        description: All outbound traffic
+
+  database:
+    ingress:
+      - port: 5432
+        protocol: tcp
+        source: sg-api-server
+        description: PostgreSQL from API servers
+      - port: 5432
+        protocol: tcp
+        source: sg-scanner
+        description: PostgreSQL from scanners
+    egress: []
+
+  cache:
+    ingress:
+      - port: 6379
+        protocol: tcp
+        source: sg-api-server
+        description: Redis from API servers
+    egress: []
+
+  scanner:
+    ingress: []
+    egress:
+      - port: 443
+        protocol: tcp
+        destination: 0.0.0.0/0
+        description: HTTPS for package downloads
+      - port: 5432
+        protocol: tcp
+        destination: sg-database
+        description: PostgreSQL connections
+
+# Compute Resources
+compute:
+  api_service:
+    type: ecs_fargate
+    cluster_name: allow2automate-marketplace
+
+    task_definition:
+      family: api-service
+      cpu: 512
+      memory: 1024
+      container:
+        name: api
+        image: ghcr.io/allow2/marketplace-api:latest
+        port: 3000
+        environment:
+          NODE_ENV: production
+          PORT: 3000
+        secrets:
+          - name: DATABASE_URL
+            valueFrom: /marketplace/database/url
+          - name: REDIS_URL
+            valueFrom: /marketplace/redis/url
+          - name: JWT_SECRET
+            valueFrom: /marketplace/jwt/secret
+          - name: GITHUB_CLIENT_ID
+            valueFrom: /marketplace/oauth/github/client_id
+          - name: GITHUB_CLIENT_SECRET
+            valueFrom: /marketplace/oauth/github/client_secret
+
+        health_check:
+          command: ["CMD-SHELL", "curl -f http://localhost:3000/health || exit 1"]
+          interval: 30
+          timeout: 5
+          retries: 3
+          start_period: 60
+
+    service:
+      desired_count: 2
+      min_count: 2
+      max_count: 20
+
+      autoscaling:
+        target_cpu: 70
+        target_memory: 80
+        scale_in_cooldown: 300
+        scale_out_cooldown: 60
+
+      load_balancer:
+        type: application
+        certificate_arn: arn:aws:acm:us-east-1:ACCOUNT:certificate/CERT_ID
+        target_group:
+          port: 3000
+          protocol: HTTP
+          health_check:
+            path: /health
+            interval: 30
+            timeout: 5
+            healthy_threshold: 2
+            unhealthy_threshold: 3
+
+  scanner_service:
+    type: lambda
+    functions:
+      - name: malware-scanner
+        runtime: nodejs18.x
+        handler: index.handler
+        timeout: 300  # 5 minutes
+        memory: 2048
+        environment:
+          S3_BUCKET: marketplace-plugins-staging
+          DATABASE_URL: ${secret.database_url}
+
+        layers:
+          - arn:aws:lambda:us-east-1:ACCOUNT:layer:clamav:1
+
+        triggers:
+          - type: sqs
+            queue: plugin-scan-queue
+            batch_size: 1
+
+      - name: npm-audit-scanner
+        runtime: nodejs18.x
+        handler: index.handler
+        timeout: 180
+        memory: 1024
+        environment:
+          S3_BUCKET: marketplace-plugins-staging
+          DATABASE_URL: ${secret.database_url}
+
+        triggers:
+          - type: sqs
+            queue: plugin-scan-queue
+            batch_size: 3
+
+# Database
+database:
+  rds:
+    engine: postgres
+    engine_version: "15.4"
+    instance_class: db.t3.medium
+    allocated_storage: 100
+    storage_type: gp3
+    iops: 3000
+    multi_az: true
+
+    database_name: marketplace
+    master_username: marketplace_admin
+    master_password: ${secret.db_password}
+
+    backup:
+      retention_period: 7
+      window: "03:00-04:00"
+      copy_tags: true
+
+    maintenance:
+      window: "sun:04:00-sun:05:00"
+
+    monitoring:
+      enabled: true
+      interval: 60
+
+    performance_insights:
+      enabled: true
+      retention_period: 7
+
+    encryption:
+      enabled: true
+      kms_key: ${aws.kms.marketplace_db}
+
+    parameter_group:
+      family: postgres15
+      parameters:
+        - name: max_connections
+          value: "200"
+        - name: shared_buffers
+          value: "{DBInstanceClassMemory/4096}"
+        - name: effective_cache_size
+          value: "{DBInstanceClassMemory/2048}"
+        - name: maintenance_work_mem
+          value: "256MB"
+        - name: checkpoint_completion_target
+          value: "0.9"
+        - name: wal_buffers
+          value: "16MB"
+        - name: default_statistics_target
+          value: "100"
+        - name: random_page_cost
+          value: "1.1"
+        - name: effective_io_concurrency
+          value: "200"
+        - name: work_mem
+          value: "5242kB"
+        - name: min_wal_size
+          value: "1GB"
+        - name: max_wal_size
+          value: "4GB"
+
+# Cache
+cache:
+  elasticache:
+    engine: redis
+    engine_version: "7.0"
+    node_type: cache.t3.micro
+    num_cache_nodes: 1
+
+    parameter_group:
+      family: redis7
+      parameters:
+        - name: maxmemory-policy
+          value: allkeys-lru
+
+    subnet_group:
+      subnets: ${vpc.private_subnets}
+
+    security_groups:
+      - ${security_groups.cache}
+
+    automatic_failover: false  # Enable for multi-AZ
+    snapshot_retention_limit: 5
+    snapshot_window: "03:00-05:00"
+
+    encryption:
+      at_rest: true
+      in_transit: true
+
+# Storage
+storage:
+  s3:
+    buckets:
+      - name: marketplace-plugins-prod
+        versioning: true
+        encryption:
+          type: AES256
+
+        lifecycle_rules:
+          - id: delete-old-versions
+            enabled: true
+            noncurrent_version_expiration: 365
+
+          - id: transition-to-ia
+            enabled: true
+            transitions:
+              - days: 90
+                storage_class: STANDARD_IA
+
+        cors:
+          - allowed_methods: [GET, HEAD]
+            allowed_origins: ["https://marketplace.allow2automate.com"]
+            allowed_headers: ["*"]
+            max_age_seconds: 3600
+
+        public_access_block:
+          block_public_acls: true
+          block_public_policy: true
+          ignore_public_acls: true
+          restrict_public_buckets: true
+
+      - name: marketplace-plugins-staging
+        versioning: false
+        encryption:
+          type: AES256
+
+        lifecycle_rules:
+          - id: auto-delete-staging
+            enabled: true
+            expiration: 7  # Clean up after 7 days
+
+      - name: marketplace-backups
+        versioning: true
+        encryption:
+          type: aws:kms
+          kms_key: ${aws.kms.backup}
+
+        lifecycle_rules:
+          - id: transition-to-glacier
+            enabled: true
+            transitions:
+              - days: 90
+                storage_class: GLACIER
+              - days: 365
+                storage_class: DEEP_ARCHIVE
+
+# CDN
+cdn:
+  cloudfront:
+    distributions:
+      - id: marketplace-api
+        enabled: true
+        price_class: PriceClass_100  # US, Europe
+
+        origins:
+          - id: alb
+            domain: ${alb.dns_name}
+            custom_origin:
+              http_port: 80
+              https_port: 443
+              protocol_policy: https-only
+              ssl_protocols: [TLSv1.2]
+
+        default_cache_behavior:
+          target_origin: alb
+          viewer_protocol_policy: redirect-to-https
+          allowed_methods: [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
+          cached_methods: [GET, HEAD, OPTIONS]
+
+          forwarded_values:
+            query_string: true
+            cookies: all
+            headers:
+              - Authorization
+              - Accept
+              - Content-Type
+
+          min_ttl: 0
+          default_ttl: 3600
+          max_ttl: 86400
+          compress: true
+
+        custom_error_responses:
+          - error_code: 404
+            response_code: 404
+            response_page_path: /404.html
+            ttl: 300
+
+        ssl_certificate:
+          acm_certificate_arn: ${aws.acm.marketplace_cert}
+          minimum_protocol_version: TLSv1.2_2021
+
+        logging:
+          enabled: true
+          bucket: ${s3.logs_bucket}
+          prefix: cloudfront/
+
+      - id: marketplace-assets
+        enabled: true
+        price_class: PriceClass_All
+
+        origins:
+          - id: s3-plugins
+            domain: ${s3.plugins_prod.regional_domain}
+            s3_origin:
+              origin_access_identity: ${cloudfront.oai.id}
+
+        default_cache_behavior:
+          target_origin: s3-plugins
+          viewer_protocol_policy: redirect-to-https
+          allowed_methods: [GET, HEAD]
+          cached_methods: [GET, HEAD]
+
+          forwarded_values:
+            query_string: false
+            cookies: none
+
+          min_ttl: 0
+          default_ttl: 86400
+          max_ttl: 31536000
+          compress: true
+
+# Monitoring
+monitoring:
+  cloudwatch:
+    log_groups:
+      - name: /ecs/api-service
+        retention_days: 30
+
+      - name: /lambda/malware-scanner
+        retention_days: 14
+
+      - name: /rds/postgresql
+        retention_days: 7
+
+    alarms:
+      - name: APIHighErrorRate
+        metric: HTTPCode_Target_5XX_Count
+        namespace: AWS/ApplicationELB
+        statistic: Sum
+        period: 300
+        evaluation_periods: 2
+        threshold: 50
+        comparison: GreaterThanThreshold
+        actions:
+          - ${sns.critical_alerts}
+
+      - name: DatabaseHighCPU
+        metric: CPUUtilization
+        namespace: AWS/RDS
+        statistic: Average
+        period: 300
+        evaluation_periods: 3
+        threshold: 80
+        comparison: GreaterThanThreshold
+        actions:
+          - ${sns.warning_alerts}
+
+      - name: RedisHighMemory
+        metric: DatabaseMemoryUsagePercentage
+        namespace: AWS/ElastiCache
+        statistic: Average
+        period: 300
+        evaluation_periods: 2
+        threshold: 85
+        comparison: GreaterThanThreshold
+        actions:
+          - ${sns.warning_alerts}
+
+  sentry:
+    dsn: ${secret.sentry_dsn}
+    environment: production
+    sample_rate: 1.0
+    traces_sample_rate: 0.1
+
+    integrations:
+      - type: performance
+        enabled: true
+      - type: profiling
+        enabled: true
+        sample_rate: 0.05
+
+# Secrets Management
+secrets:
+  aws_secrets_manager:
+    secrets:
+      - name: /marketplace/database/url
+        description: PostgreSQL connection string
+        auto_rotation: false
+
+      - name: /marketplace/redis/url
+        description: Redis connection string
+        auto_rotation: false
+
+      - name: /marketplace/jwt/secret
+        description: JWT signing key
+        auto_rotation: true
+        rotation_days: 90
+
+      - name: /marketplace/oauth/github/client_id
+        description: GitHub OAuth client ID
+        auto_rotation: false
+
+      - name: /marketplace/oauth/github/client_secret
+        description: GitHub OAuth client secret
+        auto_rotation: false
+
+# IAM Roles
+iam:
+  roles:
+    - name: ECSTaskExecutionRole
+      assume_role_policy:
+        service: ecs-tasks.amazonaws.com
+      managed_policies:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+      inline_policies:
+        - name: SecretsAccess
+          policy:
+            effect: Allow
+            actions:
+              - secretsmanager:GetSecretValue
+            resources:
+              - arn:aws:secretsmanager:*:*:secret:/marketplace/*
+
+    - name: LambdaScannerRole
+      assume_role_policy:
+        service: lambda.amazonaws.com
+      managed_policies:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+      inline_policies:
+        - name: S3Access
+          policy:
+            effect: Allow
+            actions:
+              - s3:GetObject
+              - s3:PutObject
+            resources:
+              - arn:aws:s3:::marketplace-plugins-staging/*
+
+# WAF (Web Application Firewall)
+waf:
+  web_acl:
+    name: marketplace-protection
+    scope: REGIONAL
+
+    rules:
+      - name: RateLimitRule
+        priority: 1
+        statement:
+          rate_based:
+            limit: 2000
+            aggregate_key_type: IP
+        action: block
+
+      - name: AWSManagedRulesCommonRuleSet
+        priority: 2
+        statement:
+          managed_rule_group:
+            vendor: AWS
+            name: AWSManagedRulesCommonRuleSet
+        override_action: none
+
+      - name: AWSManagedRulesKnownBadInputsRuleSet
+        priority: 3
+        statement:
+          managed_rule_group:
+            vendor: AWS
+            name: AWSManagedRulesKnownBadInputsRuleSet
+        override_action: none
+
+      - name: AWSManagedRulesSQLiRuleSet
+        priority: 4
+        statement:
+          managed_rule_group:
+            vendor: AWS
+            name: AWSManagedRulesSQLiRuleSet
+        override_action: none
+
+      - name: GeoBlockingRule
+        priority: 5
+        statement:
+          geo_match:
+            country_codes: [CN, RU, KP]  # Configurable
+        action: block
+
+    cloudwatch_metrics: true
+    sampled_requests: true
+
+# Backup & Disaster Recovery
+backup:
+  aws_backup:
+    plans:
+      - name: daily-backup
+        rules:
+          - name: DailyBackup
+            schedule: cron(0 3 * * ? *)  # 3 AM daily
+            target_vault: default
+            lifecycle:
+              delete_after: 30
+
+            selections:
+              - name: RDSDatabase
+                resources:
+                  - ${rds.arn}
+
+              - name: ElastiCache
+                resources:
+                  - ${elasticache.arn}
+
+# Cost Optimization
+cost_optimization:
+  savings_plans:
+    compute:
+      commitment: 1_year
+      payment_option: no_upfront
+      hourly_commitment: 10  # USD per hour
+
+  reserved_instances:
+    rds:
+      instance_class: db.t3.medium
+      term: 1_year
+      payment_option: partial_upfront
+
+  budget_alerts:
+    - name: MonthlyBudget
+      amount: 500
+      unit: USD
+      time_unit: MONTHLY
+
+      notifications:
+        - threshold: 80
+          type: ACTUAL
+          subscribers:
+            - email: billing@allow2.com
+
+        - threshold: 100
+          type: FORECASTED
+          subscribers:
+            - email: billing@allow2.com
+
+# Tags (for resource organization)
+tags:
+  common:
+    Project: Allow2Automate-Marketplace
+    Environment: Production
+    ManagedBy: Terraform
+    CostCenter: Engineering
+    Backup: Required

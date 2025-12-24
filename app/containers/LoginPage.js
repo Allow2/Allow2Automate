@@ -12,8 +12,9 @@ const mapDispatchToProps = (dispatch) => {
     const user = bindActionCreators(userActions, dispatch);
     return {
         onLogin: (data) => {
+            console.log('onLogin called with data:', data);
             user.login(data);
-            dispatch(push('/loggedin'));
+            // Navigation is handled by childStore.js store subscription
         }
     };
 };
