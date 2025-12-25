@@ -1,6 +1,6 @@
 import React, { Component } from 'react';
 import PropTypes from 'prop-types';
-import ReactMarkdown from 'react-markdown';
+import marked from 'marked';
 import {
     Grid,
     Card,
@@ -518,6 +518,82 @@ export default class Marketplace extends Component {
                                         transform: rotate(360deg);
                                     }
                                 }
+
+                                /* Markdown content styling */
+                                .markdown-content h1 {
+                                    font-size: 2rem;
+                                    font-weight: 500;
+                                    margin: 16px 0 8px 0;
+                                    color: rgba(0, 0, 0, 0.87);
+                                }
+                                .markdown-content h2 {
+                                    font-size: 1.5rem;
+                                    font-weight: 500;
+                                    margin: 14px 0 8px 0;
+                                    color: rgba(0, 0, 0, 0.87);
+                                }
+                                .markdown-content h3 {
+                                    font-size: 1.25rem;
+                                    font-weight: 500;
+                                    margin: 12px 0 6px 0;
+                                    color: rgba(0, 0, 0, 0.87);
+                                }
+                                .markdown-content p {
+                                    margin: 0 0 16px 0;
+                                    line-height: 1.6;
+                                }
+                                .markdown-content code {
+                                    background-color: #e0e0e0;
+                                    padding: 2px 6px;
+                                    border-radius: 3px;
+                                    font-family: 'Courier New', monospace;
+                                    font-size: 0.875rem;
+                                }
+                                .markdown-content pre {
+                                    background-color: #e0e0e0;
+                                    padding: 12px;
+                                    border-radius: 4px;
+                                    overflow: auto;
+                                    margin: 12px 0;
+                                }
+                                .markdown-content pre code {
+                                    background-color: transparent;
+                                    padding: 0;
+                                }
+                                .markdown-content ul, .markdown-content ol {
+                                    padding-left: 24px;
+                                    margin: 12px 0;
+                                }
+                                .markdown-content li {
+                                    margin: 4px 0;
+                                }
+                                .markdown-content a {
+                                    color: #2196f3;
+                                    text-decoration: none;
+                                }
+                                .markdown-content a:hover {
+                                    text-decoration: underline;
+                                }
+                                .markdown-content blockquote {
+                                    border-left: 4px solid #e0e0e0;
+                                    padding-left: 16px;
+                                    margin: 12px 0;
+                                    color: rgba(0, 0, 0, 0.6);
+                                }
+                                .markdown-content table {
+                                    border-collapse: collapse;
+                                    width: 100%;
+                                    margin: 12px 0;
+                                }
+                                .markdown-content th, .markdown-content td {
+                                    border: 1px solid #e0e0e0;
+                                    padding: 8px;
+                                    text-align: left;
+                                }
+                                .markdown-content th {
+                                    background-color: #f5f5f5;
+                                    font-weight: 500;
+                                }
                             `}
                         </style>
 
@@ -824,6 +900,7 @@ export default class Marketplace extends Component {
                             </Box>
                         ) : pluginReadme ? (
                             <Box
+                                className="markdown-content"
                                 style={{
                                     backgroundColor: '#f5f5f5',
                                     padding: 16,
@@ -831,48 +908,13 @@ export default class Marketplace extends Component {
                                     maxHeight: '60vh',
                                     overflow: 'auto'
                                 }}
-                            >
-                                <ReactMarkdown
-                                    components={{
-                                        // Style headings
-                                        h1: ({node, ...props}) => <Typography variant="h4" gutterBottom {...props} />,
-                                        h2: ({node, ...props}) => <Typography variant="h5" gutterBottom {...props} />,
-                                        h3: ({node, ...props}) => <Typography variant="h6" gutterBottom {...props} />,
-                                        // Style paragraphs
-                                        p: ({node, ...props}) => <Typography variant="body1" paragraph {...props} />,
-                                        // Style code blocks
-                                        code: ({node, inline, ...props}) => (
-                                            inline ? (
-                                                <code style={{
-                                                    backgroundColor: '#e0e0e0',
-                                                    padding: '2px 6px',
-                                                    borderRadius: 3,
-                                                    fontFamily: 'monospace',
-                                                    fontSize: '0.875rem'
-                                                }} {...props} />
-                                            ) : (
-                                                <pre style={{
-                                                    backgroundColor: '#e0e0e0',
-                                                    padding: 12,
-                                                    borderRadius: 4,
-                                                    overflow: 'auto',
-                                                    fontFamily: 'monospace',
-                                                    fontSize: '0.875rem'
-                                                }}>
-                                                    <code {...props} />
-                                                </pre>
-                                            )
-                                        ),
-                                        // Style lists
-                                        ul: ({node, ...props}) => <ul style={{ paddingLeft: 20 }} {...props} />,
-                                        ol: ({node, ...props}) => <ol style={{ paddingLeft: 20 }} {...props} />,
-                                        // Style links
-                                        a: ({node, ...props}) => <a style={{ color: '#2196f3' }} {...props} />
-                                    }}
-                                >
-                                    {pluginReadme}
-                                </ReactMarkdown>
-                            </Box>
+                                dangerouslySetInnerHTML={{
+                                    __html: marked(pluginReadme, {
+                                        gfm: true,
+                                        breaks: true
+                                    })
+                                }}
+                            />
                         ) : (
                             <Typography variant="body2" color="textSecondary">
                                 No README available for this plugin.

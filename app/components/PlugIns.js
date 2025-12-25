@@ -248,7 +248,8 @@ export default class PlugIns extends Component {
                     </Button>
                 </Box>
 
-                <div style={{ textAlign: "center" }}>
+                {/* Manual plugin entry - Hidden for now, may need later */}
+                <div style={{ textAlign: "center", display: "none" }}>
                     allow2automate-
                     <TextField id="pluginName" label="Plugin" value={this.state.pluginName} onChange={this.handleChange.bind(this)} />
                     <IconButton color="primary" aria-label="install plugin" component="span" onClick={this.addPlugin.bind(this)} >

@@ -52,7 +52,8 @@ export default class Login extends Component {
         // Get environment-aware plugin path from main process
         const pluginsDir = ipcRenderer.sendSync('getPath', 'plugins');
 
-	    const pluginPath = path.join(pluginsDir, this.props.plugin.name);
+	    // Plugins are installed via npm into node_modules subdirectory
+	    const pluginPath = path.join(pluginsDir, 'node_modules', this.props.plugin.name);
         this.plugin = require(pluginPath);
         console.log('gui', this.props.plugin.name, this.plugin);
         // if (plugin.default) {

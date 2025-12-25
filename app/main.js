@@ -514,6 +514,11 @@ app.on('ready', async () => {
 
         mainWindowStateKeeper.track(mainWindow);
 
+        // Restore maximized state if it was maximized before
+        if (mainWindowStateKeeper.isMaximized) {
+            mainWindow.maximize();
+        }
+
         // show window once on first load
         mainWindow.webContents.once('did-finish-load', () => {
             mainWindow.show();
