@@ -6,6 +6,10 @@ const initialState = {
     categoryFilter: 'all',
     selectedPlugin: null,
     isLoading: false,
+    registryLoading: false, // Track registry loading state
+    registryError: null, // Track registry errors
+    isFromCache: false, // Track if data is from cache
+    cacheTimestamp: null, // When cache was created
     featuredPlugins: [],
     installationStatus: {},
     error: null
@@ -116,6 +120,32 @@ export default handleActions({
             ...state,
             isLoading: false,
             error: action.payload
+        };
+    },
+
+    [actions.registryLoadStart]: (state) => {
+        return {
+            ...state,
+            registryLoading: true,
+            registryError: null
+        };
+    },
+
+    [actions.registryLoadSuccess]: (state, action) => {
+        return {
+            ...state,
+            registryLoading: false,
+            isFromCache: action.payload.isFromCache || false,
+            cacheTimestamp: action.payload.cacheTimestamp || null,
+            registryError: null
+        };
+    },
+
+    [actions.registryLoadFailure]: (state, action) => {
+        return {
+            ...state,
+            registryLoading: false,
+            registryError: action.payload
         };
     }
 

@@ -2,12 +2,93 @@
  * Plugin Registry Loader
  *
  * Handles loading and managing plugin metadata from the central registry.
+ * Fetches from GitHub with electron-settings caching and fallback support.
  * Supports both production mode (registry-based) and development mode (local fallback).
  * Supports namespace-based folder structure (@allow2/, @thirdparty/, etc.)
+ * Includes compliance validation for plugin dependencies (peerDependencies vs dependencies).
  */
 
 import path from 'path';
 import fs from 'fs';
+import request from 'request';
+import settings from 'electron-settings';
+
+/**
+ * Validate plugin compliance with dependency rules
+ * Checks if React and Material-UI are properly declared in peerDependencies
+ * @param {Object} plugin - Plugin metadata object
+ * @returns {Object} Validation result with compliance status and issues
+ */
+function validatePluginCompliance(plugin) {
+    const issues = [];
+    const warnings = [];
+
+    // Check if plugin has package info
+    if (!plugin.dependencies && !plugin.peerDependencies) {
+        warnings.push('No dependency information available - unable to validate');
+        return {
+            compliant: null, // Unknown compliance status
+            issues: [],
+            warnings: warnings
+        };
+    }
+
+    // Check if React is in dependencies (should be in peerDependencies)
+    if (plugin.dependencies && plugin.dependencies['react']) {
+        issues.push('React should be in peerDependencies, not dependencies');
+    }
+
+    // Check if React DOM is in dependencies (should be in peerDependencies)
+    if (plugin.dependencies && plugin.dependencies['react-dom']) {
+        issues.push('react-dom should be in peerDependencies, not dependencies');
+    }
+
+    // Check if Material-UI v4 is in dependencies (should be in peerDependencies)
+    if (plugin.dependencies && plugin.dependencies['@material-ui/core']) {
+        issues.push('@material-ui/core should be in peerDependencies, not dependencies');
+    }
+
+    // Check if Material-UI v5 is in dependencies (should be in peerDependencies)
+    if (plugin.dependencies && plugin.dependencies['@mui/material']) {
+        issues.push('@mui/material should be in peerDependencies, not dependencies');
+    }
+
+    // Check if Material-UI icons are in dependencies (should be in peerDependencies)
+    if (plugin.dependencies && plugin.dependencies['@material-ui/icons']) {
+        issues.push('@material-ui/icons should be in peerDependencies, not dependencies');
+    }
+
+    if (plugin.dependencies && plugin.dependencies['@mui/icons-material']) {
+        issues.push('@mui/icons-material should be in peerDependencies, not dependencies');
+    }
+
+    // Check if peerDependencies exist for React-based plugins
+    if (!plugin.peerDependencies || !plugin.peerDependencies['react']) {
+        // Only warn if plugin seems React-based (has React in dependencies or keywords)
+        const isReactPlugin =
+            (plugin.dependencies && plugin.dependencies['react']) ||
+            (plugin.keywords && plugin.keywords.some(k => k.toLowerCase().includes('react')));
+
+        if (isReactPlugin) {
+            warnings.push('Missing React in peerDependencies - plugin may not be React-based');
+        }
+    }
+
+    // Check for Redux in dependencies (should typically be in peerDependencies for plugins)
+    if (plugin.dependencies && plugin.dependencies['redux']) {
+        warnings.push('Redux in dependencies - consider using peerDependencies if plugin extends host Redux store');
+    }
+
+    if (plugin.dependencies && plugin.dependencies['react-redux']) {
+        warnings.push('react-redux in dependencies - consider using peerDependencies for consistency');
+    }
+
+    return {
+        compliant: issues.length === 0,
+        issues: issues,
+        warnings: warnings
+    };
+}
 
 /**
  * Registry loader class for managing plugin discovery
@@ -20,8 +101,254 @@ class RegistryLoader {
         this.developmentMode = options.developmentMode || process.env.NODE_ENV === 'development';
         this.cache = null;
         this.cacheTimestamp = null;
-        this.cacheTTL = options.cacheTTL || 60000; // 1 minute cache
+        this.cacheTTL = options.cacheTTL || 3600000; // 1 hour cache (was 1 minute)
         this.pluginFileCache = {}; // Cache for individual plugin files
+
+        // GitHub registry configuration
+        this.githubUrl = options.githubUrl || 'https://raw.githubusercontent.com/Allow2/allow2automate-registry/master/plugins.json';
+        this.requestTimeout = options.requestTimeout || 10000; // 10 second timeout (increased from 5s)
+        this.cacheKey = 'registry.plugins';
+        this.cacheTimestampKey = 'registry.timestamp';
+        this.cacheVersionKey = 'registry.version';
+    }
+
+    /**
+     * Fetch registry from GitHub with retry logic
+     * @param {number} retryCount - Current retry attempt (internal use)
+     * @returns {Promise<Object>} Registry data from GitHub
+     */
+    async fetchFromGitHub(retryCount = 0) {
+        const maxRetries = 3;
+        const retryDelay = Math.min(1000 * Math.pow(2, retryCount), 5000); // Exponential backoff, max 5s
+
+        return new Promise((resolve, reject) => {
+            console.log('[Registry] ========== FETCHING FROM GITHUB ==========');
+            console.log('[Registry] URL:', this.githubUrl);
+            console.log('[Registry] Timeout:', this.requestTimeout, 'ms');
+            if (retryCount > 0) {
+                console.log(`[Registry] Retry attempt ${retryCount}/${maxRetries}`);
+            }
+
+            const options = {
+                url: this.githubUrl,
+                timeout: this.requestTimeout,
+                headers: {
+                    'User-Agent': 'Allow2Automate/2.0.0',
+                    'Cache-Control': 'no-cache'
+                }
+            };
+
+            const startTime = Date.now();
+
+            request(options, async (error, response, body) => {
+                const duration = Date.now() - startTime;
+                console.log('[Registry] Request completed in', duration, 'ms');
+
+                if (error) {
+                    console.error('[Registry] ❌ GitHub fetch error:', error.message);
+                    console.error('[Registry] Error code:', error.code);
+
+                    // Retry on network errors
+                    if (retryCount < maxRetries && (error.code === 'ETIMEDOUT' || error.code === 'ENOTFOUND' || error.code === 'ECONNRESET')) {
+                        console.log(`[Registry] ⏳ Retrying in ${retryDelay}ms...`);
+                        setTimeout(async () => {
+                            try {
+                                const result = await this.fetchFromGitHub(retryCount + 1);
+                                resolve(result);
+                            } catch (retryError) {
+                                reject(retryError);
+                            }
+                        }, retryDelay);
+                        return;
+                    }
+
+                    console.error('[Registry] Error details:', error);
+                    return reject(new Error(`GitHub fetch failed after ${retryCount + 1} attempts: ${error.message}`));
+                }
+
+                console.log('[Registry] Response status:', response.statusCode);
+
+                if (response.statusCode !== 200) {
+                    console.error(`[Registry] ❌ GitHub HTTP error: ${response.statusCode}`);
+                    console.error('[Registry] Response body:', body ? body.substring(0, 200) : 'empty');
+
+                    // Retry on 5xx errors
+                    if (retryCount < maxRetries && response.statusCode >= 500) {
+                        console.log(`[Registry] ⏳ Server error, retrying in ${retryDelay}ms...`);
+                        setTimeout(async () => {
+                            try {
+                                const result = await this.fetchFromGitHub(retryCount + 1);
+                                resolve(result);
+                            } catch (retryError) {
+                                reject(retryError);
+                            }
+                        }, retryDelay);
+                        return;
+                    }
+
+                    return reject(new Error(`GitHub HTTP error: ${response.statusCode}`));
+                }
+
+                console.log('[Registry] Body length:', body ? body.length : 0, 'bytes');
+
+                try {
+                    const registry = JSON.parse(body);
+                    console.log('[Registry] ✅ JSON parsed successfully');
+
+                    // Validate registry structure
+                    if (!registry.plugins || !Array.isArray(registry.plugins)) {
+                        console.error('[Registry] ❌ Invalid registry format: missing plugins array');
+                        console.error('[Registry] Registry keys:', Object.keys(registry));
+                        throw new Error('Invalid registry format: missing plugins array');
+                    }
+
+                    console.log(`[Registry] ✅ Successfully fetched ${registry.plugins.length} plugins from GitHub`);
+                    console.log('[Registry] ========================================');
+                    resolve(registry);
+                } catch (parseError) {
+                    console.error('[Registry] ❌ JSON parse error:', parseError.message);
+                    console.error('[Registry] Parse error stack:', parseError.stack);
+                    reject(new Error(`Invalid JSON from GitHub: ${parseError.message}`));
+                }
+            });
+        });
+    }
+
+    /**
+     * Get cached registry from electron-settings
+     * @returns {Object|null} Cached registry data or null
+     */
+    getCachedRegistry() {
+        try {
+            const cachedData = settings.getSync(this.cacheKey);
+            const cachedTimestamp = settings.getSync(this.cacheTimestampKey);
+
+            if (cachedData && cachedTimestamp) {
+                console.log('[Registry] Found cached registry data');
+                return {
+                    data: cachedData,
+                    timestamp: cachedTimestamp
+                };
+            }
+
+            console.log('[Registry] No cached registry data found');
+            return null;
+        } catch (error) {
+            console.warn('[Registry] Error reading cache:', error.message);
+            return null;
+        }
+    }
+
+    /**
+     * Save registry to electron-settings cache
+     * @param {Object} registryData - Registry data to cache
+     */
+    setCachedRegistry(registryData) {
+        try {
+            const timestamp = Date.now();
+            settings.setSync(this.cacheKey, registryData);
+            settings.setSync(this.cacheTimestampKey, timestamp);
+
+            // Store version if available
+            if (registryData.metadata && registryData.metadata.version) {
+                settings.setSync(this.cacheVersionKey, registryData.metadata.version);
+            }
+
+            console.log('[Registry] Cached registry data');
+        } catch (error) {
+            console.warn('[Registry] Error saving to cache:', error.message);
+        }
+    }
+
+    /**
+     * Check if cached registry is stale
+     * @returns {boolean} True if cache needs refresh
+     */
+    isCacheStale() {
+        try {
+            const cachedTimestamp = settings.getSync(this.cacheTimestampKey);
+
+            if (!cachedTimestamp) {
+                return true;
+            }
+
+            const age = Date.now() - cachedTimestamp;
+            const isStale = age > this.cacheTTL;
+
+            if (isStale) {
+                console.log(`[Registry] Cache is stale (age: ${Math.round(age / 60000)} minutes)`);
+            }
+
+            return isStale;
+        } catch (error) {
+            console.warn('[Registry] Error checking cache staleness:', error.message);
+            return true;
+        }
+    }
+
+    /**
+     * Get registry with smart GitHub fetch and cache fallback
+     * @returns {Promise<Object>} Registry data
+     */
+    async getRegistry() {
+        console.log('[Registry] ========== GET REGISTRY START ==========');
+        console.log('[Registry] Development mode:', this.developmentMode);
+        console.log('[Registry] Cache TTL:', this.cacheTTL, 'ms');
+
+        try {
+            // Check if cache is fresh
+            const isStale = this.isCacheStale();
+            console.log('[Registry] Cache is stale:', isStale);
+
+            if (!isStale) {
+                const cached = this.getCachedRegistry();
+                if (cached) {
+                    console.log('[Registry] ✅ Using fresh cached data');
+                    console.log('[Registry] Cache timestamp:', new Date(cached.timestamp));
+                    console.log('[Registry] Cached plugins:', cached.data.plugins ? cached.data.plugins.length : 'N/A');
+                    return cached.data;
+                }
+            }
+
+            // Try to fetch from GitHub
+            console.log('[Registry] 🌐 Attempting to fetch from GitHub...');
+            try {
+                const registry = await this.fetchFromGitHub();
+                console.log('[Registry] ✅ GitHub fetch successful, caching...');
+                this.setCachedRegistry(registry);
+                return registry;
+            } catch (githubError) {
+                console.warn('[Registry] ⚠️ GitHub fetch failed, falling back to cache');
+                console.warn('[Registry] GitHub error:', githubError.message);
+
+                // Try to use cached data even if stale
+                const cached = this.getCachedRegistry();
+                if (cached) {
+                    console.log('[Registry] ✅ Using stale cached data as fallback');
+                    console.log('[Registry] Stale cache age:', Math.round((Date.now() - cached.timestamp) / 60000), 'minutes');
+                    return cached.data;
+                }
+
+                console.error('[Registry] ❌ No cache available');
+                // If no cache, throw the error
+                throw githubError;
+            }
+        } catch (error) {
+            console.error('[Registry] ❌ All registry sources failed:', error.message);
+
+            // Final fallback to development data
+            if (this.developmentMode) {
+                console.log('[Registry] ⚠️ Using development fallback data');
+                const fallback = this.getFallbackRegistry();
+                console.log('[Registry] Fallback plugins:', fallback.plugins.length);
+                return fallback;
+            }
+
+            console.error('[Registry] ❌ No fallback available, throwing error');
+            throw error;
+        } finally {
+            console.log('[Registry] ========== GET REGISTRY END ==========');
+        }
     }
 
     /**
@@ -30,34 +357,21 @@ class RegistryLoader {
      */
     async loadRegistry() {
         try {
-            // Check cache first
+            // Check in-memory cache first
             if (this.cache && this.cacheTimestamp && (Date.now() - this.cacheTimestamp < this.cacheTTL)) {
-                console.log('[Registry] Using cached registry data');
+                console.log('[Registry] Using in-memory cache');
                 return this.cache;
             }
 
-            // Check if registry file exists
-            if (!fs.existsSync(this.registryPath)) {
-                console.warn(`[Registry] Registry file not found at ${this.registryPath}`);
-
-                if (this.developmentMode) {
-                    console.log('[Registry] Development mode: using fallback data');
-                    return this.getFallbackRegistry();
-                }
-
-                throw new Error(`Registry file not found: ${this.registryPath}`);
-            }
-
-            // Load and parse master registry
-            const rawData = fs.readFileSync(this.registryPath, 'utf8');
-            const registry = JSON.parse(rawData);
+            // Get registry from GitHub or cache
+            const registry = await this.getRegistry();
 
             // Validate registry structure
             if (!registry.plugins || !Array.isArray(registry.plugins)) {
                 throw new Error('Invalid registry format: missing plugins array');
             }
 
-            // Load additional plugins from namespace directories
+            // Load additional plugins from namespace directories (local only)
             const namespacedPlugins = await this.loadNamespacedPlugins();
 
             // Merge namespaced plugins with master registry
@@ -65,7 +379,7 @@ class RegistryLoader {
             const mergedPlugins = this.mergePlugins(registry.plugins, namespacedPlugins);
             registry.plugins = mergedPlugins;
 
-            // Update cache
+            // Update in-memory cache
             this.cache = registry;
             this.cacheTimestamp = Date.now();
 
@@ -182,6 +496,27 @@ class RegistryLoader {
             plugin.pluginFile = `${namespace}/${filename}`;
             plugin.namespace = namespace;
 
+            // Load package.json for compliance validation if available
+            await this.enrichPluginWithPackageInfo(plugin);
+
+            // Validate plugin compliance
+            const validation = validatePluginCompliance(plugin);
+            plugin.compliance = {
+                compliant: validation.compliant,
+                validationErrors: validation.issues,
+                validationWarnings: validation.warnings,
+                lastChecked: new Date().toISOString()
+            };
+
+            // Log compliance issues
+            if (!validation.compliant && validation.issues.length > 0) {
+                console.warn(`[Registry] ⚠️ Plugin ${plugin.name} has compliance issues:`, validation.issues);
+            }
+
+            if (validation.warnings.length > 0) {
+                console.log(`[Registry] ℹ️ Plugin ${plugin.name} compliance warnings:`, validation.warnings);
+            }
+
             // Cache the plugin
             const cacheKey = `${namespace}/${plugin.id}`;
             this.pluginFileCache[cacheKey] = plugin;
@@ -191,6 +526,54 @@ class RegistryLoader {
         } catch (error) {
             console.warn(`[Registry] Error loading plugin file ${filePath}:`, error.message);
             return null;
+        }
+    }
+
+    /**
+     * Enrich plugin metadata with package.json information
+     * Attempts to load package.json from the plugin's installation directory
+     * @param {Object} plugin - Plugin object to enrich
+     * @returns {Promise<void>}
+     */
+    async enrichPluginWithPackageInfo(plugin) {
+        try {
+            const packageName = plugin.package || plugin.name;
+
+            // Extract plugin directory name from package name
+            // e.g., "@allow2/allow2automate-battle.net" -> "allow2automate-battle.net"
+            const pluginDirName = packageName.replace(/^@[^/]+\//, '');
+
+            const possiblePaths = [
+                // Try plugins directory first (sibling to automate app)
+                path.join(__dirname, '..', '..', 'plugins', pluginDirName, 'package.json'),
+                // Try from process.cwd()
+                path.join(process.cwd(), '..', 'plugins', pluginDirName, 'package.json'),
+                // Try node_modules as fallback (for installed plugins)
+                path.join(process.cwd(), 'node_modules', packageName, 'package.json'),
+                path.join(__dirname, '..', 'node_modules', packageName, 'package.json'),
+                path.join(__dirname, '..', '..', 'node_modules', packageName, 'package.json')
+            ];
+
+            for (const pkgPath of possiblePaths) {
+                if (fs.existsSync(pkgPath)) {
+                    const pkgData = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+
+                    // Add dependency information to plugin metadata
+                    plugin.dependencies = pkgData.dependencies || {};
+                    plugin.peerDependencies = pkgData.peerDependencies || {};
+                    plugin.devDependencies = pkgData.devDependencies || {};
+                    plugin.packageJsonPath = pkgPath;
+
+                    console.log(`[Registry] ✅ Loaded package.json for ${packageName} from ${pkgPath}`);
+                    return;
+                }
+            }
+
+            console.log(`[Registry] ℹ️ No package.json found for ${packageName} - skipping dependency validation`);
+            console.log(`[Registry] Searched paths:`, possiblePaths);
+
+        } catch (error) {
+            console.warn(`[Registry] Error loading package.json for ${plugin.name}:`, error.message);
         }
     }
 
@@ -322,45 +705,139 @@ class RegistryLoader {
 
     /**
      * Get plugin library in the format expected by existing code
-     * @returns {Promise<Object>} Plugin library object
+     * OPTIMIZED: Uses stale-while-revalidate pattern for instant loads
+     * @returns {Promise<Object>} Plugin library object with cache metadata
      */
     async getLibrary() {
+        console.log('[Registry] ========== GET LIBRARY START (OPTIMIZED) ==========');
+        const startTime = Date.now();
+
         try {
+            // Check for cached data first - return immediately if available
+            const cached = this.getCachedRegistry();
+            let isFromCache = false;
+            let cacheTimestamp = null;
+
+            if (cached) {
+                isFromCache = true;
+                cacheTimestamp = cached.timestamp;
+                const cacheAge = Date.now() - cached.timestamp;
+                console.log(`[Registry] ⚡ Found cache (age: ${Math.round(cacheAge / 1000)}s)`);
+
+                // If cache is fresh enough, use it immediately
+                if (cacheAge < this.cacheTTL) {
+                    console.log('[Registry] ✅ Using fresh cache for instant load');
+                    const library = this.transformRegistryToLibrary(cached.data);
+                    library._fromCache = true;
+                    library._cacheTimestamp = cacheTimestamp;
+                    const duration = Date.now() - startTime;
+                    console.log(`[Registry] ⚡ Instant load completed in ${duration}ms`);
+                    console.log('[Registry] ========== GET LIBRARY END (CACHED) ==========');
+                    return library;
+                }
+
+                // Cache is stale, but we can still use it while revalidating
+                console.log('[Registry] ⚠️ Cache is stale, will revalidate in background');
+            }
+
+            // Load registry (either no cache or cache is stale)
             const registry = await this.loadRegistry();
+            const duration = Date.now() - startTime;
+            console.log(`[Registry] Registry loaded in ${duration}ms, plugins:`, registry.plugins ? registry.plugins.length : 'N/A');
 
-            // Transform registry format to legacy library format
-            const library = {};
+            // Transform to library format
+            const library = this.transformRegistryToLibrary(registry);
+            library._fromCache = isFromCache;
+            library._cacheTimestamp = cacheTimestamp;
 
-            registry.plugins.forEach(plugin => {
-                const packageName = plugin.package || plugin.name;
-                library[packageName] = {
-                    name: packageName,
-                    shortName: plugin.name,
-                    publisher: plugin.publisher || 'unknown',
-                    releases: {
-                        latest: plugin.version || '1.0.0'
-                    },
-                    description: plugin.description || '',
-                    main: plugin.main || './index.js',
-                    repository: plugin.repository || {
-                        type: 'git',
-                        url: plugin.github || ''
-                    },
-                    keywords: plugin.keywords || [],
-                    // Additional registry metadata
-                    category: plugin.category || 'general',
-                    verified: plugin.verified || false,
-                    downloads: plugin.downloads || 0,
-                    rating: plugin.rating || 0
-                };
-            });
-
+            console.log(`[Registry] ✅ Library ready in ${duration}ms`);
+            console.log('[Registry] ========== GET LIBRARY END ==========');
             return library;
 
         } catch (error) {
-            console.error('[Registry] Error getting library:', error);
+            const duration = Date.now() - startTime;
+            console.error(`[Registry] ❌ Error getting library (${duration}ms):`, error.message);
+
+            // Try to use stale cache as last resort
+            const cached = this.getCachedRegistry();
+            if (cached) {
+                console.log('[Registry] ⚠️ Using stale cache as fallback after error');
+                const library = this.transformRegistryToLibrary(cached.data);
+                library._fromCache = true;
+                library._cacheTimestamp = cached.timestamp;
+                library._errorFallback = true;
+                return library;
+            }
+
+            console.error('[Registry] Error stack:', error.stack);
             throw error;
         }
+    }
+
+    /**
+     * Transform registry format to legacy library format
+     * @param {Object} registry - Registry data
+     * @returns {Object} Library object
+     */
+    transformRegistryToLibrary(registry) {
+        const library = {};
+        let compliantCount = 0;
+        let nonCompliantCount = 0;
+        let unknownCount = 0;
+
+        registry.plugins.forEach((plugin, index) => {
+            const packageName = plugin.package || plugin.name;
+
+            // Track compliance stats
+            if (plugin.compliance) {
+                if (plugin.compliance.compliant === true) {
+                    compliantCount++;
+                } else if (plugin.compliance.compliant === false) {
+                    nonCompliantCount++;
+                } else {
+                    unknownCount++;
+                }
+            }
+
+            library[packageName] = {
+                name: packageName,
+                shortName: plugin.shortName || plugin.name,
+                publisher: plugin.publisher || 'unknown',
+                releases: {
+                    latest: plugin.version || '1.0.0'
+                },
+                description: plugin.description || '',
+                main: plugin.main || './index.js',
+                repository: plugin.repository || {
+                    type: 'git',
+                    url: plugin.github || ''
+                },
+                installation: plugin.installation || {
+                    install_url: plugin.github || (plugin.repository ? plugin.repository.url : '')
+                },
+                keywords: plugin.keywords || [],
+                // Additional registry metadata
+                category: plugin.category || 'general',
+                verified: plugin.verified || false,
+                downloads: plugin.downloads || 0,
+                rating: plugin.rating || 0,
+                // Compliance metadata
+                compliance: plugin.compliance || {
+                    compliant: null,
+                    validationErrors: [],
+                    validationWarnings: ['No compliance check performed'],
+                    lastChecked: null
+                }
+            };
+        });
+
+        console.log('[Registry] ✅ Library created with', Object.keys(library).length, 'plugins');
+        console.log('[Registry] Compliance summary:');
+        console.log(`[Registry]   - Compliant: ${compliantCount}`);
+        console.log(`[Registry]   - Non-compliant: ${nonCompliantCount}`);
+        console.log(`[Registry]   - Unknown: ${unknownCount}`);
+
+        return library;
     }
 
     /**
@@ -442,6 +919,82 @@ class RegistryLoader {
     }
 
     /**
+     * Get compliance report for all plugins
+     * @returns {Promise<Object>} Compliance report with statistics and details
+     */
+    async getComplianceReport() {
+        try {
+            const registry = await this.loadRegistry();
+            const report = {
+                summary: {
+                    total: registry.plugins.length,
+                    compliant: 0,
+                    nonCompliant: 0,
+                    unknown: 0
+                },
+                compliantPlugins: [],
+                nonCompliantPlugins: [],
+                unknownPlugins: []
+            };
+
+            registry.plugins.forEach(plugin => {
+                const entry = {
+                    name: plugin.name,
+                    package: plugin.package || plugin.name,
+                    version: plugin.version,
+                    compliance: plugin.compliance
+                };
+
+                if (plugin.compliance) {
+                    if (plugin.compliance.compliant === true) {
+                        report.summary.compliant++;
+                        report.compliantPlugins.push(entry);
+                    } else if (plugin.compliance.compliant === false) {
+                        report.summary.nonCompliant++;
+                        report.nonCompliantPlugins.push(entry);
+                    } else {
+                        report.summary.unknown++;
+                        report.unknownPlugins.push(entry);
+                    }
+                } else {
+                    report.summary.unknown++;
+                    report.unknownPlugins.push(entry);
+                }
+            });
+
+            return report;
+
+        } catch (error) {
+            console.error('[Registry] Error generating compliance report:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Get non-compliant plugins with details
+     * @returns {Promise<Array>} Array of non-compliant plugins with issues
+     */
+    async getNonCompliantPlugins() {
+        try {
+            const registry = await this.loadRegistry();
+            return registry.plugins.filter(plugin =>
+                plugin.compliance && plugin.compliance.compliant === false
+            ).map(plugin => ({
+                name: plugin.name,
+                package: plugin.package || plugin.name,
+                version: plugin.version,
+                issues: plugin.compliance.validationErrors,
+                warnings: plugin.compliance.validationWarnings,
+                packageJsonPath: plugin.packageJsonPath
+            }));
+
+        } catch (error) {
+            console.error('[Registry] Error getting non-compliant plugins:', error);
+            throw error;
+        }
+    }
+
+    /**
      * Fallback registry for development mode
      * Returns hardcoded plugin data when registry is unavailable
      * @returns {Object} Fallback registry
@@ -469,7 +1022,19 @@ class RegistryLoader {
                     main: './dist/index.js',
                     verified: true,
                     downloads: 1500,
-                    rating: 4.5
+                    rating: 4.5,
+                    // Example: compliant plugin with proper peerDependencies
+                    peerDependencies: {
+                        'react': '^16.12.0',
+                        'react-dom': '^16.12.0',
+                        '@material-ui/core': '^4.11.3'
+                    },
+                    compliance: {
+                        compliant: true,
+                        validationErrors: [],
+                        validationWarnings: [],
+                        lastChecked: new Date().toISOString()
+                    }
                 },
                 {
                     name: 'ssh',
@@ -520,7 +1085,25 @@ class RegistryLoader {
                     main: './index.js',
                     verified: false,
                     downloads: 500,
-                    rating: 3.8
+                    rating: 3.8,
+                    // Example: non-compliant plugin with React in dependencies
+                    dependencies: {
+                        'react': '^16.12.0',
+                        'react-dom': '^16.12.0',
+                        '@material-ui/core': '^4.11.3'
+                    },
+                    compliance: {
+                        compliant: false,
+                        validationErrors: [
+                            'React should be in peerDependencies, not dependencies',
+                            'react-dom should be in peerDependencies, not dependencies',
+                            '@material-ui/core should be in peerDependencies, not dependencies'
+                        ],
+                        validationWarnings: [
+                            'Missing React in peerDependencies - plugin may not be React-based'
+                        ],
+                        lastChecked: new Date().toISOString()
+                    }
                 }
             ]
         };

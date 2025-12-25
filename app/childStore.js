@@ -45,6 +45,18 @@ export default function configureStore(routerHistory) {
 
     const store = createStore(rootReducer, initialState, enhancers);
 
+    // Debug: Track pluginLibrary state changes
+    store.subscribe(() => {
+        const state = store.getState();
+        if (state.pluginLibrary !== undefined) {
+            const keys = Object.keys(state.pluginLibrary || {});
+            console.log('[ChildStore] pluginLibrary updated, keys:', keys.length);
+            if (keys.length > 0) {
+                console.log('[ChildStore] Sample keys:', keys.slice(0, 3));
+            }
+        }
+    });
+
     // Subscribe to store changes to detect login
     let lastLoginState = false;
     store.subscribe(() => {
@@ -69,6 +81,22 @@ export default function configureStore(routerHistory) {
             }, 100);
         }
         lastLoginState = isLoggedIn;
+    });
+
+    // CRITICAL FIX: Bypass broken electron-redux v2 with direct IPC
+    // Listen for plugin library sync from main process
+    const { ipcRenderer } = require('electron');
+    ipcRenderer.on('PLUGIN_LIBRARY_SYNC', (event, action) => {
+        console.log('[IPC Handler] Received PLUGIN_LIBRARY_SYNC');
+        console.log('[IPC Handler] Action type:', action.type);
+        console.log('[IPC Handler] Payload keys:', action.payload ? Object.keys(action.payload).length : 'null');
+
+        if (action.type === 'LIBRARY_REPLACE' && action.payload) {
+            console.log('[IPC Handler] Dispatching to renderer store...');
+            const libraryReplaceAction = actionCreators.libraryReplace(action.payload);
+            store.dispatch(libraryReplaceAction);
+            console.log('[IPC Handler] Dispatch complete');
+        }
     });
 
     //console.log('client state:', store.getState());

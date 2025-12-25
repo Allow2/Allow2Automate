@@ -48,6 +48,9 @@ build
 .DS_Store
 *.log
 
+# Development plugins (separate from production)
+dev-plugins/
+
 Allow2Automate_Distribution.provisionprofile
 # localStorage
 store

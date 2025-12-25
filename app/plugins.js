@@ -5,6 +5,7 @@ import {
     sortedPluginSelector
 } from './selectors';
 import { createRegistryLoader } from './registry';
+import { getPluginPath } from './pluginPaths';
 
 var Module = require("module");
 
@@ -13,19 +14,45 @@ module.exports = function(app, store, actions) {
     // Initialize registry loader
     const registryLoader = createRegistryLoader({
         developmentMode: process.env.NODE_ENV === 'development',
-        cacheTTL: 60000 // 1 minute cache
+        cacheTTL: 3600000, // 1 hour cache
+        requestTimeout: 10000 // 10 second network timeout
     });
 
     //
-    // magically insert our node_modules path to plugin module search paths
+    // Configure shared module paths for plugins
+    // This makes React, Material-UI, and other host dependencies available to dynamically loaded plugins
+    // Uses Module.wrap to inject paths into every loaded module
     //
     const reactPath = require.resolve('react');
     const modulesIndex = reactPath.lastIndexOf("node_modules");
     const ourModulesPath = path.join(reactPath.substring(0, modulesIndex), 'node_modules');
-    console.log("injecting ourModulesPath: ", ourModulesPath);
+
+    // Also resolve specific shared dependency paths
+    const reactDomPath = path.dirname(require.resolve('react-dom'));
+    const muiCorePath = path.dirname(require.resolve('@material-ui/core'));
+    const reduxPath = path.dirname(require.resolve('redux'));
+    const reactReduxPath = path.dirname(require.resolve('react-redux'));
+
+    console.log("[Plugins] Injecting shared module paths for plugins:");
+    console.log("  - Base node_modules:", ourModulesPath);
+    console.log("  - React:", reactDomPath);
+    console.log("  - Material-UI:", muiCorePath);
+    console.log("  - Redux:", reduxPath);
+    console.log("  - React-Redux:", reactReduxPath);
+
+    // Inject module paths into every loaded module via Module.wrap
     (function(moduleWrapCopy) {
         Module.wrap = function(script) {
-            script = "module.paths.push('" + ourModulesPath + "');" + script;
+            // Build the path injection script
+            const pathInjectionScript = [
+                `module.paths.push('${ourModulesPath}');`,
+                `module.paths.push('${path.join(reactDomPath, '..')}');`,
+                `module.paths.push('${path.join(muiCorePath, '..', '..')}');`,
+                `module.paths.push('${path.join(reduxPath, '..')}');`,
+                `module.paths.push('${path.join(reactReduxPath, '..')}');`
+            ].join('');
+
+            script = pathInjectionScript + script;
             return moduleWrapCopy(script);
         };
     })(Module.wrap);
@@ -96,11 +123,10 @@ module.exports = function(app, store, actions) {
     }
 
     function initPlugins() {
-        //const userDataPath = (app || remote.app).getPath('userData');
-        const userDataPath = app.getPath('userData');
-        // We'll use the `configName` property to set the file name and path.join to bring it all together as a string
-        app.pluginPath = path.join(userDataPath, "Plugins");
-        console.log("Loading Plugins from " + app.pluginPath);
+        // Use environment-aware plugin path
+        app.pluginPath = getPluginPath(app);
+        console.log("[Plugins] Loading plugins from:", app.pluginPath);
+        console.log("[Plugins] Environment:", process.env.NODE_ENV || 'production');
 
         // should be a network call
         // use https://flight-manual.atom.io/atom-server-side-apis/sections/atom-package-server-api/ as an example
@@ -179,14 +205,23 @@ module.exports = function(app, store, actions) {
     //initPlugins();
 
     /**
-     * Get plugin library from registry
+     * Get plugin library from registry (async/await version)
      * Now uses registry loader for dynamic plugin discovery
+     */
+    plugins.getLibraryAsync = async function() {
+        console.log('[Plugins] Loading library from registry...');
+        const library = await registryLoader.getLibrary();
+        console.log(`[Plugins] ✅ Loaded ${Object.keys(library).length} plugins from registry`);
+        return library;
+    };
+
+    /**
+     * Get plugin library from registry (callback version - deprecated)
+     * Kept for backward compatibility
      */
     plugins.getLibrary = async function(callback) {
         try {
-            console.log('[Plugins] Loading library from registry...');
-            const library = await registryLoader.getLibrary();
-            console.log(`[Plugins] Loaded ${Object.keys(library).length} plugins from registry`);
+            const library = await plugins.getLibraryAsync();
             callback(null, library);
         } catch (error) {
             console.error('[Plugins] Error loading library from registry:', error);
@@ -277,12 +312,18 @@ module.exports = function(app, store, actions) {
 
     plugins.getInstalled = function(callback) {
         let currentState = store.getState().configurations;
-        const installedPlugins = app.epm.list(app.appDataPath, { version: true }).reduce(function(memo, plugin) {
+
+        // Use environment-aware plugin path for listing installed plugins
+        const pluginBasePath = getPluginPath(app);
+        console.log('[Plugins] Scanning for installed plugins in:', pluginBasePath);
+
+        const installedPlugins = app.epm.list(pluginBasePath, { version: true }).reduce(function(memo, plugin) {
             const parts = plugin.split('@');
             const pluginName = parts[0];
             memo[pluginName] = { version: parts[1] };
             try {
-                const fullPath = path.join(app.appDataPath, 'plugIns', pluginName);
+                // Use the pluginBasePath from parent scope
+                const fullPath = path.join(pluginBasePath, pluginName);
                 let jsonString = fs.readFileSync(path.join(fullPath, 'package.json'), 'utf8');
                 //console.log(jsonString);
                 let packageJson = JSON.parse(jsonString);
@@ -290,8 +331,8 @@ module.exports = function(app, store, actions) {
                 packageJson.shortName = packageJson.shortName || pluginName;
                 //packageJson.fullPath = fullpath;
                 memo[pluginName] = packageJson;
-                console.log('loading', pluginName, app.appDataPath);
-                var loadedPlugin = app.epm.load(app.appDataPath, pluginName);
+                console.log('[Plugins] Loading plugin:', pluginName, 'from:', pluginBasePath);
+                var loadedPlugin = app.epm.load(pluginBasePath, pluginName);
                 //console.log(loadedPlugin.plugin);
 
 

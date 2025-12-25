@@ -1,15 +1,48 @@
 import path from 'path';
 import url from 'url';
-import { app, crashReporter, BrowserWindow, Menu, ipcMain } from 'electron';
+import { app, crashReporter, BrowserWindow, Menu, ipcMain, safeStorage } from 'electron';
 import allActions from './actions';
 import configureStore from './mainStore';
 import { allow2Request } from './util';
 import { bindActionCreators } from 'redux';
+import { getPluginPath, getPathByName, getPluginPathInfo, isDevelopmentMode } from './pluginPaths';
 const async = require('async');
 var allow2 = require('allow2');
 var moment = require('moment-timezone');
 app.epm = require('electron-plugin-manager');
 const appConfig = require('electron-settings');
+
+//
+// Configure shared module paths for plugins
+// This makes React, Material-UI, and other host dependencies available to plugins
+//
+const Module = require('module');
+
+// Get paths to shared dependencies
+const reactPath = path.dirname(require.resolve('react'));
+const reactDomPath = path.dirname(require.resolve('react-dom'));
+const muiCorePath = path.dirname(require.resolve('@material-ui/core'));
+const muiIconsPath = path.dirname(require.resolve('@material-ui/icons'));
+const reduxPath = path.dirname(require.resolve('redux'));
+const reactReduxPath = path.dirname(require.resolve('react-redux'));
+
+// Add shared module paths to Node's resolution paths
+const sharedModulePaths = [
+    path.join(reactPath, '..'),        // node_modules/react
+    path.join(reactDomPath, '..'),     // node_modules/react-dom
+    path.join(muiCorePath, '..', '..'), // node_modules/@material-ui (parent of 'core')
+    path.join(reduxPath, '..'),        // node_modules/redux
+    path.join(reactReduxPath, '..')    // node_modules/react-redux
+];
+
+// Inject shared paths into module resolution
+sharedModulePaths.forEach(modulePath => {
+    if (!Module.globalPaths.includes(modulePath)) {
+        Module.globalPaths.push(modulePath);
+    }
+});
+
+console.log('[Main] Configured shared module paths for plugins:', sharedModulePaths);
 
 // Make React faster
 //const { resourcePath, devMode } = getWindowLoadSettings();
@@ -17,7 +50,7 @@ const devMode = false;
 if (!devMode && process.env.NODE_ENV == null) {
     process.env.NODE_ENV = 'production';
 }
-const isDevelopment = (process.env.NODE_ENV === 'development');
+const isDevelopment = isDevelopmentMode();
 
 let mainWindow = null;
 let forceQuit = false;
@@ -26,6 +59,16 @@ const store = configureStore();
 const actions = bindActionCreators(allActions, store.dispatch);
 
 app.appDataPath = path.join(app.getPath('appData'), 'allow2automate');
+
+// Log plugin path configuration on startup
+const pluginPathInfo = getPluginPathInfo(app);
+console.log('[Main] ========== PLUGIN PATH CONFIGURATION ==========');
+console.log('[Main] Environment:', pluginPathInfo.environment);
+console.log('[Main] Platform:', pluginPathInfo.platform);
+console.log('[Main] Current plugin path:', pluginPathInfo.currentPath);
+console.log('[Main] Production path:', pluginPathInfo.productionPath);
+console.log('[Main] Development path:', pluginPathInfo.developmentPath);
+console.log('[Main] ====================================================');
 
 //app.ipcMain = ipcMain;
 app.epm.manager(ipcMain);
@@ -52,7 +95,77 @@ app.ipcHandle = (channel, handler) => {
 };
 
 ipcMain.on('getPath', (event, name) => {
-	event.returnValue = app.getPath(name || "appData");
+	// Use plugin path utility for environment-aware path resolution
+	event.returnValue = getPathByName(app, name || "appData");
+});
+
+// Secure credential storage handlers using safeStorage
+// This works across Windows (DPAPI), macOS (Keychain), and Linux (libsecret)
+ipcMain.handle('saveCredentials', async (event, credentials) => {
+    try {
+        if (!safeStorage.isEncryptionAvailable()) {
+            console.warn('safeStorage encryption not available, using electron-settings fallback');
+            // Fallback to electron-settings (less secure but works everywhere)
+            await appConfig.set('savedCredentials', credentials);
+            return { success: true };
+        }
+
+        // Encrypt credentials using platform-specific secure storage
+        const encryptedEmail = safeStorage.encryptString(credentials.email);
+        const encryptedPassword = safeStorage.encryptString(credentials.password);
+
+        // Store encrypted data
+        await appConfig.set('savedCredentials', {
+            email: encryptedEmail.toString('base64'),
+            password: encryptedPassword.toString('base64'),
+            encrypted: true
+        });
+
+        return { success: true };
+    } catch (error) {
+        console.error('Error saving credentials:', error);
+        return { success: false, error: error.message };
+    }
+});
+
+ipcMain.handle('loadCredentials', async (event) => {
+    try {
+        const saved = await appConfig.get('savedCredentials');
+
+        if (!saved) {
+            return null;
+        }
+
+        // Check if credentials are encrypted
+        if (saved.encrypted && safeStorage.isEncryptionAvailable()) {
+            const emailBuffer = Buffer.from(saved.email, 'base64');
+            const passwordBuffer = Buffer.from(saved.password, 'base64');
+
+            return {
+                email: safeStorage.decryptString(emailBuffer),
+                password: safeStorage.decryptString(passwordBuffer)
+            };
+        }
+
+        // Return unencrypted credentials from fallback storage
+        return {
+            email: saved.email || '',
+            password: saved.password || ''
+        };
+    } catch (error) {
+        console.error('Error loading credentials:', error);
+        return null;
+    }
+});
+
+ipcMain.handle('clearCredentials', async (event) => {
+    try {
+        await appConfig.unset('savedCredentials');
+        return { success: true };
+    } catch (error) {
+        console.error('Error clearing credentials:', error);
+        return { success: false, error: error.message };
+    }
 });
 
 actions.deviceInit();
@@ -85,16 +198,79 @@ function migrateWemo() {
 migrateWemo();
 
 //
-// load plugins
+// load plugins - OPTIMIZED FOR INSTANT MARKETPLACE READINESS
+// Uses stale-while-revalidate pattern: show cached data immediately, update in background
 //
-plugins.getLibrary((err, pluginLibrary) => {
-    // console.log('pluginLibrary', pluginLibrary);
-    if (err) {
-        console.log('plugins.getLibrary', err);
-        return;
+(async function loadPluginLibrary() {
+    const loadStartTime = Date.now();
+    console.log('[Main] ⚡ Starting optimized plugin library load...');
+
+    // Dispatch loading start action
+    actions.registryLoadStart();
+
+    try {
+        // This is now non-blocking - uses cache first, then updates in background
+        const pluginLibrary = await plugins.getLibraryAsync();
+        const loadDuration = Date.now() - loadStartTime;
+
+        console.log(`[Main] ✅ Loaded ${Object.keys(pluginLibrary).length} plugins in ${loadDuration}ms`);
+        console.log('[Main] Plugin library keys:', Object.keys(pluginLibrary).slice(0, 5), '...');
+
+        // Update plugin library
+        actions.libraryReplace(pluginLibrary);
+
+        // Dispatch success with cache metadata
+        actions.registryLoadSuccess({
+            isFromCache: pluginLibrary._fromCache || false,
+            cacheTimestamp: pluginLibrary._cacheTimestamp || null
+        });
+
+        // Verify state update (non-blocking)
+        setTimeout(() => {
+            const currentState = store.getState();
+            console.log('[Main] State verification - pluginLibrary keys:',
+                currentState.pluginLibrary ? Object.keys(currentState.pluginLibrary).length : 'undefined');
+            console.log('[Main] Registry loading state:', currentState.marketplace && currentState.marketplace.registryLoading);
+
+            // WORKAROUND: Force re-dispatch to ensure renderer gets the plugins
+            // This handles the electron-redux v2 sync timing issue
+            console.log('[Main] Force re-dispatching LIBRARY_REPLACE to ensure renderer sync...');
+            actions.libraryReplace(currentState.pluginLibrary);
+        }, 500);
+    } catch (err) {
+        const loadDuration = Date.now() - loadStartTime;
+        console.error(`[Main] ❌ Error loading plugin library (${loadDuration}ms):`, err.message);
+
+        // Dispatch error action
+        actions.registryLoadFailure({
+            errorMessage: err.message,
+            errorCode: err.code,
+            timestamp: Date.now()
+        });
+
+        console.log('[Main] Using fallback plugin library');
+        // Use fallback library if registry fails
+        const fallbackLibrary = {
+            '@allow2/allow2automate-wemo': {
+                name: '@allow2/allow2automate-wemo',
+                shortName: 'wemo',
+                publisher: 'allow2',
+                description: 'Control WeMo smart devices',
+                category: 'iot',
+                releases: { latest: '0.0.4' }
+            },
+            '@allow2/allow2automate-ssh': {
+                name: '@allow2/allow2automate-ssh',
+                shortName: 'ssh',
+                publisher: 'allow2',
+                description: 'SSH device control',
+                category: 'connectivity',
+                releases: { latest: '0.0.2' }
+            }
+        };
+        actions.libraryReplace(fallbackLibrary);
     }
-    actions.libraryReplace(pluginLibrary);
-});
+})();
 
 plugins.getInstalled((err, installedPlugins) => {
     //console.log('installedPlugins', installedPlugins);
@@ -344,6 +520,23 @@ app.on('ready', async () => {
         });
 
         mainWindow.webContents.on('did-finish-load', () => {
+            // CRITICAL FIX: electron-redux v2 is completely broken for forwarding actions
+            // Bypass it entirely and send plugin library directly via IPC
+            setTimeout(() => {
+                const currentState = store.getState();
+                if (currentState.pluginLibrary && Object.keys(currentState.pluginLibrary).length > 0) {
+                    console.log('[Main] Renderer ready - sending plugin library via IPC with', Object.keys(currentState.pluginLibrary).length, 'plugins');
+
+                    // Send directly to renderer via IPC
+                    if (mainWindow && mainWindow.webContents) {
+                        mainWindow.webContents.send('PLUGIN_LIBRARY_SYNC', {
+                            type: 'LIBRARY_REPLACE',
+                            payload: currentState.pluginLibrary
+                        });
+                    }
+                }
+            }, 1000); // Give renderer 1 second to fully initialize
+
             // Handle window logic properly on macOS:
             // 1. App should not terminate if window has been closed
             // 2. Click on icon in dock should re-open the window

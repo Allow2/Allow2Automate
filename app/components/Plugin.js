@@ -17,23 +17,42 @@ export default class Login extends Component {
         super(...args);
 
         //
-        // magically insert our node_modules path to plugin module search paths
+        // Configure shared module paths for plugins in renderer process
+        // This makes React, Material-UI, and other host dependencies available to dynamically loaded plugins
         //
         const reactPath = require.resolve('react');
         const modulesIndex = reactPath.lastIndexOf("node_modules");
         const ourModulesPath = path.join(reactPath.substring(0, modulesIndex), 'node_modules');
-        //console.log("injecting ourModulesPath: ", ourModulesPath);
+
+        // Also resolve specific shared dependency paths
+        const reactDomPath = path.dirname(require.resolve('react-dom'));
+        const muiCorePath = path.dirname(require.resolve('@material-ui/core'));
+        const reduxPath = path.dirname(require.resolve('redux'));
+        const reactReduxPath = path.dirname(require.resolve('react-redux'));
+
+        console.log("[Plugin Component] Injecting shared module paths for:", this.props.plugin.name);
+
+        // Inject module paths into loaded plugin modules via Module.wrap
         (function(moduleWrapCopy) {
             Module.wrap = function(script) {
-                script = "module.paths.push('" + ourModulesPath + "');" + script;
+                // Build the path injection script
+                const pathInjectionScript = [
+                    `module.paths.push('${ourModulesPath}');`,
+                    `module.paths.push('${path.join(reactDomPath, '..')}');`,
+                    `module.paths.push('${path.join(muiCorePath, '..', '..')}');`,
+                    `module.paths.push('${path.join(reduxPath, '..')}');`,
+                    `module.paths.push('${path.join(reactReduxPath, '..')}');`
+                ].join('');
+
+                script = pathInjectionScript + script;
                 return moduleWrapCopy(script);
             };
         })(Module.wrap);
 
-        const appPath = ipcRenderer.sendSync('getPath', 'appData');
-	    const dir = path.join(appPath, 'allow2automate', 'plugins');
+        // Get environment-aware plugin path from main process
+        const pluginsDir = ipcRenderer.sendSync('getPath', 'plugins');
 
-	    const pluginPath = path.join(dir, this.props.plugin.name);
+	    const pluginPath = path.join(pluginsDir, this.props.plugin.name);
         this.plugin = require(pluginPath);
         console.log('gui', this.props.plugin.name, this.plugin);
         // if (plugin.default) {

@@ -28,5 +28,10 @@ export default {
     // Marketplace data refresh
     refreshMarketplace: createAction('MARKETPLACE_REFRESH'),
     marketplaceRefreshSuccess: createAction('MARKETPLACE_REFRESH_SUCCESS'),
-    marketplaceRefreshFailure: createAction('MARKETPLACE_REFRESH_FAILURE')
+    marketplaceRefreshFailure: createAction('MARKETPLACE_REFRESH_FAILURE'),
+
+    // Registry loading state
+    registryLoadStart: createAction('MARKETPLACE_REGISTRY_LOAD_START'),
+    registryLoadSuccess: createAction('MARKETPLACE_REGISTRY_LOAD_SUCCESS'),
+    registryLoadFailure: createAction('MARKETPLACE_REGISTRY_LOAD_FAILURE')
 };

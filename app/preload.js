@@ -9,6 +9,42 @@ window.getPath = (name) => {
     return ipcRenderer.sendSync('getPath', name);
 };
 
+//
+// Configure shared module paths for plugins in renderer process
+// This ensures plugins loaded in the renderer can access host dependencies
+//
+const Module = require('module');
+
+// Get paths to shared dependencies
+try {
+    const reactPath = path.dirname(require.resolve('react'));
+    const reactDomPath = path.dirname(require.resolve('react-dom'));
+    const muiCorePath = path.dirname(require.resolve('@material-ui/core'));
+    const muiIconsPath = path.dirname(require.resolve('@material-ui/icons'));
+    const reduxPath = path.dirname(require.resolve('redux'));
+    const reactReduxPath = path.dirname(require.resolve('react-redux'));
+
+    // Add shared module paths to Node's resolution paths
+    const sharedModulePaths = [
+        path.join(reactPath, '..'),        // node_modules/react
+        path.join(reactDomPath, '..'),     // node_modules/react-dom
+        path.join(muiCorePath, '..', '..'), // node_modules/@material-ui (parent of 'core')
+        path.join(reduxPath, '..'),        // node_modules/redux
+        path.join(reactReduxPath, '..')    // node_modules/react-redux
+    ];
+
+    // Inject shared paths into module resolution
+    sharedModulePaths.forEach(modulePath => {
+        if (!Module.globalPaths.includes(modulePath)) {
+            Module.globalPaths.push(modulePath);
+        }
+    });
+
+    console.log('[Preload] Configured shared module paths for plugins:', sharedModulePaths);
+} catch (error) {
+    console.error('[Preload] Error configuring shared module paths:', error);
+}
+
 // Setup electron-redux bridge for state synchronization
 const IPCEvents = {
     INIT_STATE: '@@ELECTRON_REDUX/INIT_STATE',

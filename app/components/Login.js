@@ -2,12 +2,16 @@ import React, { Component } from 'react';
 import PropTypes from 'prop-types';
 import { allow2Login } from '../util';
 import Dialogs from 'dialogs';
+import { ipcRenderer } from 'electron';
 //import RaisedButton from 'material-ui/RaisedButton';
 import {
     Button,
     TextField,
     Avatar,
-    AppBar
+    AppBar,
+    FormControlLabel,
+    Checkbox,
+    CircularProgress
 } from '@material-ui/core';
 import Person from '@material-ui/icons/Person';
 
@@ -21,33 +25,88 @@ export default class Login extends Component {
 
     state = {
         email: '',
-        password: ''
+        password: '',
+        rememberMe: false,
+        isLoadingCredentials: true,
+        isLoggingIn: false
     };
 
     emailRef = React.createRef();
     passwordRef = React.createRef();
 
+    componentDidMount() {
+        // Load saved credentials if they exist
+        ipcRenderer.invoke('loadCredentials').then(credentials => {
+            if (credentials) {
+                this.setState({
+                    email: credentials.email || '',
+                    password: credentials.password || '',
+                    rememberMe: true,
+                    isLoadingCredentials: false
+                });
+            } else {
+                this.setState({ isLoadingCredentials: false });
+            }
+        }).catch(err => {
+            console.error('Error loading saved credentials:', err);
+            this.setState({ isLoadingCredentials: false });
+        });
+    }
+
     handleLogin = () => {
+        const { email, password, rememberMe } = this.state;
+
+        // Set loading state
+        this.setState({ isLoggingIn: true });
+
         allow2Login({
-            email: this.state.email,
-            pass: this.state.password
-        }, function (error, response, body) {
+            email,
+            pass: password
+        }, (error, response, body) => {
+            // Reset loading state on error
+            this.setState({ isLoggingIn: false });
+
             if (error) {
-                return dialogs.alert(error.toString());
+                // Enhanced error handling with network-specific messages
+                const errorMessage = error.code === 'ENOTFOUND' || error.code === 'EAI_AGAIN'
+                    ? 'Unable to connect to Allow2 servers. Please check your internet connection.'
+                    : error.code === 'ETIMEDOUT'
+                    ? 'Connection to Allow2 servers timed out. Please try again.'
+                    : error.toString();
+                return dialogs.alert(errorMessage);
             }
             if (!response) {
-                return dialogs.alert('Invalid Response');
+                return dialogs.alert('Invalid response from server. Please check your internet connection and try again.');
             }
             if (body && body.message) {
                 return dialogs.alert(body.message);
             }
-            return dialogs.alert('Oops');
-        }, this.props.onLogin);
+            return dialogs.alert('Login failed. Please check your credentials and try again.');
+        }, (loginData) => {
+            // On successful login, save or clear credentials based on rememberMe
+            if (rememberMe) {
+                ipcRenderer.invoke('saveCredentials', { email, password })
+                    .catch(err => console.error('Error saving credentials:', err));
+            } else {
+                ipcRenderer.invoke('clearCredentials')
+                    .catch(err => console.error('Error clearing credentials:', err));
+            }
+
+            // Reset loading state on success
+            this.setState({ isLoggingIn: false });
+            this.props.onLogin(loginData);
+        });
     };
 
     handleChange = (e) => {
         this.setState({
             [e.target.name]: e.target.value
+        });
+    };
+
+    handleRememberMeChange = (e) => {
+        this.setState({
+            rememberMe: e.target.checked
         });
     };
 
@@ -126,12 +185,31 @@ export default class Login extends Component {
                     inputProps={{
                         autoComplete: 'current-password'
                     }} />
+                <FormControlLabel
+                    control={
+                        <Checkbox
+                            checked={this.state.rememberMe}
+                            onChange={this.handleRememberMeChange}
+                            color="primary"
+                        />
+                    }
+                    label="Remember Me"
+                    style={{marginTop: 10}}
+                />
                 <Button
                     variant="contained"
                     color="primary"
                     style={{marginTop: 20}}
-                    onClick={this.handleLogin}>
-                    Log In
+                    onClick={this.handleLogin}
+                    disabled={this.state.isLoadingCredentials || this.state.isLoggingIn}>
+                    {this.state.isLoggingIn ? (
+                        <span>
+                            <CircularProgress size={24} color="inherit" style={{marginRight: 10}} />
+                            Logging In...
+                        </span>
+                    ) : (
+                        'Log In'
+                    )}
                 </Button>
             </div>
         );
