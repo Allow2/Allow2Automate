@@ -7,6 +7,7 @@ import installedPluginsActions from './installedPlugins';
 import marketplaceActions from './marketplace';
 import pairingActions from './pairing';
 import pluginLibraryActions from './pluginLibrary';
+import pluginStatusActions from './pluginStatus';
 import userActions from './user';
 import utilActions from './util';
 
@@ -18,6 +19,7 @@ export default {
     ...marketplaceActions,
     ...pairingActions,
     ...pluginLibraryActions,
+    ...pluginStatusActions,
     ...userActions,
     ...utilActions,
     newData: createAction('NEW_DATA')

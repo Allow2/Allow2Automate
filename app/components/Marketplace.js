@@ -146,9 +146,21 @@ export default class Marketplace extends Component {
             });
 
             if (error) {
-                dialogs.alert(`Failed to install ${pluginName}: ${error.toString()}`);
+                // Emit error toast event via window event
+                window.dispatchEvent(new CustomEvent('show-toast', {
+                    detail: {
+                        message: `Failed to install ${pluginName}: ${error.toString()}`,
+                        severity: 'error'
+                    }
+                }));
             } else {
-                dialogs.alert(`${pluginName} installed successfully!`);
+                // Emit success toast event via window event
+                window.dispatchEvent(new CustomEvent('show-toast', {
+                    detail: {
+                        message: `${pluginName} installed successfully!`,
+                        severity: 'success'
+                    }
+                }));
             }
         });
     };
@@ -167,6 +179,9 @@ export default class Marketplace extends Component {
         }
 
         return Object.entries(pluginLibrary).filter(([name, plugin]) => {
+            // Skip null/undefined plugins
+            if (!plugin) return false;
+
             const matchesSearch = searchQuery === '' ||
                 name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 (plugin.description && plugin.description.toLowerCase().includes(searchQuery.toLowerCase()));
@@ -187,7 +202,7 @@ export default class Marketplace extends Component {
 
         const categories = new Set(['all']);
         Object.values(pluginLibrary).forEach(plugin => {
-            if (plugin.category) {
+            if (plugin && plugin.category) {
                 categories.add(plugin.category);
             }
         });

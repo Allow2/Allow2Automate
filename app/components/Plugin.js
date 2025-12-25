@@ -54,6 +54,15 @@ export default class Login extends Component {
 
 	    // Plugins are installed via npm into node_modules subdirectory
 	    const pluginPath = path.join(pluginsDir, 'node_modules', this.props.plugin.name);
+
+        // Provide global persist stub for backward compatibility
+        // Some older plugins may reference persist at module scope
+        if (!global.persist) {
+            global.persist = function(key, value) {
+                console.warn('[Plugin] Legacy global persist() called. Plugin should use props.persist instead.');
+            };
+        }
+
         this.plugin = require(pluginPath);
         console.log('gui', this.props.plugin.name, this.plugin);
         // if (plugin.default) {
@@ -182,6 +191,24 @@ export default class Login extends Component {
             onUpdateConfiguration(pluginName, newConfiguration);
         };
 
+        // Plugin status update interface
+        const statusUpdate = function(statusData) {
+            console.log('[Plugin] Status update from', pluginName, statusData);
+            ipcRenderer.send(`${pluginName}.status.update`, statusData);
+        };
+
+        // Plugin data persistence interface (backward compatibility)
+        const persist = function(key, value) {
+            console.log('[Plugin] Persist data from', pluginName, key, value);
+            // For backward compatibility, persist data via configuration
+            const currentConfig = plugin.configuration || {};
+            const updatedConfig = {
+                ...currentConfig,
+                [key]: value
+            };
+            configurationUpdate(updatedConfig);
+        };
+
 
         return (
             <TabContent
@@ -193,6 +220,8 @@ export default class Login extends Component {
                 // remote={remote}
                 ipcRenderer={ipcRestricted}
                 configurationUpdate={configurationUpdate}
+                statusUpdate={statusUpdate}
+                persist={persist}
                 assign={this.assign.bind(this)}
                 allow2={{
                     avatarURL: allow2AvatarURL

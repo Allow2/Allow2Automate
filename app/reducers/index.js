@@ -5,6 +5,7 @@ import installedPlugins from './installedPlugins';
 import marketplace from './marketplace';
 import pairings from './pairings';
 import pluginLibrary from './pluginLibrary';
+import pluginStatus from './pluginStatus';
 import user from './user';
 import util from './util';
 
@@ -16,6 +17,7 @@ export default {
     marketplace,
     pairings,
     pluginLibrary,
+    pluginStatus,
     user,
     util
 };

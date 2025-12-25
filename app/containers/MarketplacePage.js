@@ -120,6 +120,50 @@ const mapDispatchToProps = (dispatch) => {
                         }
                     }
 
+                    // Validate package.json compliance AFTER installation
+                    const path = require('path');
+                    const fs = require('fs');
+
+                    // Check both scoped and unscoped locations
+                    const scopedPath = path.join(pluginsDir, 'node_modules', pluginName, 'package.json');
+                    const unscopedName = pluginName.replace(/^@[^/]+\//, '');
+                    const unscopedPath = path.join(pluginsDir, 'node_modules', unscopedName, 'package.json');
+
+                    let installedPackageJson;
+                    let actualInstalledPath;
+
+                    if (fs.existsSync(scopedPath)) {
+                        installedPackageJson = JSON.parse(fs.readFileSync(scopedPath, 'utf8'));
+                        actualInstalledPath = scopedPath;
+                    } else if (fs.existsSync(unscopedPath)) {
+                        installedPackageJson = JSON.parse(fs.readFileSync(unscopedPath, 'utf8'));
+                        actualInstalledPath = unscopedPath;
+                    } else {
+                        throw new Error('Plugin package.json not found after installation');
+                    }
+
+                    console.log('[MarketplacePage] Validating package.json at:', actualInstalledPath);
+                    console.log('[MarketplacePage] Expected name:', pluginName);
+                    console.log('[MarketplacePage] Actual name:', installedPackageJson.name);
+
+                    // Compliance check: package name must match expected scoped name
+                    if (installedPackageJson.name !== pluginName) {
+                        // Uninstall the non-compliant plugin
+                        const uninstallCommand = `npm uninstall --prefix "${pluginsDir}" "${installedPackageJson.name}"`;
+                        console.warn('[MarketplacePage] ⚠️ Non-compliant plugin, uninstalling:', uninstallCommand);
+
+                        exec(uninstallCommand, () => {
+                            console.log('[MarketplacePage] Non-compliant plugin removed');
+                        });
+
+                        throw new Error(
+                            `Plugin is not compliant. Expected package name "${pluginName}" but got "${installedPackageJson.name}". ` +
+                            `The plugin repository must update their package.json to use the scoped name.`
+                        );
+                    }
+
+                    console.log('[MarketplacePage] ✅ Plugin is compliant');
+
                     // Add to installed plugins
                     dispatch(actions.installedPluginUpdate({
                         [pluginName]: {

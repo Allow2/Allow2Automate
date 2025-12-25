@@ -328,7 +328,20 @@ module.exports = function(app, store, actions) {
                 //console.log(jsonString);
                 let packageJson = JSON.parse(jsonString);
                 packageJson.name = pluginName;
-                packageJson.shortName = packageJson.shortName || pluginName;
+
+                // Extract short name from package name
+                // @allow2/allow2automate-wemo -> wemo
+                // @allow2/allow2automate-ssh -> ssh
+                const extractShortName = (name) => {
+                    if (!name) return name;
+                    // Check if package.json already has a shortName
+                    if (packageJson.shortName) return packageJson.shortName;
+                    // Extract from @allow2/allow2automate-<shortname>
+                    const match = name.match(/allow2automate-(.+)$/);
+                    return match ? match[1] : name;
+                };
+
+                packageJson.shortName = extractShortName(pluginName);
                 //packageJson.fullPath = fullpath;
                 memo[pluginName] = packageJson;
                 console.log('[Plugins] Loading plugin:', pluginName, 'from:', pluginBasePath);
@@ -356,10 +369,47 @@ module.exports = function(app, store, actions) {
                     store.save();
                 };
 
+                // Plugin status update interface
+                const statusUpdate = function(statusData) {
+                    console.log('[Plugins] Status update from', pluginName, ':', statusData.status);
+
+                    // Validate status data
+                    const validStatuses = ['unconfigured', 'configured', 'connected',
+                                          'disconnected', 'error', 'warning'];
+                    if (!validStatuses.includes(statusData.status)) {
+                        console.warn('[Plugins] Invalid status for', pluginName, ':', statusData.status);
+                        return;
+                    }
+
+                    // Dispatch Redux action to update status
+                    actions.pluginStatusUpdate(pluginName, {
+                        status: statusData.status,
+                        message: statusData.message || '',
+                        timestamp: statusData.timestamp || Date.now(),
+                        details: statusData.details || {}
+                    });
+
+                    // Persist to store
+                    store.save();
+                };
+
                 const installedPlugin = loadedPlugin.plugin({
                     isMain: true,
 	                ipcMain: ipcRestricted,
-                    configurationUpdate: configurationUpdate
+                    configurationUpdate: configurationUpdate,
+                    statusUpdate: statusUpdate
+                });
+
+                // Initialize plugin with unconfigured status
+                statusUpdate({
+                    status: 'unconfigured',
+                    message: 'Plugin loaded, awaiting configuration'
+                });
+
+                // Register IPC handler for status updates from renderer
+                const { ipcMain } = require('electron');
+                ipcMain.on(`${pluginName}.status.update`, (event, statusData) => {
+                    statusUpdate(statusData);
                 });
 
                 let currentPluginState = currentState[pluginName];
