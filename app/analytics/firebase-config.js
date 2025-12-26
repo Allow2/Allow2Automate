@@ -9,11 +9,33 @@ if (typeof window === 'undefined') {
   throw new Error('firebase-config.js should only be imported in renderer process');
 }
 
-import * as firebaseAppModule from 'firebase/app';
-import * as firebaseAnalytics from 'firebase/analytics';
+// CRITICAL FIX: Use dynamic import with null guards to prevent destructuring crashes
+let initializeApp, getAnalytics, setUserId, setUserProperties, logEvent, isSupported;
 
-const { initializeApp } = firebaseAppModule;
-const { getAnalytics, setUserId, setUserProperties, logEvent, isSupported } = firebaseAnalytics;
+try {
+  // Use require instead of ES6 import to avoid hoisting issues
+  const firebaseAppModule = require('firebase/app');
+  const firebaseAnalyticsModule = require('firebase/analytics');
+
+  // Safe destructuring with null guards
+  if (firebaseAppModule) {
+    initializeApp = firebaseAppModule.initializeApp;
+  }
+
+  if (firebaseAnalyticsModule) {
+    getAnalytics = firebaseAnalyticsModule.getAnalytics;
+    setUserId = firebaseAnalyticsModule.setUserId;
+    setUserProperties = firebaseAnalyticsModule.setUserProperties;
+    logEvent = firebaseAnalyticsModule.logEvent;
+    isSupported = firebaseAnalyticsModule.isSupported;
+  }
+
+  if (!initializeApp || !getAnalytics) {
+    console.error('[Firebase] Failed to load required Firebase modules');
+  }
+} catch (err) {
+  console.error('[Firebase] Error loading Firebase modules:', err);
+}
 
 const firebaseConfig = {
   apiKey: "AIzaSyBi41Bd-5rwZaVbzuXwCDBu9pB-TcIatYo",
@@ -26,20 +48,35 @@ const firebaseConfig = {
   measurementId: "G-QN8ZM81FHJ"
 };
 
-// Initialize Firebase (only in renderer)
-const firebaseApp = initializeApp(firebaseConfig);
+// Initialize Firebase (only in renderer) with null guards
+let firebaseApp = null;
 let analytics = null;
 
-// Initialize analytics only if supported
-isSupported().then(supported => {
-  if (supported) {
-    analytics = getAnalytics(firebaseApp);
-    console.log('[Firebase] Analytics initialized successfully');
-  } else {
-    console.warn('[Firebase] Analytics not supported in this environment');
+if (initializeApp) {
+  try {
+    firebaseApp = initializeApp(firebaseConfig);
+    console.log('[Firebase] App initialized successfully');
+
+    // Initialize analytics only if supported
+    if (isSupported && getAnalytics) {
+      isSupported().then(supported => {
+        if (supported) {
+          analytics = getAnalytics(firebaseApp);
+          console.log('[Firebase] Analytics initialized successfully');
+        } else {
+          console.warn('[Firebase] Analytics not supported in this environment');
+        }
+      }).catch(err => {
+        console.error('[Firebase] Analytics initialization error:', err);
+      });
+    } else {
+      console.warn('[Firebase] Analytics functions not loaded');
+    }
+  } catch (err) {
+    console.error('[Firebase] Failed to initialize Firebase:', err);
   }
-}).catch(err => {
-  console.error('[Firebase] Analytics initialization error:', err);
-});
+} else {
+  console.error('[Firebase] initializeApp function not loaded');
+}
 
 export { analytics, firebaseApp, setUserId, setUserProperties, logEvent };

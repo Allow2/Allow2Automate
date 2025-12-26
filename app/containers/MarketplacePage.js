@@ -2,7 +2,6 @@ import { connect } from 'react-redux';
 import { bindActionCreators } from 'redux';
 import Marketplace from '../components/Marketplace';
 import actions from '../actions';
-import Analytics from '../analytics';
 
 const mapStateToProps = (state, ownProps) => {
     console.log('[MarketplacePage] mapStateToProps called');
@@ -181,16 +180,6 @@ const mapDispatchToProps = (dispatch) => {
                     dispatch(actions.setLoading(false));
 
                     console.log('[MarketplacePage] ✅ Plugin installed successfully');
-
-                    // Track plugin installation from marketplace
-                    Analytics.trackPluginInstall({
-                        id: pluginName,
-                        name: plugin.shortName || plugin.name || pluginName,
-                        version: plugin.releases && plugin.releases.latest,
-                        author: plugin.publisher
-                    }, 'marketplace').catch(err => {
-                        console.warn('[Analytics] Failed to track marketplace install:', err);
-                    });
 
                     if (callback) {
                         callback(null);

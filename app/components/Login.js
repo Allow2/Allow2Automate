@@ -3,7 +3,6 @@ import PropTypes from 'prop-types';
 import { allow2Login } from '../util';
 import Dialogs from 'dialogs';
 import { ipcRenderer } from 'electron';
-import Analytics from '../analytics';
 //import RaisedButton from 'material-ui/RaisedButton';
 import {
     Button,
@@ -15,6 +14,7 @@ import {
     CircularProgress
 } from '@material-ui/core';
 import Person from '@material-ui/icons/Person';
+import Analytics from '../analytics';
 
 var dialogs = Dialogs({});
 
@@ -36,6 +36,9 @@ export default class Login extends Component {
     passwordRef = React.createRef();
 
     componentDidMount() {
+        // Track screen view
+        Analytics.trackScreenView('login');
+
         // Load saved credentials if they exist
         ipcRenderer.invoke('loadCredentials').then(credentials => {
             if (credentials) {
@@ -84,6 +87,10 @@ export default class Login extends Component {
             }
             return dialogs.alert('Login failed. Please check your credentials and try again.');
         }, (loginData) => {
+            // Track successful login
+            Analytics.trackLogin('allow2');
+            Analytics.setUserId(loginData.userId || email);
+
             // On successful login, save or clear credentials based on rememberMe
             if (rememberMe) {
                 ipcRenderer.invoke('saveCredentials', { email, password })
@@ -91,14 +98,6 @@ export default class Login extends Component {
             } else {
                 ipcRenderer.invoke('clearCredentials')
                     .catch(err => console.error('Error clearing credentials:', err));
-            }
-
-            // Track successful login - Initialize analytics with user ID
-            if (loginData && loginData.userId) {
-                Analytics.initialize(loginData.userId.toString(), {
-                    user_email: email,
-                    login_method: 'email'
-                });
             }
 
             // Reset loading state on success

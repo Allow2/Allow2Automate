@@ -12,15 +12,15 @@ import userActions from './user';
 import utilActions from './util';
 
 export default {
-    ...(childActions || {}),
-    ...(configurationActions || {}),
-    ...(deviceActions || {}),
-    ...(installedPluginsActions || {}),
-    ...(marketplaceActions || {}),
-    ...(pairingActions || {}),
-    ...(pluginLibraryActions || {}),
-    ...(pluginStatusActions || {}),
-    ...(userActions || {}),
-    ...(utilActions || {}),
+    ...childActions,
+    ...configurationActions,
+    ...deviceActions,
+    ...installedPluginsActions,
+    ...marketplaceActions,
+    ...pairingActions,
+    ...pluginLibraryActions,
+    ...pluginStatusActions,
+    ...userActions,
+    ...utilActions,
     newData: createAction('NEW_DATA')
 };

@@ -26,36 +26,13 @@ If the problem cannot be reliably reproduced, the issue will be marked as `Not e
 If the problem is not related to request the issue will be marked as `Help (please use Stackoverflow)`.
 
 
-## Analytics Integration (MANDATORY)
-
-All new features MUST include Firebase Analytics tracking. See [Analytics Integration Guide](docs/ANALYTICS_INTEGRATION_GUIDE.md) for details.
-
-**No PR will be merged without proper analytics integration.**
-
-Quick requirements:
-- [ ] Analytics import added to relevant files
-- [ ] Tracking methods called appropriately at user interaction points
-- [ ] ESLint analytics rules pass
-- [ ] Pre-commit hook passes
-- [ ] Events verified in Firebase DebugView (during testing)
-- [ ] No PII (Personally Identifiable Information) in event parameters
-
-For complete integration patterns, see:
-- [Analytics Integration Guide](docs/ANALYTICS_INTEGRATION_GUIDE.md) - Comprehensive patterns and examples
-- [Analytics Event Catalog](docs/ANALYTICS_EVENT_CATALOG.md) - Complete event reference
-- [Analytics Quick Start](docs/analytics/README.md) - Architecture and common gotchas
-
----
-
 ## Submitting a Pull Request
 
 1. In almost all of the cases your PR **needs tests**. Make sure you have any.
-2. **Analytics integration is MANDATORY** for all new features (see above).
-3. Run `npm test` locally. Fix any errors before pushing to GitHub.
-4. Run `npm run lint` to verify analytics integration and code style.
-5. After submitting the PR a build will be triggered on TravisCI. Wait for it to ends and make sure all jobs are passing.
+2. Run `npm test` locally. Fix any errors before pushing to GitHub.
+3. After submitting the PR a build will be triggered on TravisCI. Wait for it to ends and make sure all jobs are passing.
 
-NOTE: We need to implement and complete unit testing to make 3 and 5 work,
+NOTE: We need to implement and complete unit testing to make 2 and 3 work,
 feel free to implement that first!
 
 -----------------------------------------

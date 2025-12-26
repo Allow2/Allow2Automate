@@ -1,520 +1,302 @@
 /**
- * Centralized Analytics Management Class
- * Handles all Firebase Analytics tracking for the Electron application
+ * Analytics API - Main interface for tracking user behavior and app events
  *
- * IMPORTANT: Only works in renderer process (requires window/browser environment)
+ * This module provides a comprehensive analytics system for Allow2Automate with:
+ * - Firebase Analytics integration
+ * - Event tracking for user actions, plugin usage, and system events
+ * - User identification and properties
+ * - App source tagging (Mac App Store, development, direct download)
+ *
+ * IMPORTANT: This module must only be imported in renderer processes.
+ * The main process should not import Firebase Analytics.
  */
 
-// Only import Firebase in renderer process
-let analytics = null;
-let setUserId = null;
-let setUserProperties = null;
-let logEvent = null;
+const {
+  initializeFirebase,
+  getAnalyticsInstance,
+  logAnalyticsEvent,
+  setAnalyticsUserId,
+  setAnalyticsUserProperties
+} = require('./firebase-config');
 
-// Import environment detection (safe in all processes)
-let getAppSourceTag = null;
-let getBuildInfo = null;
+const { getAppSourceTag } = require('./environment');
 
-try {
-  const envModule = require('./environment');
-  getAppSourceTag = envModule.getAppSourceTag;
-  getBuildInfo = envModule.getBuildInfo;
-} catch (err) {
-  console.error('[Analytics] Failed to load environment module:', err);
-  // Provide fallback functions
-  getAppSourceTag = () => ({ type: 'unknown', version: '2.0.0' });
-  getBuildInfo = () => ({ version: '2.0.0', isOfficialBuild: false, buildNumber: 'dev', timestamp: new Date().toISOString() });
-}
-
-// Lazy load Firebase only in renderer process
-if (typeof window !== 'undefined') {
-  import('./firebase-config').then(module => {
-    analytics = module.analytics;
-    setUserId = module.setUserId;
-    setUserProperties = module.setUserProperties;
-    logEvent = module.logEvent;
-    console.log('[Analytics] Firebase modules loaded');
-  }).catch(err => {
-    console.error('[Analytics] Failed to load Firebase:', err);
-  });
-}
-
+/**
+ * Analytics class - Singleton interface for tracking events
+ */
 class Analytics {
   constructor() {
+    this.initialized = false;
     this.analytics = null;
-    this.isInitialized = false;
-    this.appSource = null;
-    this.buildInfo = null;
-    this.sessionStartTime = Date.now();
-    this.pendingEvents = [];
+    this.userId = null;
   }
 
   /**
-   * Initialize analytics with user context
-   * @param {string} userId - Unique user identifier
-   * @param {Object} userProperties - Additional user properties
+   * Initialize Firebase Analytics
+   * Must be called before any tracking methods
    */
-  async initialize(userId, userProperties = {}) {
-    try {
-      // Only works in renderer process
-      if (typeof window === 'undefined') {
-        console.warn('[Analytics] Cannot initialize in main process');
-        return false;
-      }
-
-      this.appSource = getAppSourceTag();
-      this.buildInfo = getBuildInfo();
-
-      // Wait for Firebase to load if not ready
-      let attempts = 0;
-      while (!analytics && attempts < 50) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-        attempts++;
-      }
-
-      if (!analytics) {
-        console.error('[Analytics] Firebase not loaded after 5 seconds');
-        return false;
-      }
-
-      this.analytics = analytics;
-
-      // Set user ID
-      if (setUserId) {
-        setUserId(this.analytics, userId);
-      }
-
-      // Set core user properties
-      const coreProperties = {
-        app_source_type: this.appSource.type,
-        app_version: this.appSource.version,
-        build_official: this.buildInfo.isOfficialBuild,
-        ...userProperties
-      };
-
-      // Add platform-specific properties
-      if (this.appSource.platform) {
-        coreProperties.store_platform = this.appSource.platform;
-      }
-
-      if (this.appSource.git) {
-        coreProperties.git_branch = this.appSource.git.branch;
-        coreProperties.git_commit = this.appSource.git.commit;
-      }
-
-      if (setUserProperties) {
-        setUserProperties(this.analytics, coreProperties);
-      }
-
-      this.isInitialized = true;
-
-      // Track initialization
-      this.trackAppStart();
-
+  async initialize() {
+    if (this.initialized) {
+      console.log('[Analytics] Already initialized');
       return true;
-    } catch (error) {
-      console.error('Analytics initialization failed:', error);
+    }
+
+    try {
+      const success = await initializeFirebase();
+      if (success) {
+        this.analytics = getAnalyticsInstance();
+        this.initialized = true;
+
+        // Set app source properties on initialization
+        const appSource = getAppSourceTag();
+        if (appSource) {
+          this.setUserProperties({
+            app_source_type: appSource.type,
+            app_source_version: appSource.version,
+            app_source_branch: appSource.git_branch,
+            app_source_commit: appSource.git_commit
+          });
+        }
+
+        console.log('[Analytics] Initialized successfully');
+        return true;
+      } else {
+        console.warn('[Analytics] Firebase initialization failed');
+        return false;
+      }
+    } catch (err) {
+      console.error('[Analytics] Error during initialization:', err);
       return false;
     }
   }
 
   /**
-   * Internal helper to safely log events
+   * Set user ID for analytics
+   * @param {string} userId - Unique user identifier
    */
-  _logEvent(eventName, eventData = {}) {
-    if (!logEvent || !this.analytics) {
-      console.log(`[Analytics] ${eventName} tracked (Firebase not ready)`, eventData);
+  setUserId(userId) {
+    if (!this.initialized || !userId) {
       return;
     }
+
     try {
-      this._logEvent( eventName, eventData);
-    } catch (error) {
-      console.error(`[Analytics] Error logging ${eventName}:`, error);
+      setAnalyticsUserId(userId);
+      this.userId = userId;
+      console.log('[Analytics] User ID set');
+    } catch (err) {
+      console.error('[Analytics] Error setting user ID:', err);
     }
   }
 
   /**
-   * Track application start
+   * Set user properties
+   * @param {Object} properties - User properties to set
    */
+  setUserProperties(properties) {
+    if (!this.initialized || !properties) {
+      return;
+    }
+
+    try {
+      setAnalyticsUserProperties(properties);
+      console.log('[Analytics] User properties set');
+    } catch (err) {
+      console.error('[Analytics] Error setting user properties:', err);
+    }
+  }
+
+  /**
+   * Track a custom event
+   * @param {string} eventName - Event name
+   * @param {Object} params - Event parameters
+   */
+  trackEvent(eventName, params = {}) {
+    if (!this.initialized) {
+      console.warn('[Analytics] Not initialized, skipping event:', eventName);
+      return;
+    }
+
+    try {
+      // Add app source to all events
+      const appSource = getAppSourceTag();
+      const enrichedParams = {
+        ...params,
+        app_source: appSource ? appSource.type : 'unknown'
+      };
+
+      logAnalyticsEvent(eventName, enrichedParams);
+    } catch (err) {
+      console.error('[Analytics] Error tracking event:', eventName, err);
+    }
+  }
+
+  // === User Authentication Events ===
+
+  trackLogin(method = 'allow2') {
+    this.trackEvent('login', { method });
+  }
+
+  trackLogout() {
+    this.trackEvent('logout');
+  }
+
+  trackSignup(method = 'allow2') {
+    this.trackEvent('sign_up', { method });
+  }
+
+  // === Plugin Events ===
+
+  trackPluginInstall(pluginId, pluginName, version) {
+    this.trackEvent('plugin_install', {
+      plugin_id: pluginId,
+      plugin_name: pluginName,
+      plugin_version: version
+    });
+  }
+
+  trackPluginUninstall(pluginId, pluginName) {
+    this.trackEvent('plugin_uninstall', {
+      plugin_id: pluginId,
+      plugin_name: pluginName
+    });
+  }
+
+  trackPluginEnable(pluginId, pluginName) {
+    this.trackEvent('plugin_enable', {
+      plugin_id: pluginId,
+      plugin_name: pluginName
+    });
+  }
+
+  trackPluginDisable(pluginId, pluginName) {
+    this.trackEvent('plugin_disable', {
+      plugin_id: pluginId,
+      plugin_name: pluginName
+    });
+  }
+
+  trackPluginUpdate(pluginId, pluginName, fromVersion, toVersion) {
+    this.trackEvent('plugin_update', {
+      plugin_id: pluginId,
+      plugin_name: pluginName,
+      from_version: fromVersion,
+      to_version: toVersion
+    });
+  }
+
+  trackPluginError(pluginId, pluginName, errorType, errorMessage) {
+    this.trackEvent('plugin_error', {
+      plugin_id: pluginId,
+      plugin_name: pluginName,
+      error_type: errorType,
+      error_message: errorMessage
+    });
+  }
+
+  // === Marketplace Events ===
+
+  trackMarketplaceView() {
+    this.trackEvent('marketplace_view');
+  }
+
+  trackMarketplaceSearch(query, resultsCount) {
+    this.trackEvent('marketplace_search', {
+      search_query: query,
+      results_count: resultsCount
+    });
+  }
+
+  trackMarketplaceFilter(filterType, filterValue) {
+    this.trackEvent('marketplace_filter', {
+      filter_type: filterType,
+      filter_value: filterValue
+    });
+  }
+
+  trackPluginDetails(pluginId, pluginName) {
+    this.trackEvent('plugin_details_view', {
+      plugin_id: pluginId,
+      plugin_name: pluginName
+    });
+  }
+
+  // === Child Management Events ===
+
+  trackChildAdd(childName) {
+    this.trackEvent('child_add', {
+      child_name: childName
+    });
+  }
+
+  trackChildRemove(childName) {
+    this.trackEvent('child_remove', {
+      child_name: childName
+    });
+  }
+
+  trackChildEdit(childName) {
+    this.trackEvent('child_edit', {
+      child_name: childName
+    });
+  }
+
+  // === App Lifecycle Events ===
+
   trackAppStart() {
-    this._logEvent('app_start', {
-      source_type: this.appSource && this.appSource.type,
-      platform: (this.appSource && this.appSource.platform) || process.platform,
-      version: this.appSource && this.appSource.version,
-      build_number: this.buildInfo && this.buildInfo.buildNumber,
-      is_official: this.buildInfo && this.buildInfo.isOfficialBuild
+    this.trackEvent('app_start');
+  }
+
+  trackAppBackground() {
+    this.trackEvent('app_background');
+  }
+
+  trackAppForeground() {
+    this.trackEvent('app_foreground');
+  }
+
+  trackAppError(errorType, errorMessage, stackTrace) {
+    this.trackEvent('app_error', {
+      error_type: errorType,
+      error_message: errorMessage,
+      stack_trace: stackTrace
     });
   }
 
-  /**
-   * Track application close
-   * @param {number} sessionDuration - Session duration in milliseconds
-   */
-  trackAppClose(sessionDuration) {
-    this._logEvent( 'app_close', {
-      session_duration: sessionDuration || (Date.now() - this.sessionStartTime),
-      source_type: this.appSource && this.appSource.type
+  // === Navigation Events ===
+
+  trackScreenView(screenName) {
+    this.trackEvent('screen_view', {
+      screen_name: screenName
     });
   }
 
-  /**
-   * Track plugin installation
-   * @param {Object} pluginData - Plugin information
-   */
-  trackPluginInstall(pluginData) {
-    this._logEvent( 'plugin_install', {
-      plugin_name: pluginData.name,
-      plugin_version: pluginData.version,
-      plugin_source: pluginData.source || 'marketplace',
-      install_method: pluginData.method || 'ui',
-      app_source: this.appSource && this.appSource.type
+  trackNavigation(from, to) {
+    this.trackEvent('navigation', {
+      from_screen: from,
+      to_screen: to
     });
   }
 
-  /**
-   * Track plugin uninstallation
-   * @param {Object} pluginData - Plugin information
-   */
-  trackPluginUninstall(pluginData) {
-    this._logEvent( 'plugin_uninstall', {
-      plugin_name: pluginData.name,
-      plugin_version: pluginData.version,
-      usage_duration: pluginData.usageDuration,
-      app_source: this.appSource && this.appSource.type
-    });
-  }
+  // === Performance Events ===
 
-  /**
-   * Track plugin activation
-   * @param {string} pluginName - Plugin name
-   */
-  trackPluginActivate(pluginName) {
-    this._logEvent( 'plugin_activate', {
-      plugin_name: pluginName,
-      app_source: this.appSource && this.appSource.type
-    });
-  }
-
-  /**
-   * Track plugin deactivation
-   * @param {string} pluginName - Plugin name
-   */
-  trackPluginDeactivate(pluginName) {
-    this._logEvent( 'plugin_deactivate', {
-      plugin_name: pluginName,
-      app_source: this.appSource && this.appSource.type
-    });
-  }
-
-  /**
-   * Track plugin update
-   * @param {Object} updateData - Update information
-   */
-  trackPluginUpdate(updateData) {
-    this._logEvent( 'plugin_update', {
-      plugin_name: updateData.name,
-      old_version: updateData.oldVersion,
-      new_version: updateData.newVersion,
-      update_source: updateData.source || 'auto',
-      app_source: this.appSource && this.appSource.type
-    });
-  }
-
-  /**
-   * Track plugin error
-   * @param {Object} errorData - Error information
-   */
-  trackPluginError(errorData) {
-    this._logEvent( 'plugin_error', {
-      plugin_name: errorData.pluginName,
-      error_type: errorData.errorType,
-      error_message: errorData.message && errorData.message.substring(0, 100), // Limit message length
-      stack_trace: errorData.stack && errorData.stack.substring(0, 500),
-      app_source: this.appSource && this.appSource.type
-    });
-  }
-
-  /**
-   * Track marketplace browse
-   * @param {Object} browseData - Browse context
-   */
-  trackMarketplaceBrowse(browseData = {}) {
-    this._logEvent( 'marketplace_browse', {
-      category: browseData.category || 'all',
-      search_term: browseData.searchTerm,
-      filter_applied: browseData.filter,
-      app_source: this.appSource && this.appSource.type
-    });
-  }
-
-  /**
-   * Track marketplace search
-   * @param {string} searchTerm - Search query
-   * @param {number} resultsCount - Number of results
-   */
-  trackMarketplaceSearch(searchTerm, resultsCount) {
-    this._logEvent( 'marketplace_search', {
-      search_term: searchTerm,
-      results_count: resultsCount,
-      app_source: this.appSource && this.appSource.type
-    });
-  }
-
-  /**
-   * Track plugin view in marketplace
-   * @param {Object} pluginData - Plugin information
-   */
-  trackPluginView(pluginData) {
-    this._logEvent( 'plugin_view', {
-      plugin_name: pluginData.name,
-      plugin_category: pluginData.category,
-      plugin_author: pluginData.author,
-      view_source: pluginData.source || 'marketplace',
-      app_source: this.appSource && this.appSource.type
-    });
-  }
-
-  /**
-   * Track feature usage
-   * @param {string} featureName - Feature identifier
-   * @param {Object} featureData - Additional feature context
-   */
-  trackFeatureUsage(featureName, featureData = {}) {
-    this._logEvent( 'feature_usage', {
-      feature_name: featureName,
-      ...featureData,
-      app_source: this.appSource && this.appSource.type
-    });
-  }
-
-  /**
-   * Track settings change
-   * @param {string} settingName - Setting identifier
-   * @param {*} oldValue - Previous value
-   * @param {*} newValue - New value
-   */
-  trackSettingsChange(settingName, oldValue, newValue) {
-    this._logEvent( 'settings_change', {
-      setting_name: settingName,
-      old_value: String(oldValue),
-      new_value: String(newValue),
-      app_source: this.appSource && this.appSource.type
-    });
-  }
-
-  /**
-   * Track error
-   * @param {Object} errorData - Error information
-   */
-  trackError(errorData) {
-    this._logEvent( 'app_error', {
-      error_type: errorData.type || 'unknown',
-      error_message: errorData.message && errorData.message.substring(0, 100),
-      error_context: errorData.context,
-      stack_trace: errorData.stack && errorData.stack.substring(0, 500),
-      app_source: this.appSource && this.appSource.type,
-      version: this.appSource && this.appSource.version
-    });
-  }
-
-  /**
-   * Track navigation
-   * @param {string} screenName - Screen/view identifier
-   * @param {Object} navigationData - Additional navigation context
-   */
-  trackNavigation(screenName, navigationData = {}) {
-    this._logEvent( 'screen_view', {
-      screen_name: screenName,
-      ...navigationData,
-      app_source: this.appSource && this.appSource.type
-    });
-  }
-
-  /**
-   * Track user engagement
-   * @param {Object} engagementData - Engagement metrics
-   */
-  trackEngagement(engagementData) {
-    this._logEvent( 'user_engagement', {
-      engagement_time_msec: engagementData.durationMs,
-      interaction_type: engagementData.type,
-      ...engagementData,
-      app_source: this.appSource && this.appSource.type
-    });
-  }
-
-  /**
-   * Track custom event
-   * @param {string} eventName - Custom event name
-   * @param {Object} eventParams - Event parameters
-   */
-  trackCustomEvent(eventName, eventParams = {}) {
-    this._logEvent( eventName, {
-      ...eventParams,
-      app_source: this.appSource && this.appSource.type,
-      timestamp: Date.now()
-    });
-  }
-
-  /**
-   * Track user action
-   * @param {string} action - Action identifier
-   * @param {Object} actionData - Action context
-   */
-  trackUserAction(action, actionData = {}) {
-    this._logEvent( 'user_action', {
-      action_type: action,
-      ...actionData,
-      app_source: this.appSource && this.appSource.type
-    });
-  }
-
-  /**
-   * Track performance metric
-   * @param {string} metricName - Metric identifier
-   * @param {number} value - Metric value
-   * @param {Object} metricData - Additional context
-   */
-  trackPerformance(metricName, value, metricData = {}) {
-    this._logEvent( 'performance_metric', {
-      metric_name: metricName,
+  trackPerformance(metric, value, unit = 'ms') {
+    this.trackEvent('performance_metric', {
+      metric_name: metric,
       metric_value: value,
-      ...metricData,
-      app_source: this.appSource && this.appSource.type
+      metric_unit: unit
     });
   }
 
-  /**
-   * Track app update
-   * @param {Object} updateData - Update information
-   */
-  trackAppUpdate(updateData) {
-    this._logEvent( 'app_update', {
-      old_version: updateData.oldVersion,
-      new_version: updateData.newVersion,
-      update_source: updateData.source || 'auto',
-      app_source: this.appSource && this.appSource.type
+  trackPluginLoadTime(pluginId, pluginName, loadTimeMs) {
+    this.trackEvent('plugin_load_time', {
+      plugin_id: pluginId,
+      plugin_name: pluginName,
+      load_time_ms: loadTimeMs
     });
-  }
-
-  /**
-   * Track notification interaction
-   * @param {Object} notificationData - Notification context
-   */
-  trackNotification(notificationData) {
-    this._logEvent( 'notification_interaction', {
-      notification_type: notificationData.type,
-      action_taken: notificationData.action,
-      notification_id: notificationData.id,
-      app_source: this.appSource && this.appSource.type
-    });
-  }
-
-  /**
-   * Track export operation
-   * @param {Object} exportData - Export context
-   */
-  trackExport(exportData) {
-    this._logEvent( 'export_data', {
-      export_type: exportData.type,
-      format: exportData.format,
-      item_count: exportData.itemCount,
-      app_source: this.appSource && this.appSource.type
-    });
-  }
-
-  /**
-   * Track import operation
-   * @param {Object} importData - Import context
-   */
-  trackImport(importData) {
-    this._logEvent( 'import_data', {
-      import_type: importData.type,
-      format: importData.format,
-      item_count: importData.itemCount,
-      success: importData.success,
-      app_source: this.appSource && this.appSource.type
-    });
-  }
-
-  /**
-   * Track share action
-   * @param {Object} shareData - Share context
-   */
-  trackShare(shareData) {
-    this._logEvent( 'share', {
-      content_type: shareData.contentType,
-      method: shareData.method,
-      item_id: shareData.itemId,
-      app_source: this.appSource && this.appSource.type
-    });
-  }
-
-  /**
-   * Track tutorial progress
-   * @param {Object} tutorialData - Tutorial context
-   */
-  trackTutorial(tutorialData) {
-    this._logEvent( 'tutorial_progress', {
-      tutorial_id: tutorialData.id,
-      step: tutorialData.step,
-      action: tutorialData.action, // begin, complete, skip
-      app_source: this.appSource && this.appSource.type
-    });
-  }
-
-  /**
-   * Track A/B test exposure
-   * @param {string} experimentId - Experiment identifier
-   * @param {string} variantId - Variant identifier
-   */
-  trackExperiment(experimentId, variantId) {
-    this._logEvent( 'experiment_exposure', {
-      experiment_id: experimentId,
-      variant_id: variantId,
-      app_source: this.appSource && this.appSource.type
-    });
-  }
-
-  /**
-   * Update user properties
-   * @param {Object} properties - Properties to update
-   */
-  updateUserProperties(properties) {
-    setUserProperties(this.analytics, {
-      ...properties,
-      app_source: this.appSource && this.appSource.type
-    });
-  }
-
-  /**
-   * Get current session information
-   * @returns {Object} Session data
-   */
-  getSessionInfo() {
-    return {
-      sessionDuration: Date.now() - this.sessionStartTime,
-      appSource: this.appSource,
-      buildInfo: this.buildInfo,
-      isInitialized: this.isInitialized
-    };
-  }
-
-  /**
-   * Flush pending analytics events (for app shutdown)
-   */
-  async flush() {
-    // Firebase Web SDK auto-flushes, but we track the close event
-    const sessionDuration = Date.now() - this.sessionStartTime;
-    this.trackAppClose(sessionDuration);
-
-    // Give a small delay for events to send
-    return new Promise(resolve => setTimeout(resolve, 1000));
   }
 }
 
 // Export singleton instance
-const analyticsInstance = new Analytics();
+const analytics = new Analytics();
 
-export default analyticsInstance;
-export { Analytics };
+module.exports = analytics;

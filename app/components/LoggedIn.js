@@ -19,13 +19,13 @@ import {
     pluginDataSelector,
     allPluginStatusSelector } from '../selectors';
 import { allow2Request, allow2AvatarURL } from '../util';
-import Analytics from '../analytics';
 import Dialogs from 'dialogs';
 import Checkbox from './Checkbox';
 import PlugIns from './PlugIns';
 import PlugInTab from '../containers/PluginTab';
 import path from 'path';
 import { remote, ipcRenderer } from 'electron';
+import Analytics from '../analytics';
 import {
     Table,
     TableBody,
@@ -40,8 +40,7 @@ var dialogs = Dialogs({});
 
 
 function TabPanel(props) {
-    // Fix: Add default empty object to prevent crash if props is null during initialization
-    const { children, value, index, ...other } = props || {};
+    const { children, value, index, ...other } = props;
 
     return (
         <div
@@ -74,6 +73,9 @@ export default class Plugins extends Component {
     messageDevices = {};
 
     componentDidMount = () => {
+        // Track screen view
+        Analytics.trackScreenView('logged_in');
+
 	    ipcRenderer.on('loggedOut', function(event) {
             this.props.dispatch(push('/'));
         }.bind(this));
@@ -105,10 +107,6 @@ export default class Plugins extends Component {
     handleLogout = () => {
         dialogs.confirm('Are you sure you want to log off?', function(ok) {
             if (ok) {
-                // Track logout event as user action
-                Analytics.trackUserAction('logout', {
-                    session_duration: Analytics.getSessionInfo().sessionDuration
-                });
                 this.props.onLogout();
             }
         }.bind(this));
@@ -116,20 +114,6 @@ export default class Plugins extends Component {
 
     handleTabChange = (el, tab) => {
         //console.log(newValue, tab);
-
-        // Track tab navigation
-        const previousTab = this.state.currentTab;
-
-        // If switching between different tabs, track navigation
-        if (previousTab !== tab) {
-            Analytics.trackNavigation(tab, {
-                from_screen: previousTab,
-                to_screen: tab,
-                source: 'user-click',
-                context: 'main-tabs'
-            });
-        }
-
         this.setState({
             currentTab: tab
         });
