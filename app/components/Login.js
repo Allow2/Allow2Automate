@@ -3,6 +3,7 @@ import PropTypes from 'prop-types';
 import { allow2Login } from '../util';
 import Dialogs from 'dialogs';
 import { ipcRenderer } from 'electron';
+import Analytics from '../analytics';
 //import RaisedButton from 'material-ui/RaisedButton';
 import {
     Button,
@@ -90,6 +91,14 @@ export default class Login extends Component {
             } else {
                 ipcRenderer.invoke('clearCredentials')
                     .catch(err => console.error('Error clearing credentials:', err));
+            }
+
+            // Track successful login - Initialize analytics with user ID
+            if (loginData && loginData.userId) {
+                Analytics.initialize(loginData.userId.toString(), {
+                    user_email: email,
+                    login_method: 'email'
+                });
             }
 
             // Reset loading state on success

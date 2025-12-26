@@ -6,6 +6,8 @@ import configureStore from './mainStore';
 import { allow2Request } from './util';
 import { bindActionCreators } from 'redux';
 import { getPluginPath, getPathByName, getPluginPathInfo, isDevelopmentMode } from './pluginPaths';
+// Analytics only works in renderer process, not main process
+// import Analytics from './analytics';
 const async = require('async');
 var allow2 = require('allow2');
 var moment = require('moment-timezone');
@@ -452,6 +454,9 @@ app.on('ready', async () => {
 
     var pollTimer = null;
     var usageTimer = null;
+
+    // Track app startup - Analytics.trackAppStart() is called automatically by firebase-config
+    // No need to call it here, the analytics module handles it internally
 
     if (isDevelopment) {
         await installExtensions();

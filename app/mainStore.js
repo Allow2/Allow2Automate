@@ -163,9 +163,12 @@ export default function configureStore() {
     // NOT to action forwarding. Actions are forwarded via contents.send() which uses
     // Electron's structuredClone serialization. We handle action serialization in
     // the middleware above instead.
+
+    // CRITICAL NULL GUARD: Ensure stateSyncEnhancer doesn't return null/undefined
+    const syncEnhancer = stateSyncEnhancer();
     const enhancers = compose(
         applyMiddleware(...middlewares),
-        stateSyncEnhancer()
+        ...(syncEnhancer ? [syncEnhancer] : [])
     );
 
     const store = createStore(rootReducer, initialState, enhancers);

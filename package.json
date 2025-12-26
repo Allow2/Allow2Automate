@@ -21,6 +21,7 @@
     "electron-plugin-manager": "^1.1.0",
     "electron-redux": "^2.0.0-alpha.9",
     "electron-settings": "^4.0.2",
+    "firebase": "^12.7.0",
     "fs-path": "0.0.24",
     "fs-plus": "^3.1.1",
     "history": "^4.10.1",
@@ -61,6 +62,7 @@
     "enzyme-adapter-react-16": "^1.15.8",
     "eslint": "^4.3.0",
     "eslint-plugin-react": "^7.18.0",
+    "husky": "^8.0.3",
     "npm-run-all": "^4.1.5",
     "redux-mock-store": "^1.5.4",
     "rimraf": "^2.7.1",
@@ -69,8 +71,11 @@
   "scripts": {
     "postinstall": "electron-builder install-app-deps",
     "develop": "npm run private:compile -- --source-maps true && run-p -r private:watch private:serve",
-    "test": "electron-mocha --renderer -R spec --require babel-core/register test/**/*.spec.js",
+    "test": "npm run lint:analytics && electron-mocha --renderer -R spec --require babel-core/register test/**/*.spec.js",
     "lint": "eslint --no-ignore scripts app test *.js",
+    "lint:analytics": "node scripts/check-analytics-compliance.js --all",
+    "lint:analytics:strict": "node scripts/check-analytics-compliance.js --all --strict",
+    "prepack": "npm run lint:analytics:strict",
     "icons": "electron-icon-maker --input=./images/icon.png --output=./app/assets",
     "pack": "run-s private:clean private:compile private:build:all",
     "pack:mac": "run-s private:clean private:compile private:build:mac",
@@ -83,6 +88,7 @@
     "private:watch": "npm run private:compile -- --source-maps true --watch --skip-initial-build",
     "private:serve": "babel-node scripts/serve.js",
     "private:compile": "babel app/ --copy-files --out-dir build",
-    "private:clean": "rimraf build"
+    "private:clean": "rimraf build",
+    "prepare": "husky install"
   }
 }

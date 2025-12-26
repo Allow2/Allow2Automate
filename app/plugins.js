@@ -6,6 +6,8 @@ import {
 } from './selectors';
 import { createRegistryLoader } from './registry';
 import { getPluginPath } from './pluginPaths';
+// Analytics only works in renderer process, not main process
+// import Analytics from './analytics';
 
 var Module = require("module");
 

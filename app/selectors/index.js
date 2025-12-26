@@ -3,7 +3,7 @@ import plugins from './plugins';
 import pluginStatus from './pluginStatus';
 
 module.exports = {
-    ...children,
-    ...plugins,
-    ...pluginStatus
+    ...(children || {}),
+    ...(plugins || {}),
+    ...(pluginStatus || {})
 };

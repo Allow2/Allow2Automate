@@ -1,4 +1,5 @@
-const { ipcRenderer } = require('electron');
+const electron = require('electron');
+const ipcRenderer = electron.ipcRenderer;
 const path = require('path');
 
 // Expose ipcRenderer to renderer process

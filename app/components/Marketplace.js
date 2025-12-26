@@ -34,6 +34,7 @@ import {
     Info
 } from '@material-ui/icons';
 import Dialogs from 'dialogs';
+import Analytics from '../analytics';
 
 const dialogs = Dialogs({});
 
@@ -63,7 +64,8 @@ export default class Marketplace extends Component {
         detailDialogOpen: false,
         selectedPlugin: null,
         pluginReadme: null,
-        loadingReadme: false
+        loadingReadme: false,
+        viewStartTime: null
     };
 
     componentDidUpdate(prevProps) {
@@ -85,8 +87,15 @@ export default class Marketplace extends Component {
     }
 
     handleSearchChange = (event) => {
+        const searchTerm = event.target.value;
         this.setState({
-            searchQuery: event.target.value
+            searchQuery: searchTerm
+        }, () => {
+            // Track marketplace search after state update
+            const filteredPlugins = this.getFilteredPlugins();
+            Analytics.trackMarketplaceSearch(searchTerm, filteredPlugins.length).catch(err => {
+                console.warn('[Analytics] Failed to track search:', err);
+            });
         });
     };
 
@@ -228,11 +237,23 @@ export default class Marketplace extends Component {
     };
 
     handleOpenPluginDetails = async (plugin) => {
+        // Track marketplace view when opening details
+        const viewStartTime = Date.now();
+        Analytics.trackPluginView({
+            name: plugin.name,
+            category: plugin.category,
+            author: plugin.publisher || plugin.author,
+            source: 'marketplace'
+        }).catch(err => {
+            console.warn('[Analytics] Failed to track plugin view:', err);
+        });
+
         this.setState({
             detailDialogOpen: true,
             selectedPlugin: plugin,
             pluginReadme: null,
-            loadingReadme: true
+            loadingReadme: true,
+            viewStartTime
         });
 
         // Fetch README from GitHub
@@ -290,11 +311,26 @@ export default class Marketplace extends Component {
     };
 
     handleClosePluginDetails = () => {
+        // Track engagement time when closing plugin details
+        const { selectedPlugin, viewStartTime } = this.state;
+        if (selectedPlugin && viewStartTime) {
+            const durationMs = Date.now() - viewStartTime;
+            Analytics.trackEngagement({
+                durationMs,
+                type: 'plugin_view',
+                plugin_name: selectedPlugin.name,
+                plugin_category: selectedPlugin.category
+            }).catch(err => {
+                console.warn('[Analytics] Failed to track engagement:', err);
+            });
+        }
+
         this.setState({
             detailDialogOpen: false,
             selectedPlugin: null,
             pluginReadme: null,
-            loadingReadme: false
+            loadingReadme: false,
+            viewStartTime: null
         });
     };
 
@@ -671,7 +707,15 @@ export default class Marketplace extends Component {
                                 <Chip
                                     key={category}
                                     label={category.charAt(0).toUpperCase() + category.slice(1)}
-                                    onClick={() => this.setState({ selectedCategory: category })}
+                                    onClick={() => {
+                                        Analytics.trackMarketplaceBrowse({
+                                            category,
+                                            filter: 'category'
+                                        }).catch(err => {
+                                            console.warn('[Analytics] Failed to track filter:', err);
+                                        });
+                                        this.setState({ selectedCategory: category });
+                                    }}
                                     color={selectedCategory === category ? 'primary' : 'default'}
                                     variant={selectedCategory === category ? 'default' : 'outlined'}
                                     size="small"
@@ -940,6 +984,14 @@ export default class Marketplace extends Component {
                         {selectedPlugin && selectedPlugin.repository && selectedPlugin.repository.url && (
                             <Button
                                 onClick={() => {
+                                    Analytics.trackUserAction('external_link_click', {
+                                        url: selectedPlugin.repository.url,
+                                        source: 'marketplace',
+                                        link_type: 'repository',
+                                        plugin_name: selectedPlugin.name
+                                    }).catch(err => {
+                                        console.warn('[Analytics] Failed to track external link:', err);
+                                    });
                                     require('electron').shell.openExternal(selectedPlugin.repository.url);
                                 }}
                                 color="primary"

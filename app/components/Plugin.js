@@ -16,6 +16,16 @@ export default class Login extends Component {
     constructor(...args) {
         super(...args);
 
+        // Analytics tracking state
+        this.usageMetrics = {
+            activeMinutes: 0,
+            totalInteractions: 0,
+            settingsChanges: 0,
+            lastActiveTime: null,
+            pluginActivatedAt: Date.now()
+        };
+        this.metricsInterval = null;
+
         //
         // Configure shared module paths for plugins in renderer process
         // This makes React, Material-UI, and other host dependencies available to dynamically loaded plugins
@@ -92,6 +102,57 @@ export default class Login extends Component {
             error: error,
             errorInfo: errorInfo
         });
+    }
+
+    componentDidMount() {
+        // Start metrics aggregation interval (every hour)
+        this.metricsInterval = setInterval(() => {
+            this.sendUsageAggregation();
+        }, 60 * 60 * 1000); // 1 hour
+
+        // Track when plugin becomes active
+        this.usageMetrics.lastActiveTime = Date.now();
+    }
+
+    componentWillUnmount() {
+        // Send final aggregation before unmounting
+        this.sendUsageAggregation();
+
+        // Clear interval
+        if (this.metricsInterval) {
+            clearInterval(this.metricsInterval);
+        }
+    }
+
+    sendUsageAggregation() {
+        // Calculate active minutes since last aggregation
+        if (this.usageMetrics.lastActiveTime) {
+            const now = Date.now();
+            const minutesSinceActive = Math.floor((now - this.usageMetrics.lastActiveTime) / (60 * 1000));
+            this.usageMetrics.activeMinutes += minutesSinceActive;
+            this.usageMetrics.lastActiveTime = now;
+        }
+
+        // Send aggregation if Analytics module is available
+        if (typeof window !== 'undefined' && window.Analytics && window.Analytics.aggregatePluginUsage) {
+            console.log('[Plugin] Sending usage aggregation for', this.props.plugin.name, this.usageMetrics);
+            window.Analytics.aggregatePluginUsage(this.props.plugin, {
+                activeMinutes: this.usageMetrics.activeMinutes,
+                totalInteractions: this.usageMetrics.totalInteractions,
+                settingsChanges: this.usageMetrics.settingsChanges,
+                sessionDuration: Date.now() - this.usageMetrics.pluginActivatedAt
+            });
+
+            // Reset counters for next aggregation period
+            this.usageMetrics.activeMinutes = 0;
+            this.usageMetrics.totalInteractions = 0;
+            this.usageMetrics.settingsChanges = 0;
+        }
+    }
+
+    trackInteraction() {
+        this.usageMetrics.totalInteractions++;
+        this.usageMetrics.lastActiveTime = Date.now();
     }
 
     get propIsDefined () {
@@ -187,19 +248,26 @@ export default class Login extends Component {
 
         const pluginName = this.props.plugin.name;
         const onUpdateConfiguration = this.props.onUpdateConfiguration;
+        const self = this;
+
         const configurationUpdate = function(newConfiguration) {
+            // Track setting changes
+            self.usageMetrics.settingsChanges++;
+            self.trackInteraction();
             onUpdateConfiguration(pluginName, newConfiguration);
         };
 
         // Plugin status update interface
         const statusUpdate = function(statusData) {
             console.log('[Plugin] Status update from', pluginName, statusData);
+            self.trackInteraction();
             ipcRenderer.send(`${pluginName}.status.update`, statusData);
         };
 
         // Plugin data persistence interface (backward compatibility)
         const persist = function(key, value) {
             console.log('[Plugin] Persist data from', pluginName, key, value);
+            self.trackInteraction();
             // For backward compatibility, persist data via configuration
             const currentConfig = plugin.configuration || {};
             const updatedConfig = {
@@ -207,6 +275,42 @@ export default class Login extends Component {
                 [key]: value
             };
             configurationUpdate(updatedConfig);
+        };
+
+        // Analytics object injected into plugin props
+        const analytics = {
+            trackSetting: (key, oldVal, newVal) => {
+                self.trackInteraction();
+                if (typeof window !== 'undefined' && window.Analytics && window.Analytics.trackPluginSettings) {
+                    window.Analytics.trackPluginSettings(plugin, key, oldVal, newVal);
+                } else {
+                    console.log('[Plugin Analytics] trackSetting called (Analytics not loaded)', { plugin: pluginName, key, oldVal, newVal });
+                }
+            },
+            trackAction: (action, metadata) => {
+                self.trackInteraction();
+                if (typeof window !== 'undefined' && window.Analytics && window.Analytics.trackPluginAction) {
+                    window.Analytics.trackPluginAction(plugin, action, metadata);
+                } else {
+                    console.log('[Plugin Analytics] trackAction called (Analytics not loaded)', { plugin: pluginName, action, metadata });
+                }
+            },
+            trackAuthEvent: (eventType, errorCode) => {
+                self.trackInteraction();
+                if (typeof window !== 'undefined' && window.Analytics && window.Analytics.trackPluginAuthEvent) {
+                    window.Analytics.trackPluginAuthEvent(plugin, eventType, errorCode);
+                } else {
+                    console.log('[Plugin Analytics] trackAuthEvent called (Analytics not loaded)', { plugin: pluginName, eventType, errorCode });
+                }
+            },
+            trackExternalLink: (url) => {
+                self.trackInteraction();
+                if (typeof window !== 'undefined' && window.Analytics && window.Analytics.trackExternalLink) {
+                    window.Analytics.trackExternalLink(url, 'plugin-ui', plugin);
+                } else {
+                    console.log('[Plugin Analytics] trackExternalLink called (Analytics not loaded)', { plugin: pluginName, url });
+                }
+            }
         };
 
 
@@ -223,6 +327,7 @@ export default class Login extends Component {
                 statusUpdate={statusUpdate}
                 persist={persist}
                 assign={this.assign.bind(this)}
+                analytics={analytics}
                 allow2={{
                     avatarURL: allow2AvatarURL
                 }}

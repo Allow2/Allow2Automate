@@ -1,0 +1,15 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+# Run analytics compliance check
+echo "🔍 Running Analytics compliance check..."
+node scripts/check-analytics-compliance.js
+
+# If the script fails, the commit will be aborted
+if [ $? -ne 0 ]; then
+  echo ""
+  echo "💡 Tip: Use 'git commit --no-verify' to bypass this check (not recommended)"
+  exit 1
+fi
+
+echo "✅ Pre-commit checks passed!"

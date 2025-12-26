@@ -10,8 +10,9 @@ import actionCreators from './actions';
 export default function configureStore(routerHistory) {
     const router = routerHistory && routerMiddleware(routerHistory);
 
+    // CRITICAL NULL GUARD: Prevent destructuring crash if actionCreators is null/undefined
     const allActionCreators = {
-        ...actionCreators,
+        ...(actionCreators || {}),
         push
     };
 
@@ -31,16 +32,19 @@ export default function configureStore(routerHistory) {
         return compose;
     })();
 
+    // CRITICAL NULL GUARD: Prevent destructuring crash if reducers is null/undefined
     const rootReducer = combineReducers({
-        ...reducers,
+        ...(reducers || {}),
         routing
     });
     // electron-redux v2 handles initial state automatically via IPC
     const initialState = {};
 
+    // CRITICAL NULL GUARD: Ensure stateSyncEnhancer doesn't return null/undefined
+    const syncEnhancer = stateSyncEnhancer();
     const enhancers = composeEnhancers(
         applyMiddleware(...middlewares),
-        stateSyncEnhancer()
+        ...(syncEnhancer ? [syncEnhancer] : [])
     );
 
     const store = createStore(rootReducer, initialState, enhancers);
@@ -85,8 +89,11 @@ export default function configureStore(routerHistory) {
 
     // CRITICAL FIX: Bypass broken electron-redux v2 with direct IPC
     // Listen for plugin library sync from main process
-    const { ipcRenderer } = require('electron');
-    ipcRenderer.on('PLUGIN_LIBRARY_SYNC', (event, action) => {
+    const electron = require('electron');
+    const ipcRenderer = electron.ipcRenderer;
+
+    if (ipcRenderer) {
+        ipcRenderer.on('PLUGIN_LIBRARY_SYNC', (event, action) => {
         console.log('[IPC Handler] Received PLUGIN_LIBRARY_SYNC');
         console.log('[IPC Handler] Action type:', action.type);
         console.log('[IPC Handler] Payload keys:', action.payload ? Object.keys(action.payload).length : 'null');
@@ -97,7 +104,10 @@ export default function configureStore(routerHistory) {
             store.dispatch(libraryReplaceAction);
             console.log('[IPC Handler] Dispatch complete');
         }
-    });
+        });
+    } else {
+        console.warn('[ChildStore] ipcRenderer not available - PLUGIN_LIBRARY_SYNC will not work');
+    }
 
     //console.log('client state:', store.getState());
 

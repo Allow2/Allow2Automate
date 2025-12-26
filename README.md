@@ -118,3 +118,38 @@ Plugins package.json require a few extra fields:
 allow2Token: create a new "app/device" token at https://developer.allow2.com/ and enter that token here. All plugins need to have a token to
 communicate with the Allow2 platform.
 engines: { "allow2automate": "*" } - specifies the version range with which the plugin is tested/compatible.
+
+## Analytics & Privacy
+
+Allow2Automate includes **Firebase Analytics** to help us improve the product and better understand how plugins are being used. This data helps us:
+
+- **Improve User Experience**: Understand which features are most valuable to parents
+- **Plugin Insights**: Identify popular plugins and usage patterns to guide marketplace recommendations
+- **Product Development**: Make data-driven decisions about which features to enhance
+- **Support**: Correlate usage data with user support requests for faster troubleshooting
+
+### What We Track
+
+- **App Usage**: Application startup, navigation, feature usage
+- **Plugin Lifecycle**: Installation, activation, deactivation, and deletion of plugins
+- **Plugin Interactions**: Settings changes, authentication events, blocking/unblocking actions
+- **Marketplace Activity**: Plugin searches, views, and installations
+- **Usage Aggregation**: How frequently plugins are used (e.g., gaming control frequency)
+
+### Privacy & Your Data
+
+- **User ID**: We track Allow2 user IDs to enable support correlation and user journey analysis
+- **No Personal Information**: We do not collect passwords, personal messages, or sensitive data
+- **Transparency**: All analytics events are documented in `/docs/ANALYTICS_EVENT_CATALOG.md`
+- **Open Source**: The analytics implementation is fully visible in this repository
+
+### Analytics Architecture
+
+Analytics data is tagged by installation source:
+- **Official Builds**: Mac App Store, Microsoft Store, Snap Store
+- **Development Builds**: Includes git branch and commit information
+- **Custom Builds**: Forks and custom installations are separately identified
+
+This helps us understand the distribution of our user base and focus improvements on official channels.
+
+For developers adding new features, analytics integration is **mandatory**. See `/docs/ANALYTICS_INTEGRATION_GUIDE.md` for implementation guidelines.

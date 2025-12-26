@@ -23,6 +23,7 @@ import {
     } from '@material-ui/core';
 import { Delete, CloudDownload, AddCircle } from '@material-ui/icons';
 import MarketplacePage from '../containers/MarketplacePage';
+import Analytics from '../analytics';
 //import {Tabs, Tab} from '@material-ui/core';
 const epm = require('electron-plugin-manager');
 const fs = require('fs');
@@ -90,7 +91,7 @@ export default class PlugIns extends Component {
         }
     };
 
-    installPlugin = (pluginName) => {
+    installPlugin = (pluginName, source = 'manual') => {
         const onPluginInstalled = this.props.onPluginInstalled.bind(this);
 	    ipcRenderer.on('epm-installed-' + pluginName, (event, err, pluginPath) => {
             //console.log(event, err, pluginPath);
@@ -111,6 +112,16 @@ export default class PlugIns extends Component {
                     //console.log("package.json:", packageJson); // => "Customer address is: Infinity Loop Drive"
                     packageJson.name = pluginName;
                     onPluginInstalled({ [pluginName] : packageJson });
+
+                    // Track plugin installation
+                    Analytics.trackPluginInstall({
+                        id: pluginName,
+                        name: packageJson.shortName || pluginName,
+                        version: packageJson.version,
+                        author: packageJson.author
+                    }, source).catch(err => {
+                        console.warn('[Analytics] Failed to track plugin install:', err);
+                    });
 
                 } catch(err) {
                     console.log('Error parsing JSON string', err, jsonString);
@@ -187,6 +198,17 @@ export default class PlugIns extends Component {
                     dialogs.alert(err.toString());
                     return;
                 }
+
+                // Track plugin deletion
+                Analytics.trackPluginDelete({
+                    id: pluginName,
+                    name: plugin.shortName || pluginName,
+                    version: plugin.version,
+                    author: plugin.author
+                }).catch(err => {
+                    console.warn('[Analytics] Failed to track plugin delete:', err);
+                });
+
                 onPluginRemoved({ pluginName : pluginName, removeConfiguration : removeConfiguration });
             });
             console.log('uninstalling', pluginName);
@@ -225,6 +247,17 @@ export default class PlugIns extends Component {
 
     toggleCheckbox = (plugin, isChecked) => {
         this.props.onSetPluginEnabled( plugin.name, isChecked );
+
+        // Track plugin activation/deactivation
+        const trackingMethod = isChecked ? Analytics.trackPluginActivate : Analytics.trackPluginDeactivate;
+        trackingMethod({
+            id: plugin.name,
+            name: plugin.shortName || plugin.name,
+            version: plugin.version,
+            author: plugin.author
+        }).catch(err => {
+            console.warn('[Analytics] Failed to track plugin state change:', err);
+        });
     };
 
     render() {
