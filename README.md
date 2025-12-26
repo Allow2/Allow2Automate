@@ -118,3 +118,28 @@ Plugins package.json require a few extra fields:
 allow2Token: create a new "app/device" token at https://developer.allow2.com/ and enter that token here. All plugins need to have a token to
 communicate with the Allow2 platform.
 engines: { "allow2automate": "*" } - specifies the version range with which the plugin is tested/compatible.
+
+## Analytics
+
+Allow2Automate uses Firebase Analytics to track user behavior, plugin usage, and app interactions. This helps us understand how the app is being used and improve the user experience.
+
+### Analytics Features
+
+- **User Authentication**: Login/logout tracking with user ID assignment
+- **Screen Views**: Track which screens users navigate to
+- **Plugin Management**: Track plugin installations, uninstalls, enables/disables, and errors
+- **Marketplace Activity**: Track marketplace views, searches, and plugin discovery
+- **App Source Tagging**: Automatically tags events with app source (Mac App Store, development, direct download, etc.)
+
+### Implementation
+
+Analytics is implemented in the `app/analytics/` directory:
+- `firebase-config.js` - Firebase initialization (renderer process only)
+- `environment.js` - Environment detection and app source tagging
+- `index.js` - Main Analytics API with 40+ tracking methods
+
+Analytics is **renderer process only** - the main process does not initialize Firebase. All tracking happens through the singleton `Analytics` instance imported in React components.
+
+### Privacy
+
+All analytics data is anonymized and used solely to improve the app. User credentials and personal information are never tracked.

@@ -31,6 +31,11 @@ If the problem is not related to request the issue will be marked as `Help (plea
 1. In almost all of the cases your PR **needs tests**. Make sure you have any.
 2. Run `npm test` locally. Fix any errors before pushing to GitHub.
 3. After submitting the PR a build will be triggered on TravisCI. Wait for it to ends and make sure all jobs are passing.
+4. **Analytics Integration**: If your PR adds or modifies React components, ensure proper Analytics integration:
+   - Import Analytics: `import Analytics from '../analytics';`
+   - Add screen view tracking in `componentDidMount()`: `Analytics.trackScreenView('screen_name');`
+   - Track user actions with appropriate methods (see `app/analytics/index.js` for available methods)
+   - The pre-commit hook will validate analytics compliance automatically
 
 NOTE: We need to implement and complete unit testing to make 2 and 3 work,
 feel free to implement that first!
