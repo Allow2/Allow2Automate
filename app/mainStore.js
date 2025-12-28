@@ -54,6 +54,7 @@ export default function configureStore() {
                             downloads: plugin.downloads,
                             rating: plugin.rating,
                             compliance: plugin.compliance,
+                            dev_plugin: plugin.dev_plugin || false,
                             // Explicitly exclude any function properties or EventEmitters
                         };
                     }
@@ -129,6 +130,7 @@ export default function configureStore() {
                     downloads: plugin.downloads,
                     rating: plugin.rating,
                     compliance: plugin.compliance,
+                    dev_plugin: plugin.dev_plugin || false,
                 };
             }
         });

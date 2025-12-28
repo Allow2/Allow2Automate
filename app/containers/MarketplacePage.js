@@ -10,6 +10,15 @@ const mapStateToProps = (state, ownProps) => {
     console.log('[MarketplacePage] pluginLibrary type:', typeof state.pluginLibrary);
     console.log('[MarketplacePage] pluginLibrary keys:', state.pluginLibrary ? Object.keys(state.pluginLibrary) : 'null/undefined');
 
+    // Debug: Check for dev_plugin flags
+    if (state.pluginLibrary) {
+        const devPlugins = Object.entries(state.pluginLibrary).filter(([k, v]) => v.dev_plugin);
+        console.log('[MarketplacePage] Dev-plugins in state:', devPlugins.length);
+        devPlugins.forEach(([key, plugin]) => {
+            console.log('[MarketplacePage]   -', key, '(dev_plugin:', plugin.dev_plugin, ')');
+        });
+    }
+
     return {
         pluginLibrary: state.pluginLibrary,
         installedPlugins: state.installedPlugins,
@@ -51,6 +60,37 @@ const mapDispatchToProps = (dispatch) => {
 
                     console.log('[MarketplacePage] Plugin details:', plugin);
                     console.log('[MarketplacePage] Repository:', plugin.repository);
+
+                    // Check if this is a dev-plugin (already installed locally)
+                    if (plugin.dev_plugin || (plugin.installation && plugin.installation.dev_plugin)) {
+                        console.log('[MarketplacePage] 🔧 Dev-plugin detected - skipping npm install (already available locally)');
+
+                        // For dev-plugins, add to installed plugins list
+                        dispatch(actions.installedPluginUpdate({
+                            [pluginName]: {
+                                name: pluginName,
+                                enabled: true,
+                                installedAt: Date.now(),
+                                version: plugin.version || (plugin.releases && plugin.releases.latest),
+                                dev_plugin: true,
+                                local_path: plugin.installation.local_path
+                            }
+                        }));
+
+                        // Mark as successfully installed
+                        dispatch(actions.installPluginSuccess(pluginName));
+                        dispatch(actions.setLoading(false));
+
+                        console.log('[MarketplacePage] ✅ Dev-plugin installed successfully');
+
+                        callback && callback(null, {
+                            success: true,
+                            plugin: pluginName,
+                            message: 'Dev-plugin is already available locally',
+                            dev_plugin: true
+                        });
+                        return;
+                    }
 
                     // Get installation URL from plugin metadata
                     let installUrl = plugin.installation && plugin.installation.install_url

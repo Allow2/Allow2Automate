@@ -209,6 +209,9 @@ export default class Marketplace extends Component {
             // Skip null/undefined plugins
             if (!plugin) return false;
 
+            // Skip metadata properties (start with _)
+            if (name.startsWith('_')) return false;
+
             const matchesSearch = searchQuery === '' ||
                 name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 (plugin.description && plugin.description.toLowerCase().includes(searchQuery.toLowerCase()));
@@ -735,6 +738,12 @@ export default class Marketplace extends Component {
                             const isInstalled = this.isPluginInstalled(plugin.name);
                             const isInstalling = installing[plugin.name];
 
+                            // Debug: Log dev_plugin flag for all plugins
+                            console.log('[Marketplace] Rendering plugin:', plugin.name, 'dev_plugin:', plugin.dev_plugin);
+                            if (plugin.name && plugin.name.includes('nintendo')) {
+                                console.log('[Marketplace] Nintendo plugin FULL OBJECT:', JSON.stringify(plugin, null, 2));
+                            }
+
                             return (
                                 <Grid item xs={12} sm={6} md={4} key={plugin.name}>
                                     <Card
@@ -742,9 +751,32 @@ export default class Marketplace extends Component {
                                         style={{
                                             height: '100%',
                                             display: 'flex',
-                                            flexDirection: 'column'
+                                            flexDirection: 'column',
+                                            position: 'relative'
                                         }}
                                     >
+                                        {/* Dev Plugin Ribbon */}
+                                        {plugin.dev_plugin && (
+                                            <Box
+                                                style={{
+                                                    position: 'absolute',
+                                                    top: 0,
+                                                    right: 0,
+                                                    backgroundColor: '#ff9800',
+                                                    color: 'white',
+                                                    padding: '4px 12px',
+                                                    fontSize: '11px',
+                                                    fontWeight: 'bold',
+                                                    zIndex: 1,
+                                                    borderBottomLeftRadius: '4px',
+                                                    boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                                                    letterSpacing: '0.5px'
+                                                }}
+                                            >
+                                                DEV
+                                            </Box>
+                                        )}
+
                                         <CardContent style={{ flexGrow: 1, position: 'relative' }}>
                                             <Box display="flex" alignItems="center" mb={2}>
                                                 <Avatar

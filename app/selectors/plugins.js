@@ -9,7 +9,8 @@ const pluginSelector = createSelector(
             const available = library[key] || null;
             var newPlugin =     {
                 name: plugin.name,
-                shortName: plugin.shortName,
+                // Get shortName from library first, fallback to plugin, then to name
+                shortName: (available && available.shortName) || plugin.shortName || plugin.name,
                 version: plugin.version,
                 packageJson: plugin,
                 configuration: configurations[plugin.name] || {},

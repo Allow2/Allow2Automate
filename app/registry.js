@@ -104,6 +104,9 @@ class RegistryLoader {
         this.cacheTTL = options.cacheTTL || 3600000; // 1 hour cache (was 1 minute)
         this.pluginFileCache = {}; // Cache for individual plugin files
 
+        // Dev-plugins directory for local development
+        this.devPluginsDir = path.join(__dirname, '..', 'dev-plugins');
+
         // GitHub registry configuration - hardcoded to official registry
         this.githubUrl = 'https://raw.githubusercontent.com/Allow2/allow2automate-registry/master/plugins.json';
         this.requestTimeout = 10000; // 10 second timeout
@@ -376,6 +379,22 @@ class RegistryLoader {
             // Don't fail completely, just return what we have
         }
 
+        // Load dev-plugins if in development mode
+        console.log('[Registry] Checking if should load dev-plugins. developmentMode:', this.developmentMode);
+        if (this.developmentMode) {
+            console.log('[Registry] Development mode enabled - loading dev-plugins...');
+            try {
+                const devPlugins = await this.loadDevPlugins();
+                plugins.push(...devPlugins);
+                console.log(`[Registry] ✅ Loaded ${devPlugins.length} dev-plugins`);
+            } catch (error) {
+                console.warn('[Registry] Error loading dev-plugins:', error.message);
+            }
+        } else {
+            console.log('[Registry] ⚠️ Development mode NOT enabled - skipping dev-plugins');
+            console.log('[Registry] process.env.NODE_ENV:', process.env.NODE_ENV);
+        }
+
         return plugins;
     }
 
@@ -518,6 +537,143 @@ class RegistryLoader {
 
         } catch (error) {
             console.warn(`[Registry] Error loading package.json for ${plugin.name}:`, error.message);
+        }
+    }
+
+    /**
+     * Load plugins from dev-plugins directory (local development)
+     * Scans dev-plugins/ for plugin directories with package.json
+     * @returns {Promise<Array>} Array of plugin objects from dev-plugins
+     */
+    async loadDevPlugins() {
+        const plugins = [];
+
+        console.log('[Registry] ========== LOAD DEV PLUGINS START ==========');
+        console.log('[Registry] developmentMode:', this.developmentMode);
+        console.log('[Registry] devPluginsDir:', this.devPluginsDir);
+
+        try {
+            // Check if dev-plugins directory exists
+            if (!fs.existsSync(this.devPluginsDir)) {
+                console.log('[Registry] ❌ No dev-plugins directory found at:', this.devPluginsDir);
+                return plugins;
+            }
+
+            console.log('[Registry] ✅ Dev-plugins directory exists');
+            console.log('[Registry] 🔍 Scanning dev-plugins directory:', this.devPluginsDir);
+
+            // Get all entries in dev-plugins
+            const entries = fs.readdirSync(this.devPluginsDir, { withFileTypes: true });
+
+            // Filter to directories and symlinks (exclude node_modules, package.json, etc.)
+            const pluginDirs = entries.filter(entry =>
+                (entry.isDirectory() || entry.isSymbolicLink()) &&
+                !entry.name.startsWith('.') &&
+                !entry.name.startsWith('node_modules') &&
+                !entry.name.endsWith('.json')
+            );
+
+            console.log(`[Registry] Found ${pluginDirs.length} potential dev-plugins:`, pluginDirs.map(d => d.name));
+
+            // Load each plugin directory
+            for (const dir of pluginDirs) {
+                try {
+                    const plugin = await this.loadDevPlugin(dir.name);
+                    if (plugin) {
+                        plugins.push(plugin);
+                        console.log(`[Registry] ✅ Loaded dev-plugin: ${plugin.name}`);
+                    }
+                } catch (error) {
+                    console.warn(`[Registry] Error loading dev-plugin ${dir.name}:`, error.message);
+                }
+            }
+
+        } catch (error) {
+            console.error('[Registry] Error scanning dev-plugins directory:', error);
+        }
+
+        return plugins;
+    }
+
+    /**
+     * Load a single dev-plugin from package.json
+     * @param {string} dirName - Plugin directory name
+     * @returns {Promise<Object|null>} Plugin object or null
+     */
+    async loadDevPlugin(dirName) {
+        const pluginDir = path.join(this.devPluginsDir, dirName);
+        const packagePath = path.join(pluginDir, 'package.json');
+
+        try {
+            // Check if package.json exists
+            if (!fs.existsSync(packagePath)) {
+                console.warn(`[Registry] No package.json found for dev-plugin: ${dirName}`);
+                return null;
+            }
+
+            // Load package.json
+            const pkgData = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
+
+            // Validate it's an allow2automate plugin
+            if (!pkgData.allow2automate || !pkgData.allow2automate.plugin) {
+                console.warn(`[Registry] ${dirName} is not an allow2automate plugin (missing allow2automate.plugin in package.json)`);
+                return null;
+            }
+
+            // Create plugin object from package.json
+            const plugin = {
+                id: pkgData.allow2automate.pluginId || pkgData.name,
+                name: pkgData.name,
+                package: pkgData.name,
+                shortName: pkgData.shortName || pkgData.allow2automate.displayName || dirName,
+                version: pkgData.version || '1.0.0',
+                description: pkgData.description || '',
+                publisher: (pkgData.author && pkgData.author.name) || 'local-dev',
+                category: pkgData.allow2automate.category || 'Development',
+                main: pkgData.main || './dist/index.js',
+                keywords: pkgData.keywords || [],
+                repository: pkgData.repository || { type: 'file', url: pluginDir },
+                // CRITICAL: Override installation URL to use local path
+                installation: {
+                    install_url: `file:${pluginDir}`,
+                    dev_plugin: true,
+                    local_path: pluginDir
+                },
+                // Add dependency information
+                dependencies: pkgData.dependencies || {},
+                peerDependencies: pkgData.peerDependencies || {},
+                devDependencies: pkgData.devDependencies || {},
+                packageJsonPath: packagePath,
+                // Mark as dev-plugin
+                dev_plugin: true,
+                verified: false,
+                downloads: 0,
+                rating: 0
+            };
+
+            // Validate plugin compliance
+            const validation = validatePluginCompliance(plugin);
+            plugin.compliance = {
+                compliant: validation.compliant,
+                validationErrors: validation.issues,
+                validationWarnings: validation.warnings,
+                lastChecked: new Date().toISOString()
+            };
+
+            // Log compliance issues
+            if (!validation.compliant && validation.issues.length > 0) {
+                console.warn(`[Registry] ⚠️ Dev-plugin ${plugin.name} has compliance issues:`, validation.issues);
+            }
+
+            if (validation.warnings.length > 0) {
+                console.log(`[Registry] ℹ️ Dev-plugin ${plugin.name} compliance warnings:`, validation.warnings);
+            }
+
+            return plugin;
+
+        } catch (error) {
+            console.error(`[Registry] Error loading dev-plugin ${dirName}:`, error);
+            return null;
         }
     }
 
@@ -712,6 +868,7 @@ class RegistryLoader {
                 releases: {
                     latest: plugin.version || '1.0.0'
                 },
+                version: plugin.version,
                 description: plugin.description || '',
                 main: plugin.main || './index.js',
                 repository: plugin.repository || {
@@ -727,6 +884,8 @@ class RegistryLoader {
                 verified: plugin.verified || false,
                 downloads: plugin.downloads || 0,
                 rating: plugin.rating || 0,
+                // Dev-plugin flag (CRITICAL for UI ribbon)
+                dev_plugin: plugin.dev_plugin || false,
                 // Compliance metadata
                 compliance: plugin.compliance || {
                     compliant: null,
@@ -742,6 +901,18 @@ class RegistryLoader {
         console.log(`[Registry]   - Compliant: ${compliantCount}`);
         console.log(`[Registry]   - Non-compliant: ${nonCompliantCount}`);
         console.log(`[Registry]   - Unknown: ${unknownCount}`);
+
+        // Debug: Log dev-plugins
+        const devPlugins = Object.values(library).filter(p => p && p.dev_plugin);
+        if (devPlugins.length > 0) {
+            console.log(`[Registry] 🔧 Dev-plugins in library: ${devPlugins.length}`);
+            devPlugins.forEach(p => {
+                console.log(`[Registry]   - ${p.name} (dev_plugin: ${p.dev_plugin})`);
+            });
+
+            // Debug: Log the actual library object to verify dev_plugin is there
+            console.log('[Registry] Sample dev-plugin from library:', library['@allow2/allow2automate-nintendo-switch']);
+        }
 
         return library;
     }

@@ -68,6 +68,12 @@ export default class PlugIns extends Component {
         const prevCount = Object.keys(prevProps.installedPlugins || {}).length;
         const currentCount = this.getInstalledPluginsCount();
 
+        // If we went from 1+ to 0 plugins, auto-open marketplace (can't close)
+        if (prevCount > 0 && currentCount === 0) {
+            console.log('[PlugIns] No plugins installed - auto-opening marketplace');
+            this.setState({ isMarketplaceOpen: true });
+        }
+
         // If we went from 0 to 1+ plugins, keep marketplace open but enable close button
         if (prevCount === 0 && currentCount > 0) {
             // Just a state update to re-render with close button enabled

@@ -222,6 +222,15 @@ migrateWemo();
         console.log(`[Main] ✅ Loaded ${Object.keys(pluginLibrary).length} plugins in ${loadDuration}ms`);
         console.log('[Main] Plugin library keys:', Object.keys(pluginLibrary).slice(0, 5), '...');
 
+        // Debug: Check for dev_plugin flags
+        const devPluginsInMain = Object.values(pluginLibrary).filter(p => p && p.dev_plugin);
+        console.log('[Main] Dev-plugins before dispatch:', devPluginsInMain.length);
+        if (devPluginsInMain.length > 0) {
+            devPluginsInMain.forEach(p => {
+                console.log('[Main]   -', p.name, '(dev_plugin:', p.dev_plugin, ')');
+            });
+        }
+
         // Update plugin library
         actions.libraryReplace(pluginLibrary);
 
