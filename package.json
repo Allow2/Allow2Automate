@@ -16,6 +16,7 @@
     "@material-ui/icons": "^4.11.2",
     "@material-ui/lab": "^4.0.0-alpha.61",
     "allow2": "^1.0.0",
+    "playwright": "^1.40.0",
     "async": "^2.6.3",
     "babel-runtime": "^6.22.0",
     "dialogs": "^1.1.20",

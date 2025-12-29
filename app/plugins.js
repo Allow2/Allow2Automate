@@ -33,14 +33,21 @@ module.exports = function(app, store, actions) {
     const reduxPath = path.dirname(require.resolve('redux'));
     const reactReduxPath = path.dirname(require.resolve('react-redux'));
 
+    // Browser automation for plugins (used by battle.net, etc.)
+    // Playwright provides headless Chrome/Firefox automation for web control
+    const playwrightPath = path.dirname(require.resolve('playwright'));
+
     console.log("[Plugins] Injecting shared module paths for plugins:");
     console.log("  - Base node_modules:", ourModulesPath);
     console.log("  - React:", reactDomPath);
     console.log("  - Material-UI:", muiCorePath);
     console.log("  - Redux:", reduxPath);
     console.log("  - React-Redux:", reactReduxPath);
+    console.log("  - Playwright (browser automation):", playwrightPath);
 
     // Inject module paths into every loaded module via Module.wrap
+    // This allows plugins to require() shared dependencies from the host application
+    // instead of bundling their own copies (reduces plugin size and version conflicts)
     (function(moduleWrapCopy) {
         Module.wrap = function(script) {
             // Build the path injection script
@@ -49,7 +56,9 @@ module.exports = function(app, store, actions) {
                 `module.paths.push('${path.join(reactDomPath, '..')}');`,
                 `module.paths.push('${path.join(muiCorePath, '..', '..')}');`,
                 `module.paths.push('${path.join(reduxPath, '..')}');`,
-                `module.paths.push('${path.join(reactReduxPath, '..')}');`
+                `module.paths.push('${path.join(reactReduxPath, '..')}');`,
+                // Playwright for browser automation (battle.net plugin uses this)
+                `module.paths.push('${path.join(playwrightPath, '..')}');`
             ].join('');
 
             script = pathInjectionScript + script;

@@ -96,6 +96,13 @@ The following dependencies are available to all plugins:
 - `redux-actions` (v2.6.5)
 - `redux-thunk` (v2.3.0)
 
+### Browser Automation
+- `playwright` (v1.40.0) - Headless browser automation for web scraping and control
+  - **Use Case**: Automating web portals, parental controls, device configuration
+  - **Size**: ~300MB (with browser binaries)
+  - **Example Plugin**: Battle.net parental controls automation
+  - **Documentation**: See [Browser Automation Integration](./browser-automation-integration.md)
+
 ### Other
 - `prop-types` (v15.7.2)
 
@@ -115,13 +122,16 @@ Plugins should declare these as **peerDependencies** in their package.json:
     "@material-ui/core": "^4.11.3",
     "@material-ui/icons": "^4.11.2",
     "redux": "^4.0.0",
-    "react-redux": "^5.1.2"
+    "react-redux": "^5.1.2",
+    "playwright": "^1.40.0"  // Optional: Only if plugin needs browser automation
   },
   "dependencies": {
     // Only plugin-specific dependencies here
   }
 }
 ```
+
+**Note**: Only include `playwright` as a peer dependency if your plugin requires browser automation. Most plugins won't need it.
 
 ### Example Plugin
 
