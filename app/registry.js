@@ -449,9 +449,9 @@ class RegistryLoader {
             const rawData = fs.readFileSync(filePath, 'utf8');
             const plugin = JSON.parse(rawData);
 
-            // Validate required fields
-            if (!plugin.id || !plugin.name || !plugin.version) {
-                console.warn(`[Registry] Invalid plugin file ${namespace}/${filename}: missing required fields`);
+            // Validate required fields (name is THE primary key)
+            if (!plugin.name || !plugin.version) {
+                console.warn(`[Registry] Invalid plugin file ${namespace}/${filename}: missing required fields (name, version)`);
                 return null;
             }
 
@@ -480,8 +480,8 @@ class RegistryLoader {
                 console.log(`[Registry] ℹ️ Plugin ${plugin.name} compliance warnings:`, validation.warnings);
             }
 
-            // Cache the plugin
-            const cacheKey = `${namespace}/${plugin.id}`;
+            // Cache the plugin (using name as the key)
+            const cacheKey = plugin.name;
             this.pluginFileCache[cacheKey] = plugin;
 
             return plugin;
@@ -621,8 +621,8 @@ class RegistryLoader {
             }
 
             // Create plugin object from package.json
+            // NOTE: name is THE unique identifier (scoped package name)
             const plugin = {
-                id: pkgData.allow2automate.pluginId || pkgData.name,
                 name: pkgData.name,
                 package: pkgData.name,
                 shortName: pkgData.shortName || pkgData.allow2automate.displayName || dirName,
@@ -687,10 +687,9 @@ class RegistryLoader {
             // Check cache first
             const registry = await this.loadRegistry();
 
-            // Find in loaded plugins
+            // Find in loaded plugins (name is THE primary key)
             const plugin = registry.plugins.find(p =>
                 p.name === pluginIdentifier ||
-                p.id === pluginIdentifier ||
                 p.package === pluginIdentifier
             );
 
@@ -717,7 +716,7 @@ class RegistryLoader {
 
     /**
      * Merge plugins from different sources
-     * Namespace plugins override master registry plugins with same ID
+     * Namespace plugins override master registry plugins with same name
      * @param {Array} masterPlugins - Plugins from master registry
      * @param {Array} namespacePlugins - Plugins from namespace directories
      * @returns {Array} Merged plugin array
@@ -725,18 +724,18 @@ class RegistryLoader {
     mergePlugins(masterPlugins, namespacePlugins) {
         const pluginMap = new Map();
 
-        // Add master plugins first
+        // Add master plugins first (using name as the unique key)
         for (const plugin of masterPlugins) {
-            pluginMap.set(plugin.id, plugin);
+            pluginMap.set(plugin.name, plugin);
         }
 
         // Override with namespace plugins
         for (const plugin of namespacePlugins) {
-            const existing = pluginMap.get(plugin.id);
+            const existing = pluginMap.get(plugin.name);
             if (existing) {
-                console.log(`[Registry] Overriding ${plugin.id} with namespace version`);
+                console.log(`[Registry] Overriding ${plugin.name} with namespace version`);
             }
-            pluginMap.set(plugin.id, plugin);
+            pluginMap.set(plugin.name, plugin);
         }
 
         return Array.from(pluginMap.values());
@@ -777,14 +776,13 @@ class RegistryLoader {
 
         try {
             const registry = await this.loadRegistry();
-            const masterPluginIds = new Set(registry.plugins.map(p => p.id));
+            const masterPluginNames = new Set(registry.plugins.map(p => p.name));
 
             const namespacedPlugins = await this.loadNamespacedPlugins();
 
             for (const plugin of namespacedPlugins) {
-                if (!masterPluginIds.has(plugin.id)) {
+                if (!masterPluginNames.has(plugin.name)) {
                     orphans.push({
-                        id: plugin.id,
                         name: plugin.name,
                         file: plugin.pluginFile,
                         namespace: plugin.namespace

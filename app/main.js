@@ -180,6 +180,12 @@ actions.timezoneGuess(moment.tz.guess());
 var plugins = require('./plugins')(app, store, actions);
 
 //
+// Initialize agent services (network device monitoring)
+//
+import { initializeAgentServices } from './main-agent-integration.js';
+let agentServices = null;
+
+//
 // migrate configurations < v2.0.0
 //
 function migrateWemo() {
@@ -470,6 +476,15 @@ app.on('ready', async () => {
 
     if (isDevelopment) {
         await installExtensions();
+    }
+
+    // Initialize agent services for network device monitoring
+    try {
+        agentServices = await initializeAgentServices(app, store, actions);
+        console.log('[Main] Agent services initialized');
+    } catch (error) {
+        console.error('[Main] Failed to initialize agent services:', error);
+        // Continue without agent services - they are optional
     }
 
     if (process.platform === 'darwin') {

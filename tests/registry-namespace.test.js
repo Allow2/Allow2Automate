@@ -66,7 +66,6 @@ describe('Registry Namespace Structure', () => {
 
             if (plugins.length > 0) {
                 plugins.forEach(plugin => {
-                    expect(plugin.id).toBeDefined();
                     expect(plugin.name).toBeDefined();
                     expect(plugin.version).toBeDefined();
                     expect(plugin.namespace).toMatch(/^@[a-z0-9-]+$/);
@@ -92,7 +91,6 @@ describe('Registry Namespace Structure', () => {
 
             if (plugin) {
                 expect(plugin.name).toBe('@allow2/allow2automate-wemo');
-                expect(plugin.id).toBe('allow2automate-wemo');
                 expect(plugin.namespace).toBe('@allow2');
             }
         });
@@ -102,11 +100,11 @@ describe('Registry Namespace Structure', () => {
             expect(plugin).toBeNull();
         });
 
-        it('should handle plugin ID format', async () => {
-            const plugin = await registryLoader.loadPlugin('allow2automate-wemo');
+        it('should handle plugin name format', async () => {
+            const plugin = await registryLoader.loadPlugin('@allow2/allow2automate-wemo');
 
             if (plugin) {
-                expect(plugin.id).toBe('allow2automate-wemo');
+                expect(plugin.name).toBe('@allow2/allow2automate-wemo');
             }
         });
     });
@@ -148,20 +146,20 @@ describe('Registry Namespace Structure', () => {
     describe('mergePlugins()', () => {
         it('should merge master and namespace plugins', () => {
             const masterPlugins = [
-                { id: 'plugin1', name: 'Plugin 1', version: '1.0.0' },
-                { id: 'plugin2', name: 'Plugin 2', version: '1.0.0' }
+                { name: '@test/plugin1', version: '1.0.0' },
+                { name: '@test/plugin2', version: '1.0.0' }
             ];
 
             const namespacePlugins = [
-                { id: 'plugin2', name: 'Plugin 2', version: '2.0.0', namespace: '@test' },
-                { id: 'plugin3', name: 'Plugin 3', version: '1.0.0', namespace: '@test' }
+                { name: '@test/plugin2', version: '2.0.0', namespace: '@test' },
+                { name: '@test/plugin3', version: '1.0.0', namespace: '@test' }
             ];
 
             const merged = registryLoader.mergePlugins(masterPlugins, namespacePlugins);
 
             expect(merged.length).toBe(3);
 
-            const plugin2 = merged.find(p => p.id === 'plugin2');
+            const plugin2 = merged.find(p => p.name === '@test/plugin2');
             expect(plugin2.version).toBe('2.0.0'); // Namespace version should override
             expect(plugin2.namespace).toBe('@test');
         });
@@ -180,7 +178,6 @@ describe('Registry Namespace Structure', () => {
             expect(orphans).toBeInstanceOf(Array);
 
             orphans.forEach(orphan => {
-                expect(orphan.id).toBeDefined();
                 expect(orphan.name).toBeDefined();
                 expect(orphan.file).toBeDefined();
                 expect(orphan.namespace).toBeDefined();
@@ -241,12 +238,13 @@ describe('Registry Namespace Structure', () => {
             expect(registry.plugins).toBeInstanceOf(Array);
         });
 
-        it('should handle legacy plugin format', async () => {
+        it('should handle plugin format with required name field', async () => {
             const registry = await registryLoader.loadRegistry();
 
-            // Should work with both old and new format
+            // All plugins must have name as the primary key
             registry.plugins.forEach(plugin => {
-                expect(plugin.id || plugin.name).toBeDefined();
+                expect(plugin.name).toBeDefined();
+                expect(plugin.name).toMatch(/^@[a-z0-9-]+\/[a-z0-9.-]+$/);
                 expect(plugin.version).toBeDefined();
             });
         });
@@ -318,13 +316,12 @@ describe('Plugin File Format', () => {
                 plugin = JSON.parse(content);
             }).not.toThrow();
 
-            // Should have required fields
-            expect(plugin.id).toBeDefined();
+            // Should have required fields (name is THE primary key)
             expect(plugin.name).toBeDefined();
             expect(plugin.version).toBeDefined();
             expect(plugin.description).toBeDefined();
 
-            // Name should start with @allow2/
+            // Name should be scoped and start with @allow2/
             expect(plugin.name).toMatch(/^@allow2\//);
         });
     });

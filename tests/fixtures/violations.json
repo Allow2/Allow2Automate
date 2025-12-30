@@ -1,0 +1,23 @@
+[
+  {
+    "processName": "Steam.exe",
+    "pid": 1234,
+    "timestamp": "2025-12-30T00:00:00.000Z",
+    "action": "killed",
+    "agentId": "agent-1"
+  },
+  {
+    "processName": "EpicGamesLauncher.exe",
+    "pid": 5678,
+    "timestamp": "2025-12-30T00:05:00.000Z",
+    "action": "killed",
+    "agentId": "agent-1"
+  },
+  {
+    "processName": "Discord.exe",
+    "pid": 9012,
+    "timestamp": "2025-12-30T00:10:00.000Z",
+    "action": "kill_failed",
+    "agentId": "agent-2"
+  }
+]

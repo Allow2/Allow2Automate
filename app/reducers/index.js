@@ -1,3 +1,4 @@
+import agents from './agents';
 import children from './children';
 import configurations from './configurations';
 import devices from './devices';
@@ -10,6 +11,7 @@ import user from './user';
 import util from './util';
 
 export default {
+    agents,
     children,
     configurations,
     devices,

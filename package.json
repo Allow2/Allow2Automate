@@ -16,21 +16,24 @@
     "@material-ui/icons": "^4.11.2",
     "@material-ui/lab": "^4.0.0-alpha.61",
     "allow2": "^1.0.0",
-    "playwright": "^1.40.0",
     "async": "^2.6.3",
     "babel-runtime": "^6.22.0",
+    "bonjour-service": "^1.1.0",
     "dialogs": "^1.1.20",
     "electron-plugin-manager": "^1.1.0",
     "electron-redux": "^2.0.0-alpha.9",
     "electron-settings": "^4.0.2",
+    "express": "^4.18.2",
     "firebase": "^12.7.0",
     "fs-path": "0.0.24",
     "fs-plus": "^3.1.1",
     "history": "^4.10.1",
+    "jsonwebtoken": "^9.0.2",
     "marked": "^4.3.0",
     "moment": "^2.24.0",
     "moment-timezone": "^0.5.27",
     "node-localstorage": "3.0.2",
+    "playwright": "^1.40.0",
     "prop-types": "^15.7.2",
     "react": "^16.12.0",
     "react-dom": "^16.12.0",
@@ -43,6 +46,7 @@
     "redux-thunk": "^2.3.0",
     "request": "^2.88.0",
     "reselect": "^3.0.1",
+    "semver": "^7.5.0",
     "uuid": "^8.3.2"
   },
   "devDependencies": {
@@ -73,10 +77,11 @@
   "scripts": {
     "postinstall": "electron-builder install-app-deps",
     "develop": "npm run private:compile -- --source-maps true && run-p -r private:watch private:serve",
-    "test": "npm run lint:analytics && electron-mocha --renderer -R spec --require babel-core/register test/**/*.spec.js",
+    "test": "jest",
     "lint": "eslint --no-ignore scripts app test *.js",
     "lint:analytics": "node scripts/check-analytics-compliance.js --all",
     "lint:analytics:strict": "node scripts/check-analytics-compliance.js --all --strict",
+    "prebuild": "node scripts/fetch-agent-installers.js",
     "prepack": "npm run lint:analytics:strict",
     "icons": "electron-icon-maker --input=./images/icon.png --output=./app/assets",
     "pack": "run-s private:clean private:compile private:build:all",
@@ -91,6 +96,11 @@
     "private:serve": "babel-node scripts/serve.js",
     "private:compile": "babel app/ --copy-files --out-dir build",
     "private:clean": "rimraf build",
-    "prepare": "husky install"
-  }
+    "prepare": "husky install",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:unit": "jest tests/services tests/routes",
+    "test:integration": "jest tests/integration"
+  },
+  "bundledAgentVersion": "1.0.0"
 }
