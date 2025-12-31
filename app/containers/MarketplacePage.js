@@ -61,35 +61,18 @@ const mapDispatchToProps = (dispatch) => {
                     console.log('[MarketplacePage] Plugin details:', plugin);
                     console.log('[MarketplacePage] Repository:', plugin.repository);
 
-                    // Check if this is a dev-plugin (already installed locally)
-                    if (plugin.dev_plugin || (plugin.installation && plugin.installation.dev_plugin)) {
-                        console.log('[MarketplacePage] 🔧 Dev-plugin detected - skipping npm install (already available locally)');
+                    // Check if this is a dev-plugin - ALWAYS force reinstall
+                    const isDevPlugin = plugin.dev_plugin || (plugin.installation && plugin.installation.dev_plugin);
+                    if (isDevPlugin) {
+                        console.log('[MarketplacePage] 🔧 Dev-plugin detected - FORCE REINSTALL from local path');
 
-                        // For dev-plugins, add to installed plugins list
-                        dispatch(actions.installedPluginUpdate({
-                            [pluginName]: {
-                                name: pluginName,
-                                enabled: true,
-                                installedAt: Date.now(),
-                                version: plugin.version || (plugin.releases && plugin.releases.latest),
-                                dev_plugin: true,
-                                local_path: plugin.installation.local_path
-                            }
-                        }));
+                        // For dev-plugins, we still need to run npm install to:
+                        // 1. Create proper symlink/copy in node_modules
+                        // 2. Install plugin's dependencies
+                        // 3. Ensure plugin can be required() correctly
 
-                        // Mark as successfully installed
-                        dispatch(actions.installPluginSuccess(pluginName));
-                        dispatch(actions.setLoading(false));
-
-                        console.log('[MarketplacePage] ✅ Dev-plugin installed successfully');
-
-                        callback && callback(null, {
-                            success: true,
-                            plugin: pluginName,
-                            message: 'Dev-plugin is already available locally',
-                            dev_plugin: true
-                        });
-                        return;
+                        // Continue with npm install using the local file:// path
+                        // DON'T return early - let the normal installation flow handle it
                     }
 
                     // Get installation URL from plugin metadata
@@ -119,7 +102,9 @@ const mapDispatchToProps = (dispatch) => {
 
                     // Try installation with tag first, fallback to default branch if tag missing
                     const attemptInstall = async (url) => {
-                        const npmCommand = `npm install --legacy-peer-deps --prefix "${pluginsDir}" "${url}"`;
+                        // For dev-plugins, always use --force to ensure fresh reinstall
+                        const forceFlag = isDevPlugin ? '--force' : '';
+                        const npmCommand = `npm install --legacy-peer-deps ${forceFlag} --prefix "${pluginsDir}" "${url}"`;
                         console.log('[MarketplacePage] Running:', npmCommand);
 
                         return new Promise((resolve, reject) => {
@@ -211,7 +196,9 @@ const mapDispatchToProps = (dispatch) => {
                             enabled: true,
                             installedAt: Date.now(),
                             version: plugin.releases && plugin.releases.latest,
-                            installUrl: actualInstallUrl
+                            installUrl: actualInstallUrl,
+                            dev_plugin: isDevPlugin || false,
+                            local_path: isDevPlugin ? plugin.installation.local_path : undefined
                         }
                     }));
 
