@@ -406,7 +406,8 @@ module.exports = function(app, store, actions) {
                     isMain: true,
 	                ipcMain: ipcRestricted,
                     configurationUpdate: configurationUpdate,
-                    statusUpdate: statusUpdate
+                    statusUpdate: statusUpdate,
+                    services: global.services
                 });
 
                 // Initialize plugin with unconfigured status

@@ -183,27 +183,63 @@ function setupIPCHandlers(agentService, agentUpdateService, actions) {
   });
 
   // Download installer
-  ipcMain.handle('agents:download-installer', async (event, { platform }) => {
+  ipcMain.handle('agents:download-installer', async (event, { platform, childId }) => {
     try {
       // Get Downloads folder
       const downloadsPath = electronApp.getPath('downloads');
 
-      // Get latest version
-      const versions = agentUpdateService.getAvailableVersions();
-      if (versions.length === 0) {
-        return { success: false, error: 'No installers available' };
+      // Generate registration code if childId provided
+      let registrationCode = null;
+      if (childId) {
+        registrationCode = await agentService.generateRegistrationCode(childId);
       }
 
-      const latestVersion = versions[0].version;
+      // Get server URL (use local network address)
+      const os = require('os');
+      const networkInterfaces = os.networkInterfaces();
+      let serverUrl = 'http://localhost:8080';
 
-      // Export installer to Downloads
-      const destPath = await agentUpdateService.exportInstaller(
-        latestVersion,
-        platform,
-        downloadsPath
-      );
+      // Find first non-internal IPv4 address
+      for (const interfaceName in networkInterfaces) {
+        for (const iface of networkInterfaces[interfaceName]) {
+          if (iface.family === 'IPv4' && !iface.internal) {
+            serverUrl = `http://${iface.address}:8080`;
+            break;
+          }
+        }
+      }
 
-      return { success: true, path: destPath };
+      // Try to get from cache first
+      const versions = agentUpdateService.getAvailableVersions();
+      let result;
+
+      if (versions.length > 0) {
+        const latestVersion = versions[0].version;
+        result = await agentUpdateService.exportInstaller(
+          latestVersion,
+          platform,
+          downloadsPath,
+          serverUrl,
+          registrationCode
+        );
+      } else {
+        // Download directly from GitHub if not cached
+        result = await agentUpdateService.downloadFromGitHub(
+          platform,
+          downloadsPath,
+          serverUrl,
+          registrationCode
+        );
+      }
+
+      return {
+        success: true,
+        installerPath: result.installerPath,
+        configPath: result.configPath,
+        serverUrl: serverUrl,
+        registrationCode: registrationCode,
+        version: result.version || (versions[0] && versions[0].version)
+      };
     } catch (error) {
       console.error('[IPC] Error downloading installer:', error);
       return { success: false, error: error.message };
@@ -217,6 +253,42 @@ function setupIPCHandlers(agentService, agentUpdateService, actions) {
       return { success: true, versions };
     } catch (error) {
       console.error('[IPC] Error getting installer versions:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Check for installer updates from GitHub
+  ipcMain.handle('agents:check-updates', async (event) => {
+    try {
+      await agentUpdateService.checkForUpdates();
+      const versions = agentUpdateService.getAvailableVersions();
+      return { success: true, versions };
+    } catch (error) {
+      console.error('[IPC] Error checking for updates:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Get server URL for agent configuration
+  ipcMain.handle('agents:get-server-url', async (event) => {
+    try {
+      const os = require('os');
+      const networkInterfaces = os.networkInterfaces();
+      let serverUrl = 'http://localhost:8080';
+
+      // Find first non-internal IPv4 address
+      for (const interfaceName in networkInterfaces) {
+        for (const iface of networkInterfaces[interfaceName]) {
+          if (iface.family === 'IPv4' && !iface.internal) {
+            serverUrl = `http://${iface.address}:8080`;
+            break;
+          }
+        }
+      }
+
+      return { success: true, serverUrl };
+    } catch (error) {
+      console.error('[IPC] Error getting server URL:', error);
       return { success: false, error: error.message };
     }
   });

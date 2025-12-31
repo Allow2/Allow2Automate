@@ -74,12 +74,18 @@ export default function AgentManagement({ ipcRenderer }) {
   const [agents, setAgents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [installerDownloading, setInstallerDownloading] = useState(false);
+  const [downloadingPlatform, setDownloadingPlatform] = useState(null);
   const [registrationDialog, setRegistrationDialog] = useState(false);
+  const [downloadResultDialog, setDownloadResultDialog] = useState(false);
+  const [downloadResult, setDownloadResult] = useState(null);
   const [selectedChild, setSelectedChild] = useState(null);
   const [registrationCode, setRegistrationCode] = useState(null);
+  const [serverUrl, setServerUrl] = useState(null);
+  const [checkingUpdates, setCheckingUpdates] = useState(false);
 
   useEffect(() => {
     loadAgents();
+    loadServerUrl();
     const interval = setInterval(loadAgents, 30000); // Refresh every 30 seconds
     return () => clearInterval(interval);
   }, []);
@@ -97,20 +103,63 @@ export default function AgentManagement({ ipcRenderer }) {
     }
   };
 
+  const loadServerUrl = async () => {
+    try {
+      const result = await ipcRenderer.invoke('agents:get-server-url');
+      if (result.success) {
+        setServerUrl(result.serverUrl);
+      }
+    } catch (error) {
+      console.error('Error loading server URL:', error);
+    }
+  };
+
+  const checkForUpdates = async () => {
+    setCheckingUpdates(true);
+    try {
+      const result = await ipcRenderer.invoke('agents:check-updates');
+      if (result.success) {
+        alert(`Updates checked. ${result.versions.length} version(s) available.`);
+      } else {
+        alert(`Error checking updates: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('Error checking for updates:', error);
+      alert('Failed to check for updates');
+    } finally {
+      setCheckingUpdates(false);
+    }
+  };
+
   const downloadInstaller = async (platform) => {
     setInstallerDownloading(true);
+    setDownloadingPlatform(platform);
     try {
-      const result = await ipcRenderer.invoke('agents:download-installer', { platform });
+      // Download with auto-generated registration code
+      const result = await ipcRenderer.invoke('agents:download-installer', {
+        platform,
+        childId: 'default-child' // This should be selected from a child list in production
+      });
+
       if (result.success) {
-        alert(`Installer downloaded to: ${result.path}`);
+        setDownloadResult({
+          platform,
+          installerPath: result.installerPath,
+          configPath: result.configPath,
+          serverUrl: result.serverUrl,
+          registrationCode: result.registrationCode,
+          version: result.version
+        });
+        setDownloadResultDialog(true);
       } else {
         alert(`Error: ${result.error}`);
       }
     } catch (error) {
       console.error('Error downloading installer:', error);
-      alert('Failed to download installer');
+      alert('Failed to download installer. Ensure you have an internet connection and GitHub is accessible.');
     } finally {
       setInstallerDownloading(false);
+      setDownloadingPlatform(null);
     }
   };
 
@@ -241,63 +290,103 @@ export default function AgentManagement({ ipcRenderer }) {
 
           {/* Install Agent Section */}
           <Box className={classes.installerSection}>
-            <Typography variant="h6" gutterBottom>
-              Install Agent on a New Device
-            </Typography>
+            <div className={classes.header}>
+              <Typography variant="h6">
+                Install Agent on a New Device
+              </Typography>
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={checkingUpdates ? <CircularProgress size={16} /> : <RefreshIcon />}
+                onClick={checkForUpdates}
+                disabled={checkingUpdates}
+              >
+                Check for Updates
+              </Button>
+            </div>
 
             <Typography variant="body2" paragraph>
-              Download the installer for your platform and run it on the device you want to monitor.
+              Download the installer for your platform. Each download includes:
             </Typography>
+            <ul style={{ marginTop: 0, paddingLeft: 20 }}>
+              <li>
+                <Typography variant="body2">
+                  Platform-specific installer (MSI, PKG, or DEB)
+                </Typography>
+              </li>
+              <li>
+                <Typography variant="body2">
+                  Pre-configured agent configuration file
+                </Typography>
+              </li>
+              <li>
+                <Typography variant="body2">
+                  Registration code for easy setup
+                </Typography>
+              </li>
+            </ul>
 
-            <Box display="flex" gap={2} flexWrap="wrap">
+            {serverUrl && (
+              <Typography variant="caption" color="textSecondary" paragraph>
+                Server URL: {serverUrl}
+              </Typography>
+            )}
+
+            <Box display="flex" gap={2} flexWrap="wrap" mt={2}>
               <Button
                 variant="contained"
                 color="primary"
-                startIcon={installerDownloading ? <CircularProgress size={20} /> : <DownloadIcon />}
+                startIcon={
+                  downloadingPlatform === 'win32' ? (
+                    <CircularProgress size={20} />
+                  ) : (
+                    <DownloadIcon />
+                  )
+                }
                 onClick={() => downloadInstaller('win32')}
                 disabled={installerDownloading}
               >
-                Windows Installer
+                Windows (MSI)
               </Button>
 
               <Button
                 variant="contained"
                 color="primary"
-                startIcon={installerDownloading ? <CircularProgress size={20} /> : <DownloadIcon />}
+                startIcon={
+                  downloadingPlatform === 'darwin' ? (
+                    <CircularProgress size={20} />
+                  ) : (
+                    <DownloadIcon />
+                  )
+                }
                 onClick={() => downloadInstaller('darwin')}
                 disabled={installerDownloading}
               >
-                macOS Installer
+                macOS (PKG)
               </Button>
 
               <Button
                 variant="contained"
                 color="primary"
-                startIcon={installerDownloading ? <CircularProgress size={20} /> : <DownloadIcon />}
+                startIcon={
+                  downloadingPlatform === 'linux' ? (
+                    <CircularProgress size={20} />
+                  ) : (
+                    <DownloadIcon />
+                  )
+                }
                 onClick={() => downloadInstaller('linux')}
                 disabled={installerDownloading}
               >
-                Linux Installer
+                Linux (DEB)
               </Button>
             </Box>
 
             <Box mt={2}>
               <Typography variant="body2" color="textSecondary">
-                After installing, you'll need a registration code to link the agent to a child.
+                Downloads are saved to your Downloads folder. The configuration file contains
+                pre-configured settings for connecting to this server.
               </Typography>
-              <Button
-                variant="outlined"
-                color="primary"
-                startIcon={<AddIcon />}
-                onClick={() => {
-                  // This would open a child selector dialog
-                  // For now, using a placeholder childId
-                  generateRegistrationCode('placeholder-child-id');
-                }}
-                style={{ marginTop: 8 }}
-              >
-                Generate Registration Code
-              </Button>
             </Box>
           </Box>
         </CardContent>
@@ -328,6 +417,125 @@ export default function AgentManagement({ ipcRenderer }) {
         <DialogActions>
           <Button onClick={() => setRegistrationDialog(false)} color="primary">
             Close
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Download Result Dialog */}
+      <Dialog
+        open={downloadResultDialog}
+        onClose={() => setDownloadResultDialog(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>Agent Installer Downloaded</DialogTitle>
+        <DialogContent>
+          <Typography variant="body1" gutterBottom style={{ fontWeight: 'bold' }}>
+            Download Complete!
+          </Typography>
+
+          {downloadResult && (
+            <Fragment>
+              <Box mt={2} mb={2}>
+                <Typography variant="body2" paragraph>
+                  The following files have been downloaded to your Downloads folder:
+                </Typography>
+
+                <Box
+                  p={2}
+                  mb={2}
+                  style={{
+                    backgroundColor: '#f5f5f5',
+                    borderRadius: 4,
+                    fontFamily: 'monospace',
+                    fontSize: '0.85rem'
+                  }}
+                >
+                  <Typography variant="body2" gutterBottom>
+                    <strong>Installer:</strong>
+                  </Typography>
+                  <Typography variant="body2" paragraph style={{ wordBreak: 'break-all' }}>
+                    {downloadResult.installerPath}
+                  </Typography>
+
+                  {downloadResult.configPath && (
+                    <Fragment>
+                      <Typography variant="body2" gutterBottom>
+                        <strong>Configuration:</strong>
+                      </Typography>
+                      <Typography variant="body2" style={{ wordBreak: 'break-all' }}>
+                        {downloadResult.configPath}
+                      </Typography>
+                    </Fragment>
+                  )}
+                </Box>
+
+                <Divider />
+
+                <Box mt={2} mb={2}>
+                  <Typography variant="h6" gutterBottom>
+                    Installation Instructions
+                  </Typography>
+
+                  <Typography variant="body2" paragraph>
+                    <strong>Step 1:</strong> Transfer both files to the target device
+                  </Typography>
+
+                  <Typography variant="body2" paragraph>
+                    <strong>Step 2:</strong> Run the installer
+                    {downloadResult.platform === 'win32' && ' (double-click the MSI file)'}
+                    {downloadResult.platform === 'darwin' && ' (double-click the PKG file)'}
+                    {downloadResult.platform === 'linux' &&
+                      ' (run: sudo dpkg -i <installer-file>)'}
+                  </Typography>
+
+                  <Typography variant="body2" paragraph>
+                    <strong>Step 3:</strong> When prompted, use this registration code:
+                  </Typography>
+
+                  <div className={classes.registrationCode}>
+                    {downloadResult.registrationCode || 'No code generated'}
+                  </div>
+
+                  <Typography variant="body2" paragraph>
+                    <strong>Step 4:</strong> The agent will automatically connect to:
+                  </Typography>
+
+                  <Box
+                    p={1}
+                    mb={2}
+                    style={{
+                      backgroundColor: '#f5f5f5',
+                      borderRadius: 4,
+                      fontFamily: 'monospace'
+                    }}
+                  >
+                    <Typography variant="body2">{downloadResult.serverUrl}</Typography>
+                  </Box>
+
+                  <Typography variant="caption" color="textSecondary">
+                    The configuration file contains all necessary settings for the agent to
+                    connect to this Allow2Automate server. Version: {downloadResult.version}
+                  </Typography>
+                </Box>
+              </Box>
+            </Fragment>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => {
+              if (downloadResult && downloadResult.registrationCode) {
+                navigator.clipboard.writeText(downloadResult.registrationCode);
+                alert('Registration code copied to clipboard!');
+              }
+            }}
+            color="primary"
+          >
+            Copy Code
+          </Button>
+          <Button onClick={() => setDownloadResultDialog(false)} color="primary" variant="contained">
+            Done
           </Button>
         </DialogActions>
       </Dialog>

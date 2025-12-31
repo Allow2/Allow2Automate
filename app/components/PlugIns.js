@@ -1,5 +1,5 @@
 import React, { Component } from 'react';
-import { Avatar, TextField, IconButton, Button, Box, Typography } from '@material-ui/core';
+import { Avatar, TextField, IconButton, Button, Box, Typography, Divider } from '@material-ui/core';
 import {
     sortedPluginSelector,
     activePluginSelector,
@@ -8,6 +8,7 @@ import {
 import { allow2Request, allow2AvatarURL } from '../util';
 import Dialogs from 'dialogs';
 import Checkbox from './Checkbox';
+import AgentManagement from './Settings/AgentManagement';
 //import deviceActions from '../actions/plugin';
 import path from 'path';
 import url from 'url';
@@ -249,6 +250,13 @@ export default class PlugIns extends Component {
 
         return (
             <div>
+                {/* Agent Management Section - Top Priority */}
+                <Box mb={4}>
+                    <AgentManagement ipcRenderer={ipcRenderer} />
+                </Box>
+
+                <Divider style={{ margin: '32px 0' }} />
+
                 {/* Header with Add Plugin button */}
                 <Box display="flex" justifyContent="space-between" alignItems="center" mb={2} p={2}>
                     <Typography variant="h5">Plugin Settings</Typography>

@@ -18,6 +18,7 @@
     "allow2": "^1.0.0",
     "async": "^2.6.3",
     "babel-runtime": "^6.22.0",
+    "better-sqlite3": "^12.5.0",
     "bonjour-service": "^1.1.0",
     "dialogs": "^1.1.20",
     "electron-plugin-manager": "^1.1.0",
@@ -64,6 +65,7 @@
     "electron-builder": "^24.0.0",
     "electron-devtools-installer": "^3.0.0",
     "electron-mocha": "^12.0.1",
+    "electron-rebuild": "^3.2.9",
     "enzyme": "^3.11.0",
     "enzyme-adapter-react-16": "^1.15.8",
     "eslint": "^4.3.0",
@@ -75,7 +77,8 @@
     "sinon": "^21.0.1"
   },
   "scripts": {
-    "postinstall": "electron-builder install-app-deps",
+    "postinstall": "electron-builder install-app-deps && npm run rebuild:native",
+    "rebuild:native": "electron-rebuild -f -w better-sqlite3",
     "develop": "npm run private:compile -- --source-maps true && run-p -r private:watch private:serve",
     "test": "jest",
     "lint": "eslint --no-ignore scripts app test *.js",

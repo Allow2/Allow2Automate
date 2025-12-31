@@ -480,10 +480,12 @@ app.on('ready', async () => {
 
     // Initialize agent services for network device monitoring
     try {
+        console.log('[Main] Starting agent services initialization...');
         agentServices = await initializeAgentServices(app, store, actions);
-        console.log('[Main] Agent services initialized');
+        console.log('[Main] ✅ Agent services initialized successfully');
     } catch (error) {
-        console.error('[Main] Failed to initialize agent services:', error);
+        console.error('[Main] ❌ Failed to initialize agent services:', error);
+        console.error('[Main] Error stack:', error.stack);
         // Continue without agent services - they are optional
     }
 
