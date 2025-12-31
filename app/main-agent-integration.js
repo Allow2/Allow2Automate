@@ -24,6 +24,7 @@ export async function initializeAgentServices(app, store, actions) {
   try {
     // Initialize database
     const database = new DatabaseModule();
+    await database.initialize();
 
     // Initialize discovery service
     const agentDiscovery = new AgentDiscovery();

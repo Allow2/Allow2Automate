@@ -32,8 +32,8 @@ export default class AgentDiscovery extends EventEmitter {
       this.bonjour = new Bonjour();
       this.enabled = true;
 
-      // Browse for allow2automate agents
-      this.browser = this.bonjour.find({ type: 'allow2automate' }, (service) => {
+      // Browse for allow2 agents (matches the type in DiscoveryAdvertiser)
+      this.browser = this.bonjour.find({ type: 'allow2' }, (service) => {
         this.handleServiceDiscovered(service);
       });
 
