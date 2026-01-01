@@ -53,8 +53,17 @@ export default class Login extends Component {
         // Get environment-aware plugin path from main process
         const pluginsDir = ipcRenderer.sendSync('getPath', 'plugins');
 
-	    // Plugins are installed via npm into node_modules subdirectory
-	    const pluginPath = path.join(pluginsDir, 'node_modules', this.props.plugin.name);
+        // Determine plugin path based on whether it's a dev plugin or installed plugin
+        let pluginPath;
+        if (this.props.plugin.dev_plugin && this.props.plugin.installation && this.props.plugin.installation.local_path) {
+            // Dev plugins: use the direct path (symlinked in dev-plugins/)
+            pluginPath = this.props.plugin.installation.local_path;
+            console.log('[Plugin] Using dev plugin path:', pluginPath);
+        } else {
+            // Installed plugins: in node_modules subdirectory
+            pluginPath = path.join(pluginsDir, 'node_modules', this.props.plugin.name);
+            console.log('[Plugin] Using installed plugin path:', pluginPath);
+        }
 
         // Provide global persist stub for backward compatibility
         // Some older plugins may reference persist at module scope
@@ -64,24 +73,71 @@ export default class Login extends Component {
             };
         }
 
-        this.plugin = require(pluginPath);
-        console.log('gui', this.props.plugin.name, this.plugin);
-        // if (plugin.default) {
-        //     plugin = plugin.default;
-        // }
-
-        //console.log('plugin', this.plugin);
+        this.plugin = null;
         this.state = {
             hasError: false,
-            pluginPath: pluginPath
+            pluginPath: pluginPath,
+            isLoading: true
         };
+
+        // Load plugin asynchronously to support both CommonJS and ES modules
+        this.loadPlugin(pluginPath);
+    }
+
+    async loadPlugin(pluginPath) {
+        try {
+            console.log('[Plugin] Loading plugin from:', pluginPath);
+
+            // Try to load the plugin - use dynamic import which supports both CJS and ESM
+            let loadedPlugin;
+
+            // First try CommonJS require (more reliable in Electron)
+            try {
+                loadedPlugin = require(pluginPath);
+                console.log('[Plugin] Loaded as CommonJS:', this.props.plugin.name);
+            } catch (requireError) {
+                console.log('[Plugin] CommonJS require failed, trying ES import:', requireError.message);
+
+                // If require fails, try dynamic import for ES modules
+                // Note: Dynamic import in Electron can be unstable, so we use require first
+                try {
+                    const fileUrl = `file://${pluginPath}`;
+                    loadedPlugin = await import(fileUrl);
+                    console.log('[Plugin] Loaded as ES module via file URL:', this.props.plugin.name);
+
+                    // ES modules export as default
+                    if (loadedPlugin.default) {
+                        loadedPlugin = loadedPlugin.default;
+                    }
+                } catch (importError) {
+                    console.error('[Plugin] Both CommonJS and ESM loading failed');
+                    throw new Error(`Cannot load plugin: CommonJS error: ${requireError.message}, ESM error: ${importError.message}`);
+                }
+            }
+
+            this.plugin = loadedPlugin;
+            console.log('[Plugin] Successfully loaded:', this.props.plugin.name, this.plugin);
+
+            this.setState({
+                isLoading: false,
+                hasError: false
+            });
+        } catch (error) {
+            console.error('[Plugin] Failed to load plugin:', this.props.plugin.name, error);
+            this.setState({
+                hasError: true,
+                error: error,
+                isLoading: false
+            });
+        }
     }
 
     static getDerivedStateFromError(error) {
         // Update state so the next render will show the fallback UI.
         return {
             hasError: true,
-            error: error
+            error: error,
+            isLoading: false
         };
     }
 
@@ -157,19 +213,33 @@ export default class Login extends Component {
         // console.log(this.plugin.test);
         //console.log('plugin', this.props.plugin);
         const plugin = this.props.plugin;
+
+        // Show loading state while plugin is loading
+        if (this.state.isLoading || !this.plugin) {
+            return (
+                <div style={{ padding: 20, textAlign: 'center' }}>
+                    <p>Loading plugin: {plugin.name}...</p>
+                </div>
+            );
+        }
+
         const TabContent = this.plugin.TabContent;
 
         // console.log('TabContent', plugin.name, this.props.data);
         if (this.state.hasError) {
             //console.log(this.state);
-            return (<div>
+            return (<div style={{ padding: 20 }}>
                     <h1>Plugin Error</h1>
-                    please check if the plugin has an update.
+                    <p>There was an error loading the plugin: {plugin.name}</p>
+                    <p>{this.state.error ? this.state.error.message : 'Unknown error'}</p>
+                    <p>Please check if the plugin has an update.</p>
             </div>);
         }
         if (!this.propIsDefined) {
             return (
-                <div>Loading...</div>
+                <div style={{ padding: 20 }}>
+                    <p>Plugin loaded but TabContent not found: {plugin.name}</p>
+                </div>
             );
         }
         // var TabContent =

@@ -313,7 +313,7 @@ function setupIPCHandlers(agentService, agentUpdateService, actions) {
     try {
       // Query violations from database
       const violations = await agentService.db.query(
-        'SELECT v.*, a.hostname FROM violations v LEFT JOIN agents a ON v.agent_id = a.id ORDER BY v.created_at DESC LIMIT $1',
+        'SELECT v.*, a.hostname FROM violations v LEFT JOIN agents a ON v.agent_id = a.id ORDER BY v.timestamp DESC LIMIT $1',
         [limit]
       );
       return [null, { success: true, violations }];

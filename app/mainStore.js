@@ -175,20 +175,55 @@ export default function configureStore() {
 
     const store = createStore(rootReducer, initialState, enhancers);
 
-    // Add logging middleware to track all state changes
+    // Auto-save functionality to persist state changes immediately
+    let saveTimeout = null;
+    const debouncedSave = () => {
+        if (saveTimeout) clearTimeout(saveTimeout);
+        saveTimeout = setTimeout(() => {
+            try {
+                const currentState = store.getState();
+                console.log('[MainStore] Auto-saving state...');
+                localStorage.setItem(localStorageKey, JSON.stringify(currentState));
+                console.log('[MainStore] ✅ State saved successfully');
+            } catch (err) {
+                console.error('[MainStore] ❌ Failed to save state:', err.message);
+            }
+        }, 1000); // Save 1 second after last change
+    };
+
+    // Subscribe to state changes for auto-save
     store.subscribe(() => {
         const state = store.getState();
         if (state.pluginLibrary !== undefined) {
             const keys = Object.keys(state.pluginLibrary || {});
             console.log('[Store] State updated - pluginLibrary has', keys.length, 'keys');
         }
+        // Trigger debounced auto-save on any state change
+        debouncedSave();
     });
+
+    // Periodic save every 30 seconds as backup
+    setInterval(() => {
+        try {
+            const currentState = store.getState();
+            console.log('[MainStore] Periodic auto-save...');
+            localStorage.setItem(localStorageKey, JSON.stringify(currentState));
+            console.log('[MainStore] ✅ Periodic save completed');
+        } catch (err) {
+            console.error('[MainStore] ❌ Failed periodic save:', err.message);
+        }
+    }, 30000);
 
     //replayActionMain(store);
 
     store.save = function() {
         //const stateForPersistence = rootReducer(store, { type: PERSISTING });
-        localStorage.setItem(localStorageKey, JSON.stringify(store.getState()));
+        try {
+            localStorage.setItem(localStorageKey, JSON.stringify(store.getState()));
+            console.log('[MainStore] ✅ Manual save completed');
+        } catch (err) {
+            console.error('[MainStore] ❌ Manual save failed:', err.message);
+        }
     };
 
     return store;

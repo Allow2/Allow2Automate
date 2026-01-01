@@ -55,8 +55,16 @@ export default class AgentDiscovery extends EventEmitter {
   async loadBonjour() {
     try {
       // bonjour-service is optional - may not be installed
-      const module = await import('bonjour-service');
-      return module.default || module;
+      // Try dynamic import first (ESM)
+      try {
+        const module = await import('bonjour-service');
+        // bonjour-service v1.x exports as default, v2.x as named export
+        return module.default || module.Bonjour || module;
+      } catch (importError) {
+        // Fallback to require for CommonJS
+        const Bonjour = require('bonjour-service');
+        return Bonjour.default || Bonjour;
+      }
     } catch (error) {
       console.log('[AgentDiscovery] bonjour-service not available:', error.message);
       return null;

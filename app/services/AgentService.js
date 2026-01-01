@@ -102,9 +102,10 @@ export default class AgentService extends EventEmitter {
     this.heartbeatInterval = setInterval(async () => {
       try {
         const staleThreshold = Date.now() - (5 * 60 * 1000); // 5 minutes
+        const staleThresholdISO = new Date(staleThreshold).toISOString();
         const staleAgents = await this.db.query(
           'SELECT id FROM agents WHERE last_heartbeat < $1',
-          [new Date(staleThreshold)]
+          [staleThresholdISO]
         );
 
         for (const agent of staleAgents) {
@@ -229,7 +230,7 @@ export default class AgentService extends EventEmitter {
     try {
       // Generate 6-character alphanumeric code
       const code = crypto.randomBytes(3).toString('hex').toUpperCase();
-      const expiresAt = new Date(Date.now() + (expiresInHours * 60 * 60 * 1000));
+      const expiresAt = new Date(Date.now() + (expiresInHours * 60 * 60 * 1000)).toISOString();
 
       await this.db.query(`
         INSERT INTO registration_codes (code, child_id, expires_at)

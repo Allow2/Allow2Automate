@@ -353,6 +353,18 @@ export default class DatabaseModule {
   }
 
   /**
+   * Sanitize parameters for SQLite (convert Date objects to ISO strings)
+   */
+  sanitizeParams(params) {
+    return params.map(param => {
+      if (param instanceof Date) {
+        return param.toISOString();
+      }
+      return param;
+    });
+  }
+
+  /**
    * Execute a query with parameters
    * For INSERT, UPDATE, DELETE statements
    */
@@ -362,6 +374,9 @@ export default class DatabaseModule {
     }
 
     try {
+      // Sanitize parameters (convert Date objects to ISO strings)
+      const sanitizedParams = this.sanitizeParams(params);
+
       // Convert PostgreSQL-style placeholders ($1, $2) to SQLite-style (?, ?)
       const sqliteSql = sql.replace(/\$\d+/g, '?');
 
@@ -373,11 +388,11 @@ export default class DatabaseModule {
       if (finalSql.trim().toUpperCase().startsWith('SELECT')) {
         // For SELECT queries, return all rows
         const stmt = this.db.prepare(finalSql);
-        return stmt.all(...params);
+        return stmt.all(...sanitizedParams);
       } else {
         // For INSERT/UPDATE/DELETE, execute and return info
         const stmt = this.db.prepare(finalSql);
-        const info = stmt.run(...params);
+        const info = stmt.run(...sanitizedParams);
         return {
           rowCount: info.changes,
           lastInsertRowid: info.lastInsertRowid
@@ -400,6 +415,9 @@ export default class DatabaseModule {
     }
 
     try {
+      // Sanitize parameters (convert Date objects to ISO strings)
+      const sanitizedParams = this.sanitizeParams(params);
+
       // Convert PostgreSQL-style placeholders to SQLite-style
       const sqliteSql = sql.replace(/\$\d+/g, '?');
 
@@ -409,7 +427,7 @@ export default class DatabaseModule {
         .replace(/CURRENT_TIMESTAMP/gi, "datetime('now')");
 
       const stmt = this.db.prepare(finalSql);
-      return stmt.get(...params) || null;
+      return stmt.get(...sanitizedParams) || null;
     } catch (error) {
       console.error('[DatabaseModule] QueryOne error:', error);
       throw error;
