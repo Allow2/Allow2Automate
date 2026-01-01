@@ -16,12 +16,11 @@ import {
   DialogActions,
   TextField,
   CircularProgress,
-  Box,
   Divider
 } from '@material-ui/core';
 import {
   Computer as ComputerIcon,
-  Download as DownloadIcon,
+  CloudDownload as DownloadIcon,
   Delete as DeleteIcon,
   Refresh as RefreshIcon,
   Add as AddIcon
@@ -211,9 +210,9 @@ export default function AgentManagement({ ipcRenderer }) {
 
   if (loading) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 200 }}>
         <CircularProgress />
-      </Box>
+      </div>
     );
   }
 
@@ -238,7 +237,7 @@ export default function AgentManagement({ ipcRenderer }) {
           <Divider />
 
           {/* Agent List */}
-          <Box mt={2}>
+          <div style={{ marginTop: 16 }}>
             <Typography variant="h6" gutterBottom>
               Registered Agents ({agents.length})
             </Typography>
@@ -286,10 +285,10 @@ export default function AgentManagement({ ipcRenderer }) {
                 ))}
               </List>
             )}
-          </Box>
+          </div>
 
           {/* Install Agent Section */}
-          <Box className={classes.installerSection}>
+          <div className={classes.installerSection}>
             <div className={classes.header}>
               <Typography variant="h6">
                 Install Agent on a New Device
@@ -297,10 +296,10 @@ export default function AgentManagement({ ipcRenderer }) {
               <Button
                 variant="outlined"
                 size="small"
-                startIcon={checkingUpdates ? <CircularProgress size={16} /> : <RefreshIcon />}
                 onClick={checkForUpdates}
                 disabled={checkingUpdates}
               >
+                {checkingUpdates ? <CircularProgress size={16} style={{ marginRight: 8 }} /> : <RefreshIcon style={{ marginRight: 8, fontSize: 18 }} />}
                 Check for Updates
               </Button>
             </div>
@@ -332,63 +331,57 @@ export default function AgentManagement({ ipcRenderer }) {
               </Typography>
             )}
 
-            <Box display="flex" gap={2} flexWrap="wrap" mt={2}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', marginTop: 16, gap: '8px' }}>
               <Button
                 variant="contained"
                 color="primary"
-                startIcon={
-                  downloadingPlatform === 'win32' ? (
-                    <CircularProgress size={20} />
-                  ) : (
-                    <DownloadIcon />
-                  )
-                }
                 onClick={() => downloadInstaller('win32')}
                 disabled={installerDownloading}
               >
+                {downloadingPlatform === 'win32' ? (
+                  <CircularProgress size={20} style={{ marginRight: 8 }} />
+                ) : (
+                  <DownloadIcon style={{ marginRight: 8 }} />
+                )}
                 Windows (MSI)
               </Button>
 
               <Button
                 variant="contained"
                 color="primary"
-                startIcon={
-                  downloadingPlatform === 'darwin' ? (
-                    <CircularProgress size={20} />
-                  ) : (
-                    <DownloadIcon />
-                  )
-                }
                 onClick={() => downloadInstaller('darwin')}
                 disabled={installerDownloading}
               >
+                {downloadingPlatform === 'darwin' ? (
+                  <CircularProgress size={20} style={{ marginRight: 8 }} />
+                ) : (
+                  <DownloadIcon style={{ marginRight: 8 }} />
+                )}
                 macOS (PKG)
               </Button>
 
               <Button
                 variant="contained"
                 color="primary"
-                startIcon={
-                  downloadingPlatform === 'linux' ? (
-                    <CircularProgress size={20} />
-                  ) : (
-                    <DownloadIcon />
-                  )
-                }
                 onClick={() => downloadInstaller('linux')}
                 disabled={installerDownloading}
               >
+                {downloadingPlatform === 'linux' ? (
+                  <CircularProgress size={20} style={{ marginRight: 8 }} />
+                ) : (
+                  <DownloadIcon style={{ marginRight: 8 }} />
+                )}
                 Linux (DEB)
               </Button>
-            </Box>
+            </div>
 
-            <Box mt={2}>
+            <div style={{ marginTop: 16 }}>
               <Typography variant="body2" color="textSecondary">
                 Downloads are saved to your Downloads folder. The configuration file contains
                 pre-configured settings for connecting to this server.
               </Typography>
-            </Box>
-          </Box>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
@@ -436,15 +429,15 @@ export default function AgentManagement({ ipcRenderer }) {
 
           {downloadResult && (
             <Fragment>
-              <Box mt={2} mb={2}>
+              <div style={{ marginTop: 16, marginBottom: 16 }}>
                 <Typography variant="body2" paragraph>
                   The following files have been downloaded to your Downloads folder:
                 </Typography>
 
-                <Box
-                  p={2}
-                  mb={2}
+                <div
                   style={{
+                    padding: 16,
+                    marginBottom: 16,
                     backgroundColor: '#f5f5f5',
                     borderRadius: 4,
                     fontFamily: 'monospace',
@@ -468,11 +461,11 @@ export default function AgentManagement({ ipcRenderer }) {
                       </Typography>
                     </Fragment>
                   )}
-                </Box>
+                </div>
 
                 <Divider />
 
-                <Box mt={2} mb={2}>
+                <div style={{ marginTop: 16, marginBottom: 16 }}>
                   <Typography variant="h6" gutterBottom>
                     Installation Instructions
                   </Typography>
@@ -501,24 +494,24 @@ export default function AgentManagement({ ipcRenderer }) {
                     <strong>Step 4:</strong> The agent will automatically connect to:
                   </Typography>
 
-                  <Box
-                    p={1}
-                    mb={2}
+                  <div
                     style={{
+                      padding: 8,
+                      marginBottom: 16,
                       backgroundColor: '#f5f5f5',
                       borderRadius: 4,
                       fontFamily: 'monospace'
                     }}
                   >
                     <Typography variant="body2">{downloadResult.serverUrl}</Typography>
-                  </Box>
+                  </div>
 
                   <Typography variant="caption" color="textSecondary">
                     The configuration file contains all necessary settings for the agent to
                     connect to this Allow2Automate server. Version: {downloadResult.version}
                   </Typography>
-                </Box>
-              </Box>
+                </div>
+              </div>
             </Fragment>
           )}
         </DialogContent>
