@@ -292,6 +292,133 @@ function setupIPCHandlers(agentService, agentUpdateService, actions) {
       return { success: false, error: error.message };
     }
   });
+
+  // Steam plugin integration - bridge to agent service
+  // These handlers provide a direct bridge between the Steam plugin and the agent service
+  // The Steam plugin expects error-first callback style: [error, result]
+
+  // Get agents for Steam plugin
+  ipcMain.handle('steam:getAgents', async (event) => {
+    try {
+      const agents = await agentService.listAgents();
+      return [null, { success: true, agents }];
+    } catch (error) {
+      console.error('[IPC] Error getting agents for Steam plugin:', error);
+      return [error, null];
+    }
+  });
+
+  // Get violations for Steam plugin
+  ipcMain.handle('steam:getViolations', async (event, { limit = 50 }) => {
+    try {
+      // Query violations from database
+      const violations = await agentService.db.query(
+        'SELECT v.*, a.hostname FROM violations v LEFT JOIN agents a ON v.agent_id = a.id ORDER BY v.created_at DESC LIMIT $1',
+        [limit]
+      );
+      return [null, { success: true, violations }];
+    } catch (error) {
+      console.error('[IPC] Error getting violations for Steam plugin:', error);
+      return [error, null];
+    }
+  });
+
+  // Get settings for Steam plugin (stored in app config)
+  ipcMain.handle('steam:getSettings', async (event) => {
+    try {
+      // Settings would typically be stored in plugin configuration
+      // For now, return defaults
+      const settings = {
+        checkInterval: 30000,
+        killOnViolation: true,
+        notifyParent: true
+      };
+      return [null, { success: true, settings }];
+    } catch (error) {
+      console.error('[IPC] Error getting settings for Steam plugin:', error);
+      return [error, null];
+    }
+  });
+
+  // Get status for Steam plugin
+  ipcMain.handle('steam:getStatus', async (event) => {
+    try {
+      const agents = await agentService.listAgents();
+      const activeAgents = agents.filter(a => a.online).length;
+
+      // Get recent violations
+      const violations = await agentService.db.query(
+        'SELECT * FROM violations ORDER BY created_at DESC LIMIT 10'
+      );
+
+      return [null, {
+        success: true,
+        agentCount: agents.length,
+        activeAgents: activeAgents,
+        monitoredChildren: 0, // Would need to query from plugin state
+        recentViolations: violations,
+        lastSync: Date.now()
+      }];
+    } catch (error) {
+      console.error('[IPC] Error getting status for Steam plugin:', error);
+      return [error, null];
+    }
+  });
+
+  // Link agent to child for Steam plugin
+  ipcMain.handle('steam:linkAgent', async (event, { agentId, childId }) => {
+    try {
+      // Update agent's child_id in database
+      await agentService.db.query(
+        'UPDATE agents SET child_id = $1 WHERE id = $2',
+        [childId, agentId]
+      );
+      return [null, { success: true }];
+    } catch (error) {
+      console.error('[IPC] Error linking agent for Steam plugin:', error);
+      return [error, null];
+    }
+  });
+
+  // Unlink agent from child for Steam plugin
+  ipcMain.handle('steam:unlinkAgent', async (event, { agentId }) => {
+    try {
+      // Remove agent's child_id from database
+      await agentService.db.query(
+        'UPDATE agents SET child_id = NULL WHERE id = $1',
+        [agentId]
+      );
+      return [null, { success: true }];
+    } catch (error) {
+      console.error('[IPC] Error unlinking agent for Steam plugin:', error);
+      return [error, null];
+    }
+  });
+
+  // Update settings for Steam plugin
+  ipcMain.handle('steam:updateSettings', async (event, { settings }) => {
+    try {
+      // Settings would typically be stored in plugin configuration
+      // For now, just acknowledge success
+      console.log('[IPC] Steam settings updated:', settings);
+      return [null, { success: true }];
+    } catch (error) {
+      console.error('[IPC] Error updating settings for Steam plugin:', error);
+      return [error, null];
+    }
+  });
+
+  // Clear violations for Steam plugin
+  ipcMain.handle('steam:clearViolations', async (event) => {
+    try {
+      // Delete all violations (or only Steam-related ones)
+      await agentService.db.query('DELETE FROM violations');
+      return [null, { success: true }];
+    } catch (error) {
+      console.error('[IPC] Error clearing violations for Steam plugin:', error);
+      return [error, null];
+    }
+  });
 }
 
 /**
