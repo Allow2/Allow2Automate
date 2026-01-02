@@ -13,7 +13,7 @@ import actions from './actions';
 
 const localStorageKey = 'Allow2Automate';
 
-export default function configureStore() {
+export default function configureStore(app) {
 
     console.log('parent state init', stateSyncEnhancer, stateSyncEnhancer(), createStore);
 
@@ -98,7 +98,15 @@ export default function configureStore() {
         actionSerializerMiddleware
     ];
 
-    const localStorage = new LocalStorage('./store');
+    // CRITICAL: Use environment-aware data root
+    // Development: <project-root>/dev-data/store (never stomps on production)
+    // Production: ~/Library/Application Support/allow2automate/store (or platform equivalent)
+    const { getDataRoot } = require('./pluginPaths');
+    const dataRoot = app && getDataRoot ? getDataRoot(app) : '.';
+    const storePath = require('path').join(dataRoot, 'store');
+
+    console.log('[MainStore] Using store path:', storePath);
+    const localStorage = new LocalStorage(storePath);
 
     const rootReducer = combineReducers(reducers);
     const initialState = JSON.parse(localStorage.getItem(localStorageKey) || '{}');
@@ -183,8 +191,24 @@ export default function configureStore() {
             try {
                 const currentState = store.getState();
                 console.log('[MainStore] Auto-saving state...');
+
+                // DEBUG: Log what's actually being saved for user state
+                const userState = currentState.user;
+                if (userState && Object.keys(userState).length > 0) {
+                    console.log('[MainStore] Saving user state with keys:', Object.keys(userState));
+                    console.log('[MainStore] User ID in save:', userState.user && userState.user.id);
+                    console.log('[MainStore] Has access_token:', !!userState.access_token);
+                } else {
+                    console.log('[MainStore] WARNING: Saving EMPTY user state!');
+                }
+
                 localStorage.setItem(localStorageKey, JSON.stringify(currentState));
                 console.log('[MainStore] ✅ State saved successfully');
+
+                // VERIFY: Read back what was saved
+                const savedData = localStorage.getItem(localStorageKey);
+                const parsedSaved = JSON.parse(savedData);
+                console.log('[MainStore] VERIFICATION - User in saved file:', parsedSaved.user && Object.keys(parsedSaved.user).length > 0 ? Object.keys(parsedSaved.user) : 'EMPTY');
             } catch (err) {
                 console.error('[MainStore] ❌ Failed to save state:', err.message);
             }
@@ -196,8 +220,18 @@ export default function configureStore() {
         const state = store.getState();
         if (state.pluginLibrary !== undefined) {
             const keys = Object.keys(state.pluginLibrary || {});
-            console.log('[Store] State updated - pluginLibrary has', keys.length, 'keys');
+            console.log('[MainStore] State updated - pluginLibrary has', keys.length, 'keys');
         }
+
+        // CRITICAL DEBUG: Track user state changes
+        if (state.user !== undefined) {
+            const isLoggedIn = !!(state.user && state.user.user && state.user.user.id);
+            console.log('[MainStore] User state in MAIN store:', isLoggedIn ? `Logged in (User ID: ${state.user.user.id})` : 'Not logged in');
+            if (isLoggedIn) {
+                console.log('[MainStore] User object keys:', Object.keys(state.user));
+            }
+        }
+
         // Trigger debounced auto-save on any state change
         debouncedSave();
     });

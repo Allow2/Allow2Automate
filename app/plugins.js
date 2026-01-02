@@ -5,7 +5,7 @@ import {
     sortedPluginSelector
 } from './selectors';
 import { createRegistryLoader } from './registry';
-import { getPluginPath } from './pluginPaths';
+import { getPluginInstallPath, getPluginLibraryScanPath } from './pluginPaths';
 
 var Module = require("module");
 
@@ -132,9 +132,9 @@ module.exports = function(app, store, actions) {
     }
 
     function initPlugins() {
-        // Use environment-aware plugin path
-        app.pluginPath = getPluginPath(app);
-        console.log("[Plugins] Loading plugins from:", app.pluginPath);
+        // Use install path for plugins
+        app.pluginPath = getPluginInstallPath(app);
+        console.log("[Plugins] Plugin install path:", app.pluginPath);
         console.log("[Plugins] Environment:", process.env.NODE_ENV || 'production');
 
         // should be a network call
@@ -322,17 +322,51 @@ module.exports = function(app, store, actions) {
     plugins.getInstalled = function(callback) {
         let currentState = store.getState().configurations;
 
-        // Use environment-aware plugin path for listing installed plugins
-        const pluginBasePath = getPluginPath(app);
+        // CRITICAL: Scan the INSTALL path (persistent storage), not library scan path
+        // Development: <project-root>/dev-data/plugins
+        // Production: ~/Library/Application Support/allow2automate/plugins
+        const pluginBasePath = getPluginInstallPath(app);
         console.log('[Plugins] Scanning for installed plugins in:', pluginBasePath);
 
-        const installedPlugins = app.epm.list(pluginBasePath, { version: true }).reduce(function(memo, plugin) {
-            const parts = plugin.split('@');
-            const pluginName = parts[0];
-            memo[pluginName] = { version: parts[1] };
+        // Scan for both scoped (@allow2/plugin-name) and unscoped (plugin-name) packages
+        // electron-plugin-manager doesn't support scoped packages, so we scan manually
+        let pluginList = [];
+        const nodeModulesPath = path.join(pluginBasePath, 'node_modules');
+
+        try {
+            if (fs.existsSync(nodeModulesPath)) {
+                // Scan for scoped packages (@allow2/*)
+                const allow2ScopePath = path.join(nodeModulesPath, '@allow2');
+                if (fs.existsSync(allow2ScopePath)) {
+                    const scopedPackages = fs.readdirSync(allow2ScopePath)
+                        .filter(name => name.startsWith('allow2automate-'))
+                        .map(name => `@allow2/${name}`);
+                    pluginList = pluginList.concat(scopedPackages);
+                    console.log('[Plugins] Found scoped packages:', scopedPackages);
+                }
+
+                // Also scan for unscoped packages (allow2automate-*)
+                const unscopedPackages = fs.readdirSync(nodeModulesPath)
+                    .filter(name => name.startsWith('allow2automate-') && !name.startsWith('@'));
+                pluginList = pluginList.concat(unscopedPackages);
+                if (unscopedPackages.length > 0) {
+                    console.log('[Plugins] Found unscoped packages:', unscopedPackages);
+                }
+            }
+        } catch (err) {
+            console.error('[Plugins] Error scanning for installed plugins:', err);
+        }
+
+        console.log('[Plugins] Total plugins found:', pluginList.length);
+        console.log('[Plugins] Plugin list:', pluginList);
+
+        const installedPlugins = pluginList.reduce(function(memo, plugin) {
+            // Handle both scoped (@allow2/name) and unscoped (name) packages
+            const pluginName = plugin; // Keep full name including scope
+
             try {
-                // Use the pluginBasePath from parent scope
-                const fullPath = path.join(pluginBasePath, pluginName);
+                // Build correct path for both scoped and unscoped packages
+                const fullPath = path.join(nodeModulesPath, pluginName);
                 let jsonString = fs.readFileSync(path.join(fullPath, 'package.json'), 'utf8');
                 //console.log(jsonString);
                 let packageJson = JSON.parse(jsonString);

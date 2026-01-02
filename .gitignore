@@ -51,12 +51,21 @@ build
 # Development plugins (separate from production)
 dev-plugins/
 
+# Development data directory (environment-isolated persistence)
+# Contains: dev-data/plugins, dev-data/store, dev-data/*.db
+# Never stomps on production data in ~/Library/Application Support
+dev-data/
+
 Allow2Automate_Distribution.provisionprofile
-# localStorage
+# localStorage (old location - deprecated)
 store
 
 # Claude Code
 .claude/
+
+
+# Removed Windows wrapper files per user request
+hive-mind-prompt-*.txt
 
 
 # Removed Windows wrapper files per user request

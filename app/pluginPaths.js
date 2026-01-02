@@ -43,34 +43,57 @@ export function isDevelopmentMode() {
 }
 
 /**
+ * Get data root directory based on environment
+ * Development: <project-root>/dev-data (git-ignored, never stomps on production)
+ * Production: Platform-specific app data directory
+ * @param {Object} app - Electron app object
+ * @returns {string} Root directory for all app data
+ */
+export function getDataRoot(app) {
+    const isDev = isDevelopmentMode();
+
+    if (isDev) {
+        // Development: Use project-local dev-data directory (git-ignored)
+        const devDataRoot = path.join(__dirname, '..', 'dev-data');
+        console.log(`[PluginPaths] Using DEVELOPMENT data root: ${devDataRoot}`);
+        return devDataRoot;
+    } else {
+        // Production: Use platform-specific app data
+        const platform = os.platform();
+        const appData = app.getPath('appData');
+
+        let prodDataRoot;
+        switch (platform) {
+            case 'darwin':
+                // macOS: ~/Library/Application Support/allow2automate
+                prodDataRoot = path.join(appData, 'allow2automate');
+                break;
+            case 'win32':
+                // Windows: %APPDATA%/allow2automate
+                prodDataRoot = path.join(appData, 'allow2automate');
+                break;
+            case 'linux':
+                // Linux: ~/.config/allow2automate
+                prodDataRoot = path.join(appData, 'allow2automate');
+                break;
+            default:
+                console.warn(`[PluginPaths] Unknown platform: ${platform}, using default`);
+                prodDataRoot = path.join(appData, 'allow2automate');
+        }
+
+        console.log(`[PluginPaths] Using PRODUCTION data root: ${prodDataRoot}`);
+        return prodDataRoot;
+    }
+}
+
+/**
  * Get platform-specific production plugin path
  * @param {Object} app - Electron app object
  * @returns {string} Platform-specific production plugin path
  */
 export function getProductionPluginPath(app) {
-    const platform = os.platform();
-
-    // Use Electron's appData path which is platform-aware
-    const appData = app.getPath('appData');
-
-    switch (platform) {
-        case 'darwin':
-            // macOS: ~/Library/Application Support/allow2automate/plugins
-            return path.join(appData, 'allow2automate', 'plugins');
-
-        case 'win32':
-            // Windows: %APPDATA%/allow2automate/plugins
-            return path.join(appData, 'allow2automate', 'plugins');
-
-        case 'linux':
-            // Linux: ~/.config/allow2automate/plugins (via appData)
-            return path.join(appData, 'allow2automate', 'plugins');
-
-        default:
-            // Fallback for unknown platforms
-            console.warn(`[PluginPaths] Unknown platform: ${platform}, using default`);
-            return path.join(appData, 'allow2automate', 'plugins');
-    }
+    // All installed plugins (dev and prod) go to data root
+    return path.join(getDataRoot(app), 'plugins');
 }
 
 /**
@@ -83,23 +106,38 @@ export function getDevelopmentPluginPath() {
 }
 
 /**
- * Get plugin path based on current environment
+ * Get plugin LIBRARY scan path (for marketplace - includes dev-plugins in dev mode)
  * @param {Object} app - Electron app object
- * @returns {string} Environment-appropriate plugin path
+ * @returns {string} Path to scan for plugin library/marketplace
  */
-export function getPluginPath(app) {
+export function getPluginLibraryScanPath(app) {
     const isDev = isDevelopmentMode();
 
     if (isDev) {
+        // Development: Scan dev-plugins for marketplace augmentation
         const devPath = getDevelopmentPluginPath();
-        console.log(`[PluginPaths] Using DEVELOPMENT plugin path: ${devPath}`);
+        console.log(`[PluginPaths] Plugin library scan path (dev): ${devPath}`);
         return devPath;
     } else {
-        const prodPath = getProductionPluginPath(app);
-        console.log(`[PluginPaths] Using PRODUCTION plugin path: ${prodPath}`);
-        return prodPath;
+        // Production: No local scan, marketplace comes from registry only
+        // Return null to indicate no local scanning
+        console.log(`[PluginPaths] Plugin library scan path (prod): REGISTRY ONLY`);
+        return null;
     }
 }
+
+/**
+ * Get plugin INSTALL path (where npm installed plugins are stored - ALWAYS persistent)
+ * @param {Object} app - Electron app object
+ * @returns {string} Path where plugins should be npm installed
+ */
+export function getPluginInstallPath(app) {
+    // ALWAYS use data root for installation (dev-data in dev, app data in prod)
+    const installPath = getProductionPluginPath(app);
+    console.log(`[PluginPaths] Plugin install path: ${installPath}`);
+    return installPath;
+}
+
 
 /**
  * Get all plugin path information for debugging
@@ -108,13 +146,15 @@ export function getPluginPath(app) {
  */
 export function getPluginPathInfo(app) {
     const isDev = isDevelopmentMode();
-    const currentPath = getPluginPath(app);
+    const installPath = getPluginInstallPath(app);
+    const libraryScanPath = getPluginLibraryScanPath(app);
     const prodPath = getProductionPluginPath(app);
     const devPath = getDevelopmentPluginPath();
 
     return {
         environment: isDev ? 'development' : 'production',
-        currentPath: currentPath,
+        currentPath: installPath, // Install path is the main path
+        libraryScanPath: libraryScanPath, // Where we scan for marketplace augmentation
         productionPath: prodPath,
         developmentPath: devPath,
         platform: os.platform(),
@@ -131,9 +171,20 @@ export function getPluginPathInfo(app) {
  * @returns {string} Requested path
  */
 export function getPathByName(app, name) {
+    // Handle data root
+    if (name === 'dataRoot') {
+        return getDataRoot(app);
+    }
+
     // Handle plugin-specific path requests
     if (name === 'plugins' || name === 'pluginsDir') {
-        return getPluginPath(app);
+        // For npm install operations, use install path (persistent)
+        return getPluginInstallPath(app);
+    }
+
+    if (name === 'pluginLibraryScan') {
+        // For marketplace scanning, use library scan path
+        return getPluginLibraryScanPath(app);
     }
 
     // Delegate to Electron's getPath for standard paths
@@ -142,9 +193,11 @@ export function getPathByName(app, name) {
 
 export default {
     isDevelopmentMode,
+    getDataRoot,
     getProductionPluginPath,
     getDevelopmentPluginPath,
-    getPluginPath,
+    getPluginLibraryScanPath,
+    getPluginInstallPath,
     getPluginPathInfo,
     getPathByName
 };

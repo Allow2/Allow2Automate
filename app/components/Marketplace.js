@@ -20,7 +20,10 @@ import {
     DialogTitle,
     DialogContent,
     DialogActions,
-    Tooltip
+    Tooltip,
+    Select,
+    MenuItem,
+    FormControl
 } from '@material-ui/core';
 import {
     Search,
@@ -31,7 +34,8 @@ import {
     Refresh,
     Warning,
     Error as ErrorIcon,
-    Info
+    Info,
+    Sort
 } from '@material-ui/icons';
 import Dialogs from 'dialogs';
 import Analytics from '../analytics';
@@ -55,6 +59,7 @@ export default class Marketplace extends Component {
     state = {
         searchQuery: '',
         selectedCategory: 'all',
+        sortOrder: 'name',
         installing: {},
         isRefreshing: false,
         lastRefreshTime: null,
@@ -93,6 +98,13 @@ export default class Marketplace extends Component {
         this.setState({
             searchQuery: event.target.value
         });
+    };
+
+    handleSortChange = (event) => {
+        this.setState({
+            sortOrder: event.target.value
+        });
+        Analytics.trackMarketplaceSort(event.target.value);
     };
 
     handleRefresh = async () => {
@@ -199,13 +211,13 @@ export default class Marketplace extends Component {
 
     getFilteredPlugins = () => {
         const { pluginLibrary } = this.props;
-        const { searchQuery, selectedCategory } = this.state;
+        const { searchQuery, selectedCategory, sortOrder } = this.state;
 
         if (!pluginLibrary || Object.keys(pluginLibrary).length === 0) {
             return [];
         }
 
-        return Object.entries(pluginLibrary).filter(([name, plugin]) => {
+        const filtered = Object.entries(pluginLibrary).filter(([name, plugin]) => {
             // Skip null/undefined plugins
             if (!plugin) return false;
 
@@ -224,6 +236,36 @@ export default class Marketplace extends Component {
             name,
             ...plugin
         }));
+
+        // Sort the filtered plugins
+        return filtered.sort((a, b) => {
+            switch (sortOrder) {
+                case 'name':
+                    // Sort alphabetically by name
+                    return a.name.localeCompare(b.name);
+
+                case 'newest':
+                    // Sort by creation date (newest first)
+                    const dateA = new Date(a.createdAt || 0).getTime();
+                    const dateB = new Date(b.createdAt || 0).getTime();
+                    return dateB - dateA;
+
+                case 'updated':
+                    // Sort by last update (most recently updated first)
+                    const updateA = new Date(a.updatedAt || a.createdAt || 0).getTime();
+                    const updateB = new Date(b.updatedAt || b.createdAt || 0).getTime();
+                    return updateB - updateA;
+
+                case 'rating':
+                    // Sort by rating (highest first)
+                    const ratingA = a.rating || 0;
+                    const ratingB = b.rating || 0;
+                    return ratingB - ratingA;
+
+                default:
+                    return 0;
+            }
+        });
     };
 
     getCategories = () => {
@@ -677,23 +719,40 @@ export default class Marketplace extends Component {
                             </Box>
                         )}
 
-                        {/* Search Bar */}
-                        <TextField
-                            fullWidth
-                            variant="outlined"
-                            placeholder="Search plugins..."
-                            value={searchQuery}
-                            onChange={this.handleSearchChange}
-                            size="small"
-                            style={{ marginBottom: 16 }}
-                            InputProps={{
-                                startAdornment: (
-                                    <InputAdornment position="start">
-                                        <Search />
-                                    </InputAdornment>
-                                )
-                            }}
-                        />
+                        {/* Search Bar and Sort */}
+                        <Box display="flex" gap={2} mb={2}>
+                            <TextField
+                                fullWidth
+                                variant="outlined"
+                                placeholder="Search plugins..."
+                                value={searchQuery}
+                                onChange={this.handleSearchChange}
+                                size="small"
+                                InputProps={{
+                                    startAdornment: (
+                                        <InputAdornment position="start">
+                                            <Search />
+                                        </InputAdornment>
+                                    )
+                                }}
+                            />
+                            <FormControl variant="outlined" size="small" style={{ minWidth: 180 }}>
+                                <Select
+                                    value={this.state.sortOrder}
+                                    onChange={this.handleSortChange}
+                                    startAdornment={
+                                        <InputAdornment position="start">
+                                            <Sort style={{ marginLeft: 8 }} />
+                                        </InputAdornment>
+                                    }
+                                >
+                                    <MenuItem value="name">Sort by Name</MenuItem>
+                                    <MenuItem value="newest">Sort by Newest</MenuItem>
+                                    <MenuItem value="updated">Sort by Latest Updates</MenuItem>
+                                    <MenuItem value="rating">Sort by Highest Rating</MenuItem>
+                                </Select>
+                            </FormControl>
+                        </Box>
 
                         {/* Category Filters */}
                         <Box display="flex" gap={1} flexWrap="wrap">

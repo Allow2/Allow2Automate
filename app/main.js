@@ -61,8 +61,48 @@ const isDevelopment = isDevelopmentMode();
 let mainWindow = null;
 let forceQuit = false;
 
-const store = configureStore();
+const store = configureStore(app);
 const actions = bindActionCreators(allActions, store.dispatch);
+
+// CRITICAL: electron-redux v2 action replay
+// Listen for actions from renderer and dispatch them to main store
+// This is essential for login state, installed plugins, and other renderer actions to sync to main
+const IPCEvents = {
+    INIT_STATE: '@@ELECTRON_REDUX/INIT_STATE',
+    INIT_STATE_ASYNC: '@@ELECTRON_REDUX/INIT_STATE_ASYNC',
+    ACTION: '@@ELECTRON_REDUX/ACTION'
+};
+
+// Synchronous initial state - for backward compatibility
+ipcMain.on(IPCEvents.INIT_STATE, (event) => {
+    console.log('[electron-redux] Renderer requested initial state (sync)');
+    const state = store.getState();
+    event.returnValue = JSON.stringify(state);
+});
+
+// Asynchronous initial state - preferred method
+ipcMain.handle(IPCEvents.INIT_STATE_ASYNC, async () => {
+    console.log('[electron-redux] Renderer requested initial state (async)');
+    const state = store.getState();
+    return JSON.stringify(state);
+});
+
+// CRITICAL: Replay actions from renderer to main store
+ipcMain.on(IPCEvents.ACTION, (event, action) => {
+    console.log('[electron-redux] Replaying action from renderer:', action.type);
+
+    // Dispatch the action to the main store
+    store.dispatch(action);
+
+    // Broadcast to ALL renderer windows (not just sender)
+    BrowserWindow.getAllWindows().forEach(win => {
+        if (win.webContents !== event.sender) {
+            win.webContents.send(IPCEvents.ACTION, action);
+        }
+    });
+});
+
+console.log('[electron-redux] IPC handlers registered for state sync and action replay');
 
 app.appDataPath = path.join(app.getPath('appData'), 'allow2automate');
 
@@ -294,12 +334,23 @@ migrateWemo();
 })();
 
 plugins.getInstalled((err, installedPlugins) => {
-    //console.log('installedPlugins', installedPlugins);
     if (err) {
-        console.log('plugins.getInstalled', err);
+        console.log('[Plugins] Error getting installed plugins:', err);
         return;
     }
+
+    console.log('[Plugins] Found installed plugins:', Object.keys(installedPlugins || {}).length);
+    if (installedPlugins && Object.keys(installedPlugins).length > 0) {
+        console.log('[Plugins] Installed plugin names:', Object.keys(installedPlugins));
+    }
+
+    // Dispatch action to update store
     actions.installedPluginReplace(installedPlugins);
+    console.log('[Plugins] Dispatched installedPluginReplace action to main store');
+
+    // Verify it's in the store
+    const currentState = store.getState();
+    console.log('[Plugins] Installed plugins in main store:', Object.keys(currentState.installedPlugins || {}).length);
 });
 
 // seed test data
@@ -429,14 +480,14 @@ app.on('window-all-closed', () => {
     }
 });
 
-function windowStateKeeper(windowName) {
+async function windowStateKeeper(windowName) {
     let window, windowState;
-    function setBounds() {
-        // Restore from appConfig
-        if (appConfig.has(`windowState.${windowName}`)) {
-            windowState = appConfig.get(`windowState.${windowName}`);
-            return;
-        }
+
+    // Restore from appConfig (electron-settings v4 requires await)
+    if (await appConfig.has(`windowState.${windowName}`)) {
+        windowState = await appConfig.get(`windowState.${windowName}`);
+        console.log(`[WindowState] Restored ${windowName} window state:`, windowState);
+    } else {
         // Default
         windowState = {
             x: undefined,
@@ -444,21 +495,26 @@ function windowStateKeeper(windowName) {
             width: 1000,    //660
             height: 800
         };
+        console.log(`[WindowState] Using default ${windowName} window state:`, windowState);
     }
-    function saveState() {
+
+    async function saveState() {
         if (!windowState.isMaximized) {
             windowState = window.getBounds();
         }
         windowState.isMaximized = window.isMaximized();
-        appConfig.set(`windowState.${windowName}`, windowState);
+        // electron-settings v4 returns a Promise - await it
+        await appConfig.set(`windowState.${windowName}`, windowState);
+        console.log(`[WindowState] Saved ${windowName} window state:`, windowState);
     }
+
     function track(win) {
         window = win;
         ['resize', 'move', 'close'].forEach(event => {
             win.on(event, saveState);
         });
     }
-    setBounds();
+
     return({
         x: windowState.x,
         y: windowState.y,
@@ -514,7 +570,7 @@ app.on('ready', async () => {
         Menu.setApplicationMenu(menu)
     }
 
-    const mainWindowStateKeeper = windowStateKeeper('main');
+    const mainWindowStateKeeper = await windowStateKeeper('main');
 
     function showMainWindow() {
         if (mainWindow) {

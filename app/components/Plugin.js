@@ -53,17 +53,22 @@ export default class Login extends Component {
         // Get environment-aware plugin path from main process
         const pluginsDir = ipcRenderer.sendSync('getPath', 'plugins');
 
-        // Determine plugin path based on whether it's a dev plugin or installed plugin
-        let pluginPath;
+        // Determine plugin directory based on whether it's a dev plugin or installed plugin
+        let pluginDir;
         if (this.props.plugin.dev_plugin && this.props.plugin.installation && this.props.plugin.installation.local_path) {
-            // Dev plugins: use the direct path (symlinked in dev-plugins/)
-            pluginPath = this.props.plugin.installation.local_path;
-            console.log('[Plugin] Using dev plugin path:', pluginPath);
+            // Dev plugins: use the direct path from installation.local_path
+            pluginDir = this.props.plugin.installation.local_path;
+            console.log('[Plugin] Using dev plugin directory:', pluginDir);
         } else {
             // Installed plugins: in node_modules subdirectory
-            pluginPath = path.join(pluginsDir, 'node_modules', this.props.plugin.name);
-            console.log('[Plugin] Using installed plugin path:', pluginPath);
+            pluginDir = path.join(pluginsDir, 'node_modules', this.props.plugin.name);
+            console.log('[Plugin] Using installed plugin directory:', pluginDir);
         }
+
+        // Build the full path to the plugin's entry point using the 'main' field
+        const entryPoint = this.props.plugin.main || 'dist/index.js';
+        const pluginPath = path.join(pluginDir, entryPoint);
+        console.log('[Plugin] Plugin entry point:', pluginPath);
 
         // Provide global persist stub for backward compatibility
         // Some older plugins may reference persist at module scope
@@ -74,14 +79,17 @@ export default class Login extends Component {
         }
 
         this.plugin = null;
+        this.pluginPath = pluginPath; // Store for componentDidMount
         this.state = {
             hasError: false,
             pluginPath: pluginPath,
             isLoading: true
         };
+    }
 
-        // Load plugin asynchronously to support both CommonJS and ES modules
-        this.loadPlugin(pluginPath);
+    componentDidMount() {
+        // Load plugin after component is mounted to avoid setState warnings
+        this.loadPlugin(this.pluginPath);
     }
 
     async loadPlugin(pluginPath) {

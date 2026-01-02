@@ -9,32 +9,30 @@ if (typeof window === 'undefined') {
   throw new Error('firebase-config.js should only be imported in renderer process');
 }
 
-// CRITICAL FIX: Use dynamic import with null guards to prevent destructuring crashes
-let initializeApp, getAnalytics, setUserId, setUserProperties, logEvent, isSupported;
+// CRITICAL FIX: Use Firebase compat libraries for better Babel 6 compatibility
+// Firebase 12.x with compat mode works with CommonJS transpilation
+let firebase, initializeApp, getAnalytics, setUserId, setUserProperties, logEvent, isSupported;
 
 try {
-  // Use require instead of ES6 import to avoid hoisting issues
-  const firebaseAppModule = require('firebase/app');
-  const firebaseAnalyticsModule = require('firebase/analytics');
+  // Use Firebase compat version for Babel 6 / CommonJS compatibility
+  firebase = require('firebase/compat/app');
+  require('firebase/compat/analytics');
 
-  // Safe destructuring with null guards
-  if (firebaseAppModule) {
-    initializeApp = firebaseAppModule.initializeApp;
+  // Compat API provides firebase namespace
+  if (firebase) {
+    initializeApp = firebase.initializeApp.bind(firebase);
+    getAnalytics = (app) => firebase.analytics(app);
+    setUserId = (analytics, userId) => analytics.setUserId(userId);
+    setUserProperties = (analytics, properties) => analytics.setUserProperties(properties);
+    logEvent = (analytics, eventName, eventParams) => analytics.logEvent(eventName, eventParams);
+    isSupported = () => Promise.resolve(true); // Compat assumes browser support
   }
 
-  if (firebaseAnalyticsModule) {
-    getAnalytics = firebaseAnalyticsModule.getAnalytics;
-    setUserId = firebaseAnalyticsModule.setUserId;
-    setUserProperties = firebaseAnalyticsModule.setUserProperties;
-    logEvent = firebaseAnalyticsModule.logEvent;
-    isSupported = firebaseAnalyticsModule.isSupported;
-  }
-
-  if (!initializeApp || !getAnalytics) {
-    console.error('[Firebase] Failed to load required Firebase modules');
+  if (!initializeApp || !firebase.analytics) {
+    console.error('[Firebase] Failed to load required Firebase compat modules');
   }
 } catch (err) {
-  console.error('[Firebase] Error loading Firebase modules:', err);
+  console.error('[Firebase] Error loading Firebase compat modules:', err);
 }
 
 const firebaseConfig = {
@@ -57,20 +55,23 @@ if (initializeApp) {
     firebaseApp = initializeApp(firebaseConfig);
     console.log('[Firebase] App initialized successfully');
 
-    // Initialize analytics only if supported
-    if (isSupported && getAnalytics) {
-      isSupported().then(supported => {
-        if (supported) {
-          analytics = getAnalytics(firebaseApp);
-          console.log('[Firebase] Analytics initialized successfully');
-        } else {
-          console.warn('[Firebase] Analytics not supported in this environment');
-        }
-      }).catch(err => {
-        console.error('[Firebase] Analytics initialization error:', err);
-      });
+    // Initialize analytics using compat API (synchronous)
+    if (firebase && firebase.analytics) {
+      try {
+        analytics = firebase.analytics(firebaseApp);
+        console.log('[Firebase] Analytics initialized successfully with measurement ID:', firebaseConfig.measurementId);
+
+        // Test analytics is working
+        analytics.logEvent('firebase_initialized', {
+          timestamp: new Date().toISOString(),
+          environment: 'electron_renderer'
+        });
+        console.log('[Firebase] Test event logged to GA4');
+      } catch (analyticsErr) {
+        console.error('[Firebase] Analytics initialization error:', analyticsErr);
+      }
     } else {
-      console.warn('[Firebase] Analytics functions not loaded');
+      console.warn('[Firebase] Analytics compat not loaded');
     }
   } catch (err) {
     console.error('[Firebase] Failed to initialize Firebase:', err);

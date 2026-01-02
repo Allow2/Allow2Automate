@@ -4,6 +4,12 @@ import actions from '../actions';
 export default handleActions({
 
     [actions.installedPluginReplace]: (state, action) => {
+        console.log('[InstalledPlugins Reducer] REPLACE action received');
+        console.log('[InstalledPlugins Reducer] Previous state:', Object.keys(state || {}).length, 'plugins');
+        console.log('[InstalledPlugins Reducer] New payload:', Object.keys(action.payload || {}).length, 'plugins');
+        if (action.payload && Object.keys(action.payload).length > 0) {
+            console.log('[InstalledPlugins Reducer] Plugin names:', Object.keys(action.payload));
+        }
         return action.payload;
     },
 

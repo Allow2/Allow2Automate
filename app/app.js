@@ -6,6 +6,7 @@ import { createMemoryHistory } from 'history';
 import routes from './routes';
 import configureStore from './childStore';
 import { ThemeProvider as MuiThemeProvider } from '@material-ui/core/styles';
+import Analytics from './analytics';
 
 const syncHistoryWithStore = (store, history) => {
   const { routing } = store.getState();
@@ -17,6 +18,18 @@ const syncHistoryWithStore = (store, history) => {
 const routerHistory = createMemoryHistory();
 const store = configureStore(routerHistory);
 syncHistoryWithStore(store, routerHistory);
+
+// Initialize Firebase Analytics
+Analytics.initialize().then((success) => {
+  if (success) {
+    console.log('[App] Analytics initialized successfully');
+    Analytics.trackAppStart();
+  } else {
+    console.warn('[App] Analytics initialization failed - events will not be tracked');
+  }
+}).catch((err) => {
+  console.error('[App] Analytics initialization error:', err);
+});
 
 const rootElement = document.querySelector(document.currentScript.getAttribute('data-container'));
 

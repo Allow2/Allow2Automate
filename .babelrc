@@ -3,5 +3,9 @@
   "plugins": [
     "transform-decorators-legacy",
     "transform-runtime"
+  ],
+  "ignore": [
+    "node_modules/firebase/**",
+    "node_modules/@firebase/**"
   ]
 }
