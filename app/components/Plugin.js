@@ -33,22 +33,26 @@ export default class Login extends Component {
 
         console.log("[Plugin Component] Injecting shared module paths for:", this.props.plugin.name);
 
-        // Inject module paths into loaded plugin modules via Module.wrap
-        (function(moduleWrapCopy) {
-            Module.wrap = function(script) {
-                // Build the path injection script
-                const pathInjectionScript = [
-                    `module.paths.push('${ourModulesPath}');`,
-                    `module.paths.push('${path.join(reactDomPath, '..')}');`,
-                    `module.paths.push('${path.join(muiCorePath, '..', '..')}');`,
-                    `module.paths.push('${path.join(reduxPath, '..')}');`,
-                    `module.paths.push('${path.join(reactReduxPath, '..')}');`
-                ].join('');
+        // Store original Module.wrap
+        if (!Module._originalWrap) {
+            Module._originalWrap = Module.wrap;
+        }
 
-                script = pathInjectionScript + script;
-                return moduleWrapCopy(script);
-            };
-        })(Module.wrap);
+        // Inject module paths into loaded plugin modules via Module.wrap
+        // This ensures plugins use the host app's React instance
+        Module.wrap = function(script) {
+            // Build the path injection script
+            const pathInjectionScript = [
+                `module.paths.push('${ourModulesPath}');`,
+                `module.paths.push('${path.join(reactDomPath, '..')}');`,
+                `module.paths.push('${path.join(muiCorePath, '..', '..')}');`,
+                `module.paths.push('${path.join(reduxPath, '..')}');`,
+                `module.paths.push('${path.join(reactReduxPath, '..')}');`
+            ].join('');
+
+            script = pathInjectionScript + script;
+            return Module._originalWrap(script);
+        };
 
         // Get environment-aware plugin path from main process
         const pluginsDir = ipcRenderer.sendSync('getPath', 'plugins');
@@ -95,6 +99,13 @@ export default class Login extends Component {
     async loadPlugin(pluginPath) {
         try {
             console.log('[Plugin] Loading plugin from:', pluginPath);
+
+            // CRITICAL: Clear require cache to ensure fresh load with injected paths
+            // This prevents cached modules from using wrong React instances
+            if (require.cache[pluginPath]) {
+                console.log('[Plugin] Clearing cached module:', pluginPath);
+                delete require.cache[pluginPath];
+            }
 
             // Try to load the plugin - use dynamic import which supports both CJS and ESM
             let loadedPlugin;

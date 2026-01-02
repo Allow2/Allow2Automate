@@ -387,8 +387,11 @@ module.exports = function(app, store, actions) {
                 packageJson.shortName = extractShortName(pluginName);
                 //packageJson.fullPath = fullpath;
                 memo[pluginName] = packageJson;
-                console.log('[Plugins] Loading plugin:', pluginName, 'from:', pluginBasePath);
-                var loadedPlugin = app.epm.load(pluginBasePath, pluginName);
+                console.log('[Plugins] Loading plugin:', pluginName, 'from:', fullPath);
+
+                // Don't use epm.load() for scoped packages - it doesn't support them
+                // The plugin will be loaded on-demand by the renderer when needed
+                // var loadedPlugin = app.epm.load(pluginBasePath, pluginName);
                 //console.log(loadedPlugin.plugin);
 
 

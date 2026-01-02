@@ -54,7 +54,11 @@ dev-plugins/
 # Development data directory (environment-isolated persistence)
 # Contains: dev-data/plugins, dev-data/store, dev-data/*.db
 # Never stomps on production data in ~/Library/Application Support
-dev-data/
+dev-data/*
+#!dev-data/plugins/
+#!dev-data/store/
+#dev-data/plugins/*
+#dev-data/store/*
 
 Allow2Automate_Distribution.provisionprofile
 # localStorage (old location - deprecated)
