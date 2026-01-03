@@ -348,7 +348,7 @@ function setupIPCHandlers(agentService, agentUpdateService, actions) {
 
       // Get recent violations
       const violations = await agentService.db.query(
-        'SELECT * FROM violations ORDER BY created_at DESC LIMIT 10'
+        'SELECT * FROM violations ORDER BY timestamp DESC LIMIT 10'
       );
 
       return [null, {

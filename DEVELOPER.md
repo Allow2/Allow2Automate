@@ -371,9 +371,77 @@ Include relevant keywords to help users find your plugin:
   // Development dependencies
   "devDependencies": {
     "eslint": "^8.0.0"
+  },
+
+  // CRITICAL: Peer dependencies for UI components
+  "peerDependencies": {
+    "react": "^16.0.0 || ^17.0.0",
+    "react-dom": "^16.0.0 || ^17.0.0",
+    "@material-ui/core": "^4.0.0",
+    "@material-ui/icons": "^4.0.0"
   }
 }
 ```
+
+### ⚠️ CRITICAL: Peer Dependencies for Plugin UI
+
+**If your plugin has a configuration UI (uses React components), you MUST:**
+
+1. **Declare React and Material-UI as `peerDependencies`** (not regular `dependencies`)
+2. **Never install peer dependencies in your plugin's `node_modules/` during development**
+
+**Why this matters:**
+
+Allow2Automate plugins run inside the host application's React context. If your plugin bundles its own copy of React, React-DOM, or Material-UI, you will encounter:
+
+```
+❌ Invalid hook call. Hooks can only be called inside of the body of a function component.
+❌ Multiple instances of React detected
+❌ Material-UI styles broken or duplicated
+```
+
+**Correct package.json for UI plugins:**
+
+```json
+{
+  "name": "allow2automate-myplugin",
+  "dependencies": {
+    "axios": "^0.27.0"  // ✅ Regular dependencies only
+  },
+  "peerDependencies": {
+    "react": "^16.0.0 || ^17.0.0",           // ✅ Host provides
+    "react-dom": "^16.0.0 || ^17.0.0",       // ✅ Host provides
+    "@material-ui/core": "^4.0.0",           // ✅ Host provides
+    "@material-ui/icons": "^4.0.0"           // ✅ Host provides
+  },
+  "devDependencies": {
+    "react": "^17.0.0",                      // ✅ For local development only
+    "react-dom": "^17.0.0",
+    "@material-ui/core": "^4.0.0"
+  }
+}
+```
+
+**During development:**
+
+```bash
+# ✅ CORRECT: Install dev dependencies for development
+npm install
+
+# ✅ CORRECT: Before publishing/testing, remove peer deps from node_modules
+rm -rf node_modules/react node_modules/react-dom node_modules/@material-ui
+
+# ✅ CORRECT: Test with host app's dependencies
+cd /path/to/allow2automate
+npm install /path/to/your/plugin
+```
+
+**What happens when installed:**
+
+- Host app provides React, ReactDOM, Material-UI
+- Your plugin uses the host's single React instance
+- No duplicate libraries, no version conflicts
+- React Hooks work correctly
 
 ---
 
