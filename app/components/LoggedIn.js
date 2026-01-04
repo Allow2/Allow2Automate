@@ -181,7 +181,10 @@ export default class Plugins extends Component {
                     const pluginDetail = {
                         name: plugin.name,
                         shortName: plugin.shortName,
-                        version: plugin.version
+                        version: plugin.version,
+                        main: plugin.packageJson && plugin.packageJson.main,
+                        dev_plugin: plugin.dev_plugin,
+                        installation: plugin.installation || (plugin.available && plugin.available.installation)
                     };
                     return (
                         <TabPanel index={ plugin.name } key={ plugin.name } value={this.state.currentTab} >

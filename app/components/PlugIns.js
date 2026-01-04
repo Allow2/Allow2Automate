@@ -1,5 +1,5 @@
 import React, { Component } from 'react';
-import { Avatar, TextField, IconButton, Button, Box, Typography, Divider } from '@material-ui/core';
+import { Avatar, TextField, IconButton, Button, Box, Typography, Divider, Chip } from '@material-ui/core';
 import {
     sortedPluginSelector,
     activePluginSelector,
@@ -22,7 +22,7 @@ import {
     TableRow,
     TableCell
     } from '@material-ui/core';
-import { Delete, CloudDownload, AddCircle } from '@material-ui/icons';
+import { Delete, CloudDownload, AddCircle, Code } from '@material-ui/icons';
 import MarketplacePage from '../containers/MarketplacePage';
 import Analytics from '../analytics';
 //import {Tabs, Tab} from '@material-ui/core';
@@ -293,15 +293,36 @@ export default class PlugIns extends Component {
                             { plugins.map(function (plugin) {
                                     //console.log(plugin);
                                     let version = (plugin.version) || "";
+                                    const isDevPlugin = plugin.dev_plugin || false;
+                                    const latestVersion = plugin.latestVersion;
+                                    const showLatestVersion = isDevPlugin && latestVersion && latestVersion !== version;
 
                                     return (
                                         <TableRow key={plugin.name}>
                                             <TableCell>
-                                                <span>{plugin.name}</span>
+                                                <Box display="flex" alignItems="center" gap={1}>
+                                                    <span>{plugin.name}</span>
+                                                    {isDevPlugin && (
+                                                        <Chip
+                                                            label="DEV"
+                                                            size="small"
+                                                            color="secondary"
+                                                            icon={<Code />}
+                                                            style={{ marginLeft: 8 }}
+                                                        />
+                                                    )}
+                                                </Box>
                                             </TableCell>
                                             <TableCell style={customStyle}>
                                                 {!plugin.missing &&
-                                                <span>{version}</span>
+                                                <Box>
+                                                    <span>{version}</span>
+                                                    {showLatestVersion && (
+                                                        <Typography variant="caption" display="block" color="textSecondary">
+                                                            Latest: {latestVersion}
+                                                        </Typography>
+                                                    )}
+                                                </Box>
                                                 }
                                                 { plugin.missing &&
                                                 <Button label="Reinstall" onClick={this.reinstallPlugin.bind(this, plugin)}/>
