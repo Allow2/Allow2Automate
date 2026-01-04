@@ -328,9 +328,10 @@ export default class AgentUpdateService {
       fs.copyFileSync(installer.path, destFile);
 
       // Generate configuration file
+      let configFile = null;
       if (serverUrl && registrationCode) {
-        const configFileName = `allow2automate-agent-config-${platform}.json`;
-        const configFile = path.join(destinationPath, configFileName);
+        const configFileName = 'allow2automate-agent-config.json';
+        configFile = path.join(destinationPath, configFileName);
 
         const config = this.generateAgentConfig(serverUrl, registrationCode, platform);
         fs.writeFileSync(configFile, JSON.stringify(config, null, 2), 'utf8');
@@ -339,7 +340,7 @@ export default class AgentUpdateService {
       }
 
       console.log(`[AgentUpdateService] Exported installer to ${destFile}`);
-      return { installerPath: destFile, configPath: configFile || null };
+      return { installerPath: destFile, configPath: configFile };
     } catch (error) {
       console.error('[AgentUpdateService] Error exporting installer:', error);
       throw error;
@@ -446,19 +447,18 @@ export default class AgentUpdateService {
       await this.downloadFile(asset.browser_download_url, filePath);
 
       // Generate configuration file
+      let configFile = null;
       if (serverUrl && registrationCode) {
-        const configFileName = `allow2automate-agent-config-${platform}.json`;
-        const configFile = path.join(destinationPath, configFileName);
+        const configFileName = 'allow2automate-agent-config.json';
+        configFile = path.join(destinationPath, configFileName);
 
         const agentConfig = this.generateAgentConfig(serverUrl, registrationCode, platform);
         fs.writeFileSync(configFile, JSON.stringify(agentConfig, null, 2), 'utf8');
 
         console.log(`[AgentUpdateService] Generated config file at ${configFile}`);
-
-        return { installerPath: filePath, configPath: configFile, version };
       }
 
-      return { installerPath: filePath, configPath: null, version };
+      return { installerPath: filePath, configPath: configFile, version };
 
     } catch (error) {
       console.error('[AgentUpdateService] Error downloading from GitHub:', error);
