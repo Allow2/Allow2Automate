@@ -193,6 +193,30 @@ function setupIPCHandlers(agentService, agentUpdateService, actions) {
     }
   });
 
+  // Get current user for an agent
+  ipcMain.handle('agents:get-current-user', async (event, { agentId }) => {
+    try {
+      const currentUser = await agentService.getCurrentUser(agentId);
+      const lastUser = currentUser || await agentService.getLastUser(agentId);
+      return { success: true, currentUser, lastUser };
+    } catch (error) {
+      console.error('[IPC] Error getting current user:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Get user session history for an agent
+  ipcMain.handle('agents:get-user-sessions', async (event, { agentId, limit = 50 }) => {
+    try {
+      const currentUser = await agentService.getCurrentUser(agentId);
+      const sessionHistory = await agentService.getUserSessionHistory(agentId, limit);
+      return { success: true, currentUser, sessionHistory };
+    } catch (error) {
+      console.error('[IPC] Error getting user sessions:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
   // Download installer
   ipcMain.handle('agents:download-installer', async (event, { platform, childId }) => {
     try {

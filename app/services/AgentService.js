@@ -324,6 +324,148 @@ export default class AgentService extends EventEmitter {
   }
 
   /**
+   * Record or update a user session
+   * @param {string} agentId - Agent ID
+   * @param {object} userContext - User session data from agent
+   */
+  async recordUserSession(agentId, userContext) {
+    try {
+      if (!userContext || !userContext.username) {
+        return; // No user data to record
+      }
+
+      const {
+        username,
+        userId,
+        accountName,
+        isActive,
+        sessionStartTime,
+        lastActivityTime
+      } = userContext;
+
+      // Check if session exists for this agent+username
+      const existing = await this.db.queryOne(
+        'SELECT * FROM agent_user_sessions WHERE agent_id = $1 AND username = $2',
+        [agentId, username]
+      );
+
+      if (existing) {
+        // Update existing session
+        await this.db.query(`
+          UPDATE agent_user_sessions
+          SET user_id = $1,
+              account_name = $2,
+              last_seen = $3,
+              is_active = $4,
+              updated_at = datetime('now')
+          WHERE id = $5
+        `, [
+          userId,
+          accountName,
+          lastActivityTime || new Date().toISOString(),
+          isActive ? 1 : 0,
+          existing.id
+        ]);
+      } else {
+        // Create new session
+        const sessionId = crypto.randomUUID();
+        await this.db.query(`
+          INSERT INTO agent_user_sessions (id, agent_id, username, user_id, account_name, session_start, last_seen, is_active)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        `, [
+          sessionId,
+          agentId,
+          username,
+          userId,
+          accountName,
+          sessionStartTime || new Date().toISOString(),
+          lastActivityTime || new Date().toISOString(),
+          isActive ? 1 : 0
+        ]);
+      }
+
+      // Mark other sessions for this agent as inactive if current user is active
+      if (isActive) {
+        await this.db.query(`
+          UPDATE agent_user_sessions
+          SET is_active = 0, updated_at = datetime('now')
+          WHERE agent_id = $1 AND username != $2
+        `, [agentId, username]);
+      }
+
+      console.log(`[AgentService] Recorded user session for ${username} on agent ${agentId}`);
+
+    } catch (error) {
+      console.error('[AgentService] Error recording user session:', error);
+      // Don't throw - user session tracking shouldn't break the heartbeat
+    }
+  }
+
+  /**
+   * Get current active user for an agent
+   * @param {string} agentId - Agent ID
+   * @returns {object|null} Current user info or null
+   */
+  async getCurrentUser(agentId) {
+    try {
+      const session = await this.db.queryOne(`
+        SELECT * FROM agent_user_sessions
+        WHERE agent_id = $1 AND is_active = 1
+        ORDER BY last_seen DESC
+        LIMIT 1
+      `, [agentId]);
+
+      return session;
+    } catch (error) {
+      console.error('[AgentService] Error getting current user:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Get last seen user for an agent (when no active user)
+   * @param {string} agentId - Agent ID
+   * @returns {object|null} Last user info or null
+   */
+  async getLastUser(agentId) {
+    try {
+      const session = await this.db.queryOne(`
+        SELECT * FROM agent_user_sessions
+        WHERE agent_id = $1
+        ORDER BY last_seen DESC
+        LIMIT 1
+      `, [agentId]);
+
+      return session;
+    } catch (error) {
+      console.error('[AgentService] Error getting last user:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Get user session history for an agent
+   * @param {string} agentId - Agent ID
+   * @param {number} limit - Max number of sessions to return
+   * @returns {array} Array of session records
+   */
+  async getUserSessionHistory(agentId, limit = 50) {
+    try {
+      const sessions = await this.db.query(`
+        SELECT * FROM agent_user_sessions
+        WHERE agent_id = $1
+        ORDER BY last_seen DESC
+        LIMIT $2
+      `, [agentId, limit]);
+
+      return sessions;
+    } catch (error) {
+      console.error('[AgentService] Error getting user session history:', error);
+      return [];
+    }
+  }
+
+  /**
    * Create or update a policy for an agent
    */
   async createPolicy(agentId, policyConfig) {

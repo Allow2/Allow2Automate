@@ -208,6 +208,27 @@ export default class DatabaseModule {
           );
         `,
         indexes: []
+      },
+      agent_user_sessions: {
+        sql: `
+          CREATE TABLE IF NOT EXISTS agent_user_sessions (
+            id TEXT PRIMARY KEY,
+            agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+            username TEXT NOT NULL,
+            user_id TEXT,
+            account_name TEXT,
+            session_start TEXT,
+            last_seen TEXT,
+            is_active INTEGER DEFAULT 1,
+            created_at TEXT DEFAULT (datetime('now')),
+            updated_at TEXT DEFAULT (datetime('now'))
+          );
+        `,
+        indexes: [
+          'CREATE INDEX IF NOT EXISTS idx_agent_user_sessions_agent_id ON agent_user_sessions(agent_id);',
+          'CREATE INDEX IF NOT EXISTS idx_agent_user_sessions_is_active ON agent_user_sessions(is_active);',
+          'CREATE INDEX IF NOT EXISTS idx_agent_user_sessions_last_seen ON agent_user_sessions(last_seen DESC);'
+        ]
       }
     };
   }

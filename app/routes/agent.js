@@ -224,18 +224,36 @@ router.post('/api/agent/violations', authenticateAgent, async (req, res) => {
 /**
  * Agent heartbeat
  * POST /api/agent/heartbeat
+ * Body: { metadata, userContext (optional) }
  */
 router.post('/api/agent/heartbeat', authenticateAgent, async (req, res) => {
   try {
-    const metadata = req.body || {};
+    const { metadata = {}, userContext } = req.body;
 
     const agentService = global.services && global.services.agent;
     if (!agentService) {
       return res.status(503).json({ error: 'Agent service not available' });
     }
 
+    // Update heartbeat
     await agentService.updateHeartbeat(req.agentId, metadata);
-    res.json({ success: true });
+
+    // Record user session if provided
+    if (userContext && userContext.systemUser) {
+      await agentService.recordUserSession(req.agentId, userContext.systemUser);
+    }
+
+    // Get agent info for response enrichment
+    const agent = await agentService.getAgent(req.agentId);
+    const defaultChild = agent && agent.default_child_id ? {
+      childId: agent.default_child_id,
+      name: agent.child_name || null
+    } : null;
+
+    res.json({
+      success: true,
+      defaultChild
+    });
 
   } catch (error) {
     console.error('[AgentRoutes] Error updating heartbeat:', error);
@@ -286,6 +304,63 @@ router.post('/api/agent/registration-code', async (req, res) => {
 
   } catch (error) {
     console.error('[AgentRoutes] Error generating registration code:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Get current user for an agent
+ * GET /api/agents/:agentId/current-user
+ */
+router.get('/api/agents/:agentId/current-user', async (req, res) => {
+  try {
+    const { agentId } = req.params;
+
+    const agentService = global.services && global.services.agent;
+    if (!agentService) {
+      return res.status(503).json({ error: 'Agent service not available' });
+    }
+
+    const currentUser = await agentService.getCurrentUser(agentId);
+    const lastUser = currentUser || await agentService.getLastUser(agentId);
+
+    res.json({
+      success: true,
+      currentUser,
+      lastUser
+    });
+
+  } catch (error) {
+    console.error('[AgentRoutes] Error getting current user:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Get user session history for an agent
+ * GET /api/agents/:agentId/user-sessions
+ */
+router.get('/api/agents/:agentId/user-sessions', async (req, res) => {
+  try {
+    const { agentId } = req.params;
+    const limit = parseInt(req.query.limit) || 50;
+
+    const agentService = global.services && global.services.agent;
+    if (!agentService) {
+      return res.status(503).json({ error: 'Agent service not available' });
+    }
+
+    const currentUser = await agentService.getCurrentUser(agentId);
+    const sessionHistory = await agentService.getUserSessionHistory(agentId, limit);
+
+    res.json({
+      success: true,
+      currentUser,
+      sessionHistory
+    });
+
+  } catch (error) {
+    console.error('[AgentRoutes] Error getting user sessions:', error);
     res.status(500).json({ error: error.message });
   }
 });
