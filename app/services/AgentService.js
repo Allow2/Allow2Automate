@@ -166,31 +166,74 @@ export default class AgentService extends EventEmitter {
 
   /**
    * Register a new agent
+   * @param {string} registrationCode - Optional registration code (for backward compatibility)
+   * @param {object} agentInfo - Agent information (machineId, hostname, platform, version, ip)
    */
   async registerAgent(registrationCode, agentInfo) {
     try {
-      // Verify registration code
-      const codeRecord = await this.db.queryOne(
-        'SELECT * FROM registration_codes WHERE code = $1 AND used = false AND expires_at > NOW()',
-        [registrationCode]
-      );
+      let childId = null;
 
-      if (!codeRecord) {
-        throw new Error('Invalid or expired registration code');
+      // Check if registration code provided (backward compatibility)
+      if (registrationCode) {
+        const codeRecord = await this.db.queryOne(
+          'SELECT * FROM registration_codes WHERE code = $1 AND used = false AND expires_at > datetime("now")',
+          [registrationCode]
+        );
+
+        if (codeRecord) {
+          childId = codeRecord.child_id;
+
+          // Mark registration code as used after successful registration
+          // (will be done at the end)
+        } else {
+          console.warn(`[AgentService] Invalid or expired registration code: ${registrationCode}`);
+          // Continue registration without child assignment
+        }
       }
 
-      // Generate agent ID and auth token
+      // Check if agent already exists with this machine_id
+      const existingAgent = await this.db.queryOne(
+        'SELECT * FROM agents WHERE machine_id = $1',
+        [agentInfo.machineId]
+      );
+
+      if (existingAgent) {
+        // Agent re-registering - update existing record
+        const agentId = existingAgent.id;
+
+        await this.db.query(`
+          UPDATE agents
+          SET hostname = $1, platform = $2, version = $3, last_known_ip = $4, last_heartbeat = datetime('now'), updated_at = datetime('now')
+          WHERE id = $5
+        `, [
+          agentInfo.hostname,
+          agentInfo.platform,
+          agentInfo.version,
+          agentInfo.ip,
+          agentId
+        ]);
+
+        console.log(`[AgentService] Agent re-registered: ${agentId} (${agentInfo.hostname})`);
+
+        return {
+          agentId,
+          authToken: existingAgent.auth_token,
+          childId: existingAgent.child_id || childId
+        };
+      }
+
+      // New agent registration
       const agentId = crypto.randomUUID();
       const authToken = crypto.randomBytes(32).toString('hex');
 
-      // Create agent record
+      // Create agent record (child_id is null initially, can be set later via UI)
       await this.db.query(`
         INSERT INTO agents (id, machine_id, child_id, hostname, platform, version, auth_token, last_known_ip, last_heartbeat)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, datetime('now'))
       `, [
         agentId,
         agentInfo.machineId,
-        codeRecord.child_id,
+        childId,  // null unless registration code provided
         agentInfo.hostname,
         agentInfo.platform,
         agentInfo.version,
@@ -198,24 +241,26 @@ export default class AgentService extends EventEmitter {
         agentInfo.ip
       ]);
 
-      // Mark registration code as used
-      await this.db.query(
-        'UPDATE registration_codes SET used = true, agent_id = $1 WHERE code = $2',
-        [agentId, registrationCode]
-      );
+      // Mark registration code as used (if provided)
+      if (registrationCode && childId) {
+        await this.db.query(
+          'UPDATE registration_codes SET used = 1, agent_id = $1 WHERE code = $2',
+          [agentId, registrationCode]
+        );
+      }
 
       // Create agent connection
       const connection = new AgentConnection(agentId, this.discovery, this.db);
       connection.lastKnownIP = agentInfo.ip;
       this.agents.set(agentId, connection);
 
-      console.log(`[AgentService] Registered new agent: ${agentId} (${agentInfo.hostname})`);
-      this.emit('agentRegistered', { agentId, ...agentInfo });
+      console.log(`[AgentService] Registered new agent: ${agentId} (${agentInfo.hostname})${childId ? ` with child ${childId}` : ' (no child assigned)'}`);
+      this.emit('agentRegistered', { agentId, ...agentInfo, childId });
 
       return {
         agentId,
         authToken,
-        childId: codeRecord.child_id
+        childId
       };
     } catch (error) {
       console.error('[AgentService] Error registering agent:', error);
@@ -224,7 +269,7 @@ export default class AgentService extends EventEmitter {
   }
 
   /**
-   * Generate a registration code for a child
+   * Generate a registration code for a child (DEPRECATED - for backward compatibility only)
    */
   async generateRegistrationCode(childId, expiresInHours = 24) {
     try {
@@ -241,6 +286,39 @@ export default class AgentService extends EventEmitter {
       return code;
     } catch (error) {
       console.error('[AgentService] Error generating registration code:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Assign or update child for an agent
+   * @param {string} agentId - Agent ID
+   * @param {string} childId - Child ID to assign (or null to unassign)
+   * @param {boolean} setAsDefault - Also set as default_child_id
+   */
+  async setAgentChild(agentId, childId, setAsDefault = true) {
+    try {
+      // Update agent's child assignment
+      if (setAsDefault) {
+        await this.db.query(`
+          UPDATE agents
+          SET child_id = $1, default_child_id = $1, updated_at = datetime('now')
+          WHERE id = $2
+        `, [childId, agentId]);
+      } else {
+        await this.db.query(`
+          UPDATE agents
+          SET child_id = $1, updated_at = datetime('now')
+          WHERE id = $2
+        `, [childId, agentId]);
+      }
+
+      console.log(`[AgentService] Set child ${childId} for agent ${agentId}${setAsDefault ? ' (as default)' : ''}`);
+      this.emit('agentChildAssigned', { agentId, childId });
+
+      return true;
+    } catch (error) {
+      console.error('[AgentService] Error setting agent child:', error);
       throw error;
     }
   }

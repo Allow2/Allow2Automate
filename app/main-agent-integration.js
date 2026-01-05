@@ -138,6 +138,17 @@ function setupIPCHandlers(agentService, agentUpdateService, actions) {
     }
   });
 
+  // Set/update agent's assigned child
+  ipcMain.handle('agents:set-child', async (event, { agentId, childId }) => {
+    try {
+      await agentService.setAgentChild(agentId, childId, true);
+      return { success: true };
+    } catch (error) {
+      console.error('[IPC] Error setting agent child:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
   // Create policy
   ipcMain.handle('agents:create-policy', async (event, { agentId, policyConfig }) => {
     try {

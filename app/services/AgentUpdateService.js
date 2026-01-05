@@ -327,9 +327,9 @@ export default class AgentUpdateService {
       // Copy installer file
       fs.copyFileSync(installer.path, destFile);
 
-      // Generate configuration file
+      // Generate configuration file (optional - only if serverUrl provided)
       let configFile = null;
-      if (serverUrl && registrationCode) {
+      if (serverUrl) {
         const configFileName = 'allow2automate-agent-config.json';
         configFile = path.join(destinationPath, configFileName);
 
@@ -349,17 +349,24 @@ export default class AgentUpdateService {
 
   /**
    * Generate agent configuration file
+   * @param {string} serverUrl - Parent server URL
+   * @param {string} registrationCode - Optional registration code (for backward compatibility)
+   * @param {string} platform - Platform (win32, darwin, linux)
    */
   generateAgentConfig(serverUrl, registrationCode, platform) {
     const config = {
       parentApiUrl: serverUrl,
-      registrationCode: registrationCode,
       apiPort: 8443,
       checkInterval: 30000,
       logLevel: 'info',
       enableMDNS: true,
       autoUpdate: true
     };
+
+    // Add registration code only if provided (backward compatibility)
+    if (registrationCode) {
+      config.registrationCode = registrationCode;
+    }
 
     // Add platform-specific paths
     if (platform === 'win32') {

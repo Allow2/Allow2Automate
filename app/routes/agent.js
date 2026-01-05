@@ -30,13 +30,20 @@ function authenticateAgent(req, res, next) {
 /**
  * Agent registration endpoint
  * POST /api/agent/register
+ * Body: { registrationCode (optional), agentInfo: { machineId, hostname, platform, version, ip } }
  */
 router.post('/api/agent/register', async (req, res) => {
   try {
     const { registrationCode, agentInfo } = req.body;
 
-    if (!registrationCode || !agentInfo) {
-      return res.status(400).json({ error: 'Missing required fields' });
+    // agentInfo is required, registrationCode is optional
+    if (!agentInfo) {
+      return res.status(400).json({ error: 'Missing required field: agentInfo' });
+    }
+
+    // Validate agentInfo fields
+    if (!agentInfo.machineId || !agentInfo.hostname || !agentInfo.platform) {
+      return res.status(400).json({ error: 'agentInfo missing required fields (machineId, hostname, platform)' });
     }
 
     // Get agent service from global context
@@ -45,7 +52,8 @@ router.post('/api/agent/register', async (req, res) => {
       return res.status(503).json({ error: 'Agent service not available' });
     }
 
-    const result = await agentService.registerAgent(registrationCode, agentInfo);
+    // Register agent (registrationCode is optional)
+    const result = await agentService.registerAgent(registrationCode || null, agentInfo);
 
     // Generate JWT token for the agent
     const token = jwt.sign(
