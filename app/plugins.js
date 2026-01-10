@@ -439,19 +439,24 @@ module.exports = function(app, store, actions) {
                     store.save();
                 };
 
-                const installedPlugin = loadedPlugin.plugin({
-                    isMain: true,
-	                ipcMain: ipcRestricted,
-                    configurationUpdate: configurationUpdate,
-                    statusUpdate: statusUpdate,
-                    services: global.services
-                });
+                // NOTE: Plugin is NOT loaded in main process - loaded on-demand by renderer
+                // Since we don't use epm.load() anymore (doesn't support scoped packages),
+                // we skip the main process plugin initialization
+                // The renderer will load and initialize the plugin when needed
+
+                // const installedPlugin = loadedPlugin.plugin({
+                //     isMain: true,
+	            //     ipcMain: ipcRestricted,
+                //     configurationUpdate: configurationUpdate,
+                //     statusUpdate: statusUpdate,
+                //     services: global.services
+                // });
 
                 // Initialize plugin with unconfigured status
-                statusUpdate({
-                    status: 'unconfigured',
-                    message: 'Plugin loaded, awaiting configuration'
-                });
+                // statusUpdate({
+                //     status: 'unconfigured',
+                //     message: 'Plugin loaded, awaiting configuration'
+                // });
 
                 // Register IPC handler for status updates from renderer
                 const { ipcMain } = require('electron');
@@ -459,13 +464,14 @@ module.exports = function(app, store, actions) {
                     statusUpdate(statusData);
                 });
 
-                let currentPluginState = currentState[pluginName];
-                installedPlugin.onLoad && installedPlugin.onLoad(currentPluginState);
-                plugins.installed[pluginName] = {
-                    name: pluginName,
-                    plugin: installedPlugin,
-                    currentState: null
-                };
+                // Plugin state management moved to renderer process
+                // let currentPluginState = currentState[pluginName];
+                // installedPlugin.onLoad && installedPlugin.onLoad(currentPluginState);
+                // plugins.installed[pluginName] = {
+                //     name: pluginName,
+                //     plugin: installedPlugin,
+                //     currentState: null
+                // };
 
             } catch (err) {
                 console.log('Error parsing JSON string', err);

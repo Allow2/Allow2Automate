@@ -16,6 +16,46 @@ import path from 'path';
 import fs from 'fs';
 
 /**
+ * Find an available port for the server
+ */
+async function findAvailablePort(expressApp, startPort, maxAttempts) {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const port = startPort + attempt;
+
+    try {
+      const server = await new Promise((resolve, reject) => {
+        const srv = expressApp.listen(port, (err) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(srv);
+          }
+        });
+
+        srv.once('error', (err) => {
+          if (err.code === 'EADDRINUSE') {
+            console.log(`[AgentIntegration] Port ${port} in use, trying ${port + 1}...`);
+            reject(err);
+          } else {
+            reject(err);
+          }
+        });
+      });
+
+      return server;
+    } catch (err) {
+      if (err.code !== 'EADDRINUSE' || attempt === maxAttempts - 1) {
+        console.error(`[AgentIntegration] Error binding to port ${port}:`, err.message);
+        if (attempt === maxAttempts - 1) {
+          return null;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+/**
  * Initialize agent services
  */
 export async function initializeAgentServices(app, store, actions) {
@@ -45,10 +85,16 @@ export async function initializeAgentServices(app, store, actions) {
     // Mount agent routes
     expressApp.use(agentRoutes);
 
-    // Start Express server on port 8080
-    const server = expressApp.listen(8080, () => {
-      console.log('[AgentIntegration] Agent API server listening on port 8080');
-    });
+    // Start Express server with dynamic port allocation
+    const startPort = process.env.AGENT_API_PORT || 8080;
+    const server = await findAvailablePort(expressApp, startPort, 100);
+
+    if (!server) {
+      throw new Error('Could not find available port for agent API server');
+    }
+
+    const actualPort = server.address().port;
+    console.log(`[AgentIntegration] Agent API server listening on port ${actualPort}`);
 
     // Expose services globally for routes and plugins
     global.services = {
@@ -56,7 +102,8 @@ export async function initializeAgentServices(app, store, actions) {
       agent: agentService,
       agentDiscovery: agentDiscovery,
       agentUpdate: agentUpdateService,
-      database: database
+      database: database,
+      serverPort: actualPort
     };
 
     // Setup IPC handlers
@@ -232,40 +279,35 @@ function setupIPCHandlers(agentService, agentUpdateService, actions) {
       // Get server URL (use local network address)
       const os = require('os');
       const networkInterfaces = os.networkInterfaces();
-      let serverUrl = 'http://localhost:8080';
+      const serverPort = (global.services && global.services.serverPort) || 8080;
+      let serverUrl = `http://localhost:${serverPort}`;
 
       // Find first non-internal IPv4 address
       for (const interfaceName in networkInterfaces) {
         for (const iface of networkInterfaces[interfaceName]) {
           if (iface.family === 'IPv4' && !iface.internal) {
-            serverUrl = `http://${iface.address}:8080`;
+            serverUrl = `http://${iface.address}:${serverPort}`;
             break;
           }
         }
       }
 
-      // Try to get from cache first
-      const versions = agentUpdateService.getAvailableVersions();
-      let result;
+      // Get latest version for this platform
+      const latestVersions = agentUpdateService.getLatestVersions();
+      const platformInfo = latestVersions[platform];
 
-      if (versions.length > 0) {
-        const latestVersion = versions[0].version;
-        result = await agentUpdateService.exportInstaller(
-          latestVersion,
-          platform,
-          downloadsPath,
-          serverUrl,
-          registrationCode
-        );
-      } else {
-        // Download directly from GitHub if not cached
-        result = await agentUpdateService.downloadFromGitHub(
-          platform,
-          downloadsPath,
-          serverUrl,
-          registrationCode
-        );
+      if (!platformInfo) {
+        throw new Error(`No installer available for platform: ${platform}`);
       }
+
+      // Export installer (downloads if needed)
+      const result = await agentUpdateService.exportInstaller(
+        platformInfo.version,
+        platform,
+        downloadsPath,
+        serverUrl,
+        registrationCode
+      );
 
       return {
         success: true,
@@ -273,7 +315,8 @@ function setupIPCHandlers(agentService, agentUpdateService, actions) {
         configPath: result.configPath,
         serverUrl: serverUrl,
         registrationCode: registrationCode,
-        version: result.version || (versions[0] && versions[0].version)
+        version: result.version,
+        checksum: platformInfo.checksum
       };
     } catch (error) {
       console.error('[IPC] Error downloading installer:', error);
@@ -292,14 +335,29 @@ function setupIPCHandlers(agentService, agentUpdateService, actions) {
     }
   });
 
-  // Check for installer updates from GitHub
-  ipcMain.handle('agents:check-updates', async (event) => {
+  // Check for latest versions from GitHub
+  ipcMain.handle('agents:check-latest-versions', async (event) => {
     try {
-      await agentUpdateService.checkForUpdates();
-      const versions = agentUpdateService.getAvailableVersions();
-      return { success: true, versions };
+      const latestVersions = await agentUpdateService.checkLatestVersions();
+      return { success: true, versions: latestVersions };
     } catch (error) {
-      console.error('[IPC] Error checking for updates:', error);
+      console.error('[IPC] Error checking for latest versions:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Download uninstall script for a platform
+  ipcMain.handle('agents:download-uninstall-script', async (event, { platform }) => {
+    try {
+      const downloadsPath = electronApp.getPath('downloads');
+      const result = await agentUpdateService.downloadUninstallScript(platform, downloadsPath);
+      return {
+        success: true,
+        scriptPath: result.scriptPath,
+        version: result.version
+      };
+    } catch (error) {
+      console.error('[IPC] Error downloading uninstall script:', error);
       return { success: false, error: error.message };
     }
   });
@@ -309,13 +367,14 @@ function setupIPCHandlers(agentService, agentUpdateService, actions) {
     try {
       const os = require('os');
       const networkInterfaces = os.networkInterfaces();
-      let serverUrl = 'http://localhost:8080';
+      const serverPort = (global.services && global.services.serverPort) || 8080;
+      let serverUrl = `http://localhost:${serverPort}`;
 
       // Find first non-internal IPv4 address
       for (const interfaceName in networkInterfaces) {
         for (const iface of networkInterfaces[interfaceName]) {
           if (iface.family === 'IPv4' && !iface.internal) {
-            serverUrl = `http://${iface.address}:8080`;
+            serverUrl = `http://${iface.address}:${serverPort}`;
             break;
           }
         }

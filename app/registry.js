@@ -582,9 +582,11 @@ class RegistryLoader {
                     if (plugin) {
                         plugins.push(plugin);
                         console.log(`[Registry] ✅ Loaded dev-plugin: ${plugin.name}`);
+                    } else {
+                        console.log(`[Registry] ⏭️ Skipped dev-plugin: ${dir.name} (no valid package.json or not an automate plugin)`);
                     }
                 } catch (error) {
-                    console.warn(`[Registry] Error loading dev-plugin ${dir.name}:`, error.message);
+                    console.warn(`[Registry] ⚠️ Error loading dev-plugin ${dir.name}:`, error.message);
                 }
             }
 
@@ -848,6 +850,13 @@ class RegistryLoader {
         registry.plugins.forEach((plugin, index) => {
             const packageName = plugin.package || plugin.name;
 
+            // Debug: Check for duplicates
+            if (library[packageName]) {
+                console.warn(`[Registry] ⚠️ DUPLICATE PLUGIN KEY: ${packageName}`);
+                console.warn(`[Registry]   Existing:`, library[packageName].name, library[packageName].shortName);
+                console.warn(`[Registry]   New:`, plugin.name, plugin.shortName);
+            }
+
             // Track compliance stats
             if (plugin.compliance) {
                 if (plugin.compliance.compliant === true) {
@@ -899,6 +908,10 @@ class RegistryLoader {
         console.log(`[Registry]   - Compliant: ${compliantCount}`);
         console.log(`[Registry]   - Non-compliant: ${nonCompliantCount}`);
         console.log(`[Registry]   - Unknown: ${unknownCount}`);
+
+        // Debug: Log ALL plugin names to check for duplicates
+        const allPluginNames = Object.keys(library).filter(k => !k.startsWith('_'));
+        console.log('[Registry] 📋 All plugin keys in library:', allPluginNames.sort());
 
         // Debug: Log dev-plugins
         const devPlugins = Object.values(library).filter(p => p && p.dev_plugin);

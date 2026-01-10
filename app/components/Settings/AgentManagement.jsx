@@ -16,15 +16,19 @@ import {
   DialogActions,
   TextField,
   CircularProgress,
-  Divider
+  Divider,
+  Snackbar,
+  Link
 } from '@material-ui/core';
 import {
   Computer as ComputerIcon,
   CloudDownload as DownloadIcon,
   Delete as DeleteIcon,
   Refresh as RefreshIcon,
-  Add as AddIcon
+  Add as AddIcon,
+  GetApp as GetAppIcon
 } from '@material-ui/icons';
+import { Alert } from '@material-ui/lab';
 import { makeStyles } from '@material-ui/core/styles';
 
 const useStyles = makeStyles((theme) => ({
@@ -66,6 +70,31 @@ const useStyles = makeStyles((theme) => ({
     textAlign: 'center',
     margin: theme.spacing(2, 0),
   },
+  platformButton: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    padding: theme.spacing(2),
+    minWidth: 200,
+  },
+  versionInfo: {
+    marginTop: theme.spacing(1),
+    fontSize: '0.75rem',
+    color: theme.palette.text.secondary,
+  },
+  checksumText: {
+    fontSize: '0.65rem',
+    color: theme.palette.text.disabled,
+    fontFamily: 'monospace',
+    marginTop: theme.spacing(0.5),
+    wordBreak: 'break-all',
+    maxWidth: 180,
+  },
+  uninstallLink: {
+    fontSize: '0.7rem',
+    marginTop: theme.spacing(0.5),
+    cursor: 'pointer',
+  },
 }));
 
 export default function AgentManagement({ ipcRenderer }) {
@@ -80,11 +109,14 @@ export default function AgentManagement({ ipcRenderer }) {
   const [selectedChild, setSelectedChild] = useState(null);
   const [registrationCode, setRegistrationCode] = useState(null);
   const [serverUrl, setServerUrl] = useState(null);
-  const [checkingUpdates, setCheckingUpdates] = useState(false);
+  const [checkingVersions, setCheckingVersions] = useState(false);
+  const [versionInfo, setVersionInfo] = useState({});
+  const [toast, setToast] = useState({ open: false, message: '', severity: 'info' });
 
   useEffect(() => {
     loadAgents();
     loadServerUrl();
+    checkLatestVersions();
     const interval = setInterval(loadAgents, 30000); // Refresh every 30 seconds
     return () => clearInterval(interval);
   }, []);
@@ -113,20 +145,24 @@ export default function AgentManagement({ ipcRenderer }) {
     }
   };
 
-  const checkForUpdates = async () => {
-    setCheckingUpdates(true);
+  const showToast = (message, severity = 'info') => {
+    setToast({ open: true, message, severity });
+  };
+
+  const checkLatestVersions = async () => {
+    setCheckingVersions(true);
     try {
-      const result = await ipcRenderer.invoke('agents:check-updates');
+      const result = await ipcRenderer.invoke('agents:check-latest-versions');
       if (result.success) {
-        alert(`Updates checked. ${result.versions.length} version(s) available.`);
+        setVersionInfo(result.versions);
       } else {
-        alert(`Error checking updates: ${result.error}`);
+        showToast(`Error checking versions: ${result.error}`, 'error');
       }
     } catch (error) {
-      console.error('Error checking for updates:', error);
-      alert('Failed to check for updates');
+      console.error('Error checking for latest versions:', error);
+      showToast('Failed to check for latest versions', 'error');
     } finally {
-      setCheckingUpdates(false);
+      setCheckingVersions(false);
     }
   };
 
@@ -147,18 +183,34 @@ export default function AgentManagement({ ipcRenderer }) {
           configPath: result.configPath,
           serverUrl: result.serverUrl,
           registrationCode: result.registrationCode,
-          version: result.version
+          version: result.version,
+          checksum: result.checksum
         });
         setDownloadResultDialog(true);
+        showToast('Installer downloaded successfully', 'success');
       } else {
-        alert(`Error: ${result.error}`);
+        showToast(`Error: ${result.error}`, 'error');
       }
     } catch (error) {
       console.error('Error downloading installer:', error);
-      alert('Failed to download installer. Ensure you have an internet connection and GitHub is accessible.');
+      showToast('Failed to download installer. Ensure you have an internet connection and GitHub is accessible.', 'error');
     } finally {
       setInstallerDownloading(false);
       setDownloadingPlatform(null);
+    }
+  };
+
+  const downloadUninstallScript = async (platform) => {
+    try {
+      const result = await ipcRenderer.invoke('agents:download-uninstall-script', { platform });
+      if (result.success) {
+        showToast(`Uninstall script downloaded: ${result.scriptPath}`, 'success');
+      } else {
+        showToast(`Error: ${result.error}`, 'error');
+      }
+    } catch (error) {
+      console.error('Error downloading uninstall script:', error);
+      showToast('Failed to download uninstall script', 'error');
     }
   };
 
@@ -169,11 +221,11 @@ export default function AgentManagement({ ipcRenderer }) {
         setRegistrationCode(result.code);
         setRegistrationDialog(true);
       } else {
-        alert(`Error: ${result.error}`);
+        showToast(`Error: ${result.error}`, 'error');
       }
     } catch (error) {
       console.error('Error generating registration code:', error);
-      alert('Failed to generate registration code');
+      showToast('Failed to generate registration code', 'error');
     }
   };
 
@@ -186,12 +238,13 @@ export default function AgentManagement({ ipcRenderer }) {
       const result = await ipcRenderer.invoke('agents:delete', { agentId });
       if (result.success) {
         loadAgents(); // Refresh the list
+        showToast('Agent removed successfully', 'success');
       } else {
-        alert(`Error: ${result.error}`);
+        showToast(`Error: ${result.error}`, 'error');
       }
     } catch (error) {
       console.error('Error deleting agent:', error);
-      alert('Failed to delete agent');
+      showToast('Failed to delete agent', 'error');
     }
   };
 
@@ -296,11 +349,11 @@ export default function AgentManagement({ ipcRenderer }) {
               <Button
                 variant="outlined"
                 size="small"
-                onClick={checkForUpdates}
-                disabled={checkingUpdates}
+                onClick={checkLatestVersions}
+                disabled={checkingVersions}
               >
-                {checkingUpdates ? <CircularProgress size={16} style={{ marginRight: 8 }} /> : <RefreshIcon style={{ marginRight: 8, fontSize: 18 }} />}
-                Check for Updates
+                {checkingVersions ? <CircularProgress size={16} style={{ marginRight: 8 }} /> : <RefreshIcon style={{ marginRight: 8, fontSize: 18 }} />}
+                Refresh Versions
               </Button>
             </div>
 
@@ -331,48 +384,120 @@ export default function AgentManagement({ ipcRenderer }) {
               </Typography>
             )}
 
-            <div style={{ display: 'flex', flexWrap: 'wrap', marginTop: 16, gap: '8px' }}>
-              <Button
-                variant="contained"
-                color="primary"
-                onClick={() => downloadInstaller('win32')}
-                disabled={installerDownloading}
-              >
-                {downloadingPlatform === 'win32' ? (
-                  <CircularProgress size={20} style={{ marginRight: 8 }} />
-                ) : (
-                  <DownloadIcon style={{ marginRight: 8 }} />
+            <div style={{ display: 'flex', flexWrap: 'wrap', marginTop: 16, gap: '16px', justifyContent: 'center' }}>
+              {/* Windows Platform */}
+              <div className={classes.platformButton}>
+                <Button
+                  variant="contained"
+                  color="primary"
+                  onClick={() => downloadInstaller('win32')}
+                  disabled={installerDownloading || checkingVersions}
+                  fullWidth
+                >
+                  {downloadingPlatform === 'win32' ? (
+                    <CircularProgress size={20} style={{ marginRight: 8 }} />
+                  ) : (
+                    <DownloadIcon style={{ marginRight: 8 }} />
+                  )}
+                  Windows
+                </Button>
+                {versionInfo.win32 && (
+                  <Fragment>
+                    <Typography className={classes.versionInfo}>
+                      v{versionInfo.win32.version}
+                    </Typography>
+                    {versionInfo.win32.checksum && (
+                      <Typography className={classes.checksumText} title={versionInfo.win32.checksum}>
+                        SHA256: {versionInfo.win32.checksum.substring(0, 16)}...
+                      </Typography>
+                    )}
+                    <Link
+                      component="button"
+                      variant="body2"
+                      className={classes.uninstallLink}
+                      onClick={() => downloadUninstallScript('win32')}
+                    >
+                      Uninstall Script
+                    </Link>
+                  </Fragment>
                 )}
-                Windows (MSI)
-              </Button>
+              </div>
 
-              <Button
-                variant="contained"
-                color="primary"
-                onClick={() => downloadInstaller('darwin')}
-                disabled={installerDownloading}
-              >
-                {downloadingPlatform === 'darwin' ? (
-                  <CircularProgress size={20} style={{ marginRight: 8 }} />
-                ) : (
-                  <DownloadIcon style={{ marginRight: 8 }} />
+              {/* macOS Platform */}
+              <div className={classes.platformButton}>
+                <Button
+                  variant="contained"
+                  color="primary"
+                  onClick={() => downloadInstaller('darwin')}
+                  disabled={installerDownloading || checkingVersions}
+                  fullWidth
+                >
+                  {downloadingPlatform === 'darwin' ? (
+                    <CircularProgress size={20} style={{ marginRight: 8 }} />
+                  ) : (
+                    <DownloadIcon style={{ marginRight: 8 }} />
+                  )}
+                  macOS
+                </Button>
+                {versionInfo.darwin && (
+                  <Fragment>
+                    <Typography className={classes.versionInfo}>
+                      v{versionInfo.darwin.version}
+                    </Typography>
+                    {versionInfo.darwin.checksum && (
+                      <Typography className={classes.checksumText} title={versionInfo.darwin.checksum}>
+                        SHA256: {versionInfo.darwin.checksum.substring(0, 16)}...
+                      </Typography>
+                    )}
+                    <Link
+                      component="button"
+                      variant="body2"
+                      className={classes.uninstallLink}
+                      onClick={() => downloadUninstallScript('darwin')}
+                    >
+                      Uninstall Script
+                    </Link>
+                  </Fragment>
                 )}
-                macOS (PKG)
-              </Button>
+              </div>
 
-              <Button
-                variant="contained"
-                color="primary"
-                onClick={() => downloadInstaller('linux')}
-                disabled={installerDownloading}
-              >
-                {downloadingPlatform === 'linux' ? (
-                  <CircularProgress size={20} style={{ marginRight: 8 }} />
-                ) : (
-                  <DownloadIcon style={{ marginRight: 8 }} />
+              {/* Linux Platform */}
+              <div className={classes.platformButton}>
+                <Button
+                  variant="contained"
+                  color="primary"
+                  onClick={() => downloadInstaller('linux')}
+                  disabled={installerDownloading || checkingVersions}
+                  fullWidth
+                >
+                  {downloadingPlatform === 'linux' ? (
+                    <CircularProgress size={20} style={{ marginRight: 8 }} />
+                  ) : (
+                    <DownloadIcon style={{ marginRight: 8 }} />
+                  )}
+                  Linux
+                </Button>
+                {versionInfo.linux && (
+                  <Fragment>
+                    <Typography className={classes.versionInfo}>
+                      v{versionInfo.linux.version}
+                    </Typography>
+                    {versionInfo.linux.checksum && (
+                      <Typography className={classes.checksumText} title={versionInfo.linux.checksum}>
+                        SHA256: {versionInfo.linux.checksum.substring(0, 16)}...
+                      </Typography>
+                    )}
+                    <Link
+                      component="button"
+                      variant="body2"
+                      className={classes.uninstallLink}
+                      onClick={() => downloadUninstallScript('linux')}
+                    >
+                      Uninstall Script
+                    </Link>
+                  </Fragment>
                 )}
-                Linux (DEB)
-              </Button>
+              </div>
             </div>
 
             <div style={{ marginTop: 16 }}>
@@ -520,7 +645,7 @@ export default function AgentManagement({ ipcRenderer }) {
             onClick={() => {
               if (downloadResult && downloadResult.registrationCode) {
                 navigator.clipboard.writeText(downloadResult.registrationCode);
-                alert('Registration code copied to clipboard!');
+                showToast('Registration code copied to clipboard!', 'success');
               }
             }}
             color="primary"
@@ -532,6 +657,22 @@ export default function AgentManagement({ ipcRenderer }) {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Toast Notifications */}
+      <Snackbar
+        open={toast.open}
+        autoHideDuration={6000}
+        onClose={() => setToast({ ...toast, open: false })}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+      >
+        <Alert
+          onClose={() => setToast({ ...toast, open: false })}
+          severity={toast.severity}
+          variant="filled"
+        >
+          {toast.message}
+        </Alert>
+      </Snackbar>
     </div>
   );
 }

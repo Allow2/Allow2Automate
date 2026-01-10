@@ -12,7 +12,7 @@ const mapStateToProps = (state, ownProps) => {
 
     // Debug: Check for dev_plugin flags
     if (state.pluginLibrary) {
-        const devPlugins = Object.entries(state.pluginLibrary).filter(([k, v]) => v.dev_plugin);
+        const devPlugins = Object.entries(state.pluginLibrary).filter(([k, v]) => v && typeof v === 'object' && v.dev_plugin);
         console.log('[MarketplacePage] Dev-plugins in state:', devPlugins.length);
         devPlugins.forEach(([key, plugin]) => {
             console.log('[MarketplacePage]   -', key, '(dev_plugin:', plugin.dev_plugin, ')');
@@ -231,13 +231,27 @@ const mapDispatchToProps = (dispatch) => {
             return async (dispatch) => {
                 // Reload the registry and update the store
                 const { createRegistryLoader } = require('../registry');
-                const registryLoader = createRegistryLoader();
+
+                // CRITICAL: Must pass developmentMode to load dev-plugins
+                const registryLoader = createRegistryLoader({
+                    developmentMode: process.env.NODE_ENV === 'development',
+                    cacheTTL: 3600000, // 1 hour cache
+                    requestTimeout: 10000 // 10 second network timeout
+                });
 
                 try {
+                    console.log('[MarketplacePage] 🔄 Refreshing registry...');
+                    console.log('[MarketplacePage] Development mode:', process.env.NODE_ENV === 'development');
+
                     const library = await registryLoader.getLibrary();
+
+                    console.log('[MarketplacePage] ✅ Registry refreshed successfully');
+                    console.log('[MarketplacePage] Total plugins loaded:', Object.keys(library).filter(k => !k.startsWith('_')).length);
+                    console.log('[MarketplacePage] Dev-plugins loaded:', Object.values(library).filter(p => p && p.dev_plugin).length);
+
                     dispatch(actions.libraryReplace(library));
                 } catch (error) {
-                    console.error('Failed to refresh registry:', error);
+                    console.error('[MarketplacePage] ❌ Failed to refresh registry:', error);
                     throw error;
                 }
             };
