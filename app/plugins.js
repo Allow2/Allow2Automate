@@ -332,17 +332,24 @@ module.exports = function(app, store, actions) {
         // electron-plugin-manager doesn't support scoped packages, so we scan manually
         let pluginList = [];
         const nodeModulesPath = path.join(pluginBasePath, 'node_modules');
+        console.error('[Plugins] ERROR-LEVEL - Scanning node_modules at:', nodeModulesPath);
 
         try {
             if (fs.existsSync(nodeModulesPath)) {
+                console.error('[Plugins] ERROR-LEVEL - node_modules EXISTS');
                 // Scan for scoped packages (@allow2/*)
                 const allow2ScopePath = path.join(nodeModulesPath, '@allow2');
+                console.error('[Plugins] ERROR-LEVEL - Checking @allow2 scope at:', allow2ScopePath);
                 if (fs.existsSync(allow2ScopePath)) {
+                    console.error('[Plugins] ERROR-LEVEL - @allow2 scope EXISTS');
                     const scopedPackages = fs.readdirSync(allow2ScopePath)
                         .filter(name => name.startsWith('allow2automate-'))
                         .map(name => `@allow2/${name}`);
                     pluginList = pluginList.concat(scopedPackages);
                     console.log('[Plugins] Found scoped packages:', scopedPackages);
+                    console.error('[Plugins] ERROR-LEVEL - Found scoped packages:', JSON.stringify(scopedPackages));
+                } else {
+                    console.error('[Plugins] ERROR-LEVEL - @allow2 scope DOES NOT EXIST');
                 }
 
                 // Also scan for unscoped packages (allow2automate-*)
@@ -359,6 +366,8 @@ module.exports = function(app, store, actions) {
 
         console.log('[Plugins] Total plugins found:', pluginList.length);
         console.log('[Plugins] Plugin list:', pluginList);
+        console.error('[Plugins] ERROR-LEVEL LOG - Total plugins found:', pluginList.length);
+        console.error('[Plugins] ERROR-LEVEL LOG - Plugin list:', JSON.stringify(pluginList));
 
         const installedPlugins = pluginList.reduce(function(memo, plugin) {
             // Handle both scoped (@allow2/name) and unscoped (name) packages
@@ -439,39 +448,97 @@ module.exports = function(app, store, actions) {
                     store.save();
                 };
 
-                // NOTE: Plugin is NOT loaded in main process - loaded on-demand by renderer
-                // Since we don't use epm.load() anymore (doesn't support scoped packages),
-                // we skip the main process plugin initialization
-                // The renderer will load and initialize the plugin when needed
+                // Generic plugin main process initialization
+                // Detect if plugin exports requiresMainProcess flag
+                const { ipcMain } = require('electron');
 
-                // const installedPlugin = loadedPlugin.plugin({
-                //     isMain: true,
-	            //     ipcMain: ipcRestricted,
-                //     configurationUpdate: configurationUpdate,
-                //     statusUpdate: statusUpdate,
-                //     services: global.services
-                // });
+                console.log('[Plugin Loader] Checking if plugin needs main process init:', pluginName);
 
-                // Initialize plugin with unconfigured status
-                // statusUpdate({
-                //     status: 'unconfigured',
-                //     message: 'Plugin loaded, awaiting configuration'
-                // });
+                // Try to load plugin module to check for main process requirement
+                let requiresMainProcess = false;
+                try {
+                    const pluginModule = require(fullPath);
+                    requiresMainProcess = pluginModule.requiresMainProcess === true;
+                } catch (err) {
+                    console.log('[Plugin Loader] Could not pre-check plugin:', err.message);
+                }
+
+                if (requiresMainProcess) {
+                    console.error(`[Plugin Loader] ✅ Plugin ${pluginName} requires main process - initializing...`);
+
+                    // Load the plugin module
+                    let loadedPlugin;
+                    try {
+                        loadedPlugin = require(fullPath);
+                        console.log('[Plugin Loader] Loaded plugin module:', pluginName);
+                    } catch (err) {
+                        console.error('[Plugin Loader] Failed to load plugin:', pluginName, err);
+                        return memo;
+                    }
+
+                    // Build plugin context with all available services
+                    const pluginContext = {
+                        isMain: true,
+                        ipcMain: ipcMain, // Native ipcMain for full access
+                        configurationUpdate: configurationUpdate,
+                        statusUpdate: statusUpdate,
+                        services: global.services || {},
+
+                        // Allow2 integration (if user logged in)
+                        allow2: store && store.getState && store.getState().user ? {
+                            on: (event, handler) => {
+                                console.log(`[Plugin ${packageJson.shortName}] Allow2 event listener registered:`, event);
+                            },
+                            getChildState: async (childId) => {
+                                const state = store.getState();
+                                const child = state.user && state.user.children && state.user.children.find(c => c.id === childId);
+                                return child ? {
+                                    paused: child.paused || false,
+                                    quota: child.timeToday || 0
+                                } : { paused: true, quota: 0 };
+                            }
+                        } : null,
+
+                        // Activity logging
+                        logActivity: (activityData) => {
+                            console.log(`[Plugin ${packageJson.shortName}] Activity:`, activityData);
+                        },
+
+                        // Notifications
+                        notify: (notification) => {
+                            console.log(`[Plugin ${packageJson.shortName}] Notification:`, notification);
+                        },
+
+                        // Send to renderer windows
+                        sendToRenderer: (channel, data) => {
+                            const { BrowserWindow } = require('electron');
+                            BrowserWindow.getAllWindows().forEach(win => {
+                                win.webContents.send(channel, data);
+                            });
+                        }
+                    };
+
+                    // Initialize plugin
+                    const installedPlugin = loadedPlugin.plugin(pluginContext);
+
+                    // Load plugin state and call onLoad
+                    let currentPluginState = currentState[pluginName];
+                    if (installedPlugin.onLoad) {
+                        console.log(`[Plugin Loader] Calling onLoad for ${pluginName}`);
+                        installedPlugin.onLoad(currentPluginState);
+                    }
+
+                    plugins.installed[pluginName] = {
+                        name: pluginName,
+                        plugin: installedPlugin,
+                        currentState: currentPluginState
+                    };
+                }
 
                 // Register IPC handler for status updates from renderer
-                const { ipcMain } = require('electron');
                 ipcMain.on(`${pluginName}.status.update`, (event, statusData) => {
                     statusUpdate(statusData);
                 });
-
-                // Plugin state management moved to renderer process
-                // let currentPluginState = currentState[pluginName];
-                // installedPlugin.onLoad && installedPlugin.onLoad(currentPluginState);
-                // plugins.installed[pluginName] = {
-                //     name: pluginName,
-                //     plugin: installedPlugin,
-                //     currentState: null
-                // };
 
             } catch (err) {
                 console.log('Error parsing JSON string', err);
