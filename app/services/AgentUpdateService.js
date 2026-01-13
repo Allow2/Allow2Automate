@@ -572,25 +572,37 @@ export default class AgentUpdateService {
   /**
    * Generate agent configuration file
    * @param {string} serverUrl - Parent server URL
-   * @param {string} registrationCode - Optional registration code (for backward compatibility)
+   * @param {string} childId - Optional child ID for pre-assignment
    * @param {string} platform - Platform (win32, darwin, linux)
+   * @param {boolean} advancedMode - Use fixed IP (disable mDNS)
    */
-  generateAgentConfig(serverUrl, registrationCode, platform) {
+  generateAgentConfig(serverUrl, childId, platform, advancedMode = false) {
     const config = {
+      // Parent server URL (auto-detected or user-specified)
       parentApiUrl: serverUrl,
+
+      // Agent API port (default: 8443)
       apiPort: 8443,
+
+      // Policy sync interval in milliseconds (default: 30 seconds)
       checkInterval: 30000,
+
+      // Log level: 'error', 'warn', 'info', 'debug'
       logLevel: 'info',
-      enableMDNS: true,
+
+      // Enable mDNS/Bonjour discovery (disable if using fixed IP)
+      enableMDNS: !advancedMode,
+
+      // Enable automatic updates
       autoUpdate: true
     };
 
-    // Add registration code only if provided (backward compatibility)
-    if (registrationCode) {
-      config.registrationCode = registrationCode;
+    // Add child ID if provided (for optional pre-assignment)
+    if (childId) {
+      config.preAssignedChildId = childId;
     }
 
-    // Add platform-specific paths
+    // Platform-specific paths (for reference)
     if (platform === 'win32') {
       config.configPath = 'C:\\ProgramData\\Allow2\\agent\\config.json';
       config.logPath = 'C:\\ProgramData\\Allow2\\agent\\logs\\';
@@ -603,6 +615,172 @@ export default class AgentUpdateService {
     }
 
     return config;
+  }
+
+  /**
+   * Create ZIP bundle with installer and config file
+   * @param {string} installerPath - Path to installer file
+   * @param {string} configPath - Path to config file
+   * @param {string} outputPath - Path for output ZIP file
+   * @returns {Promise<string>} Path to created ZIP file
+   */
+  async createInstallerBundle(installerPath, configPath, outputPath) {
+    try {
+      console.log('[AgentUpdateService] Creating installer bundle...');
+
+      const archiver = require('archiver');
+      const fs = require('fs');
+      const path = require('path');
+
+      return new Promise((resolve, reject) => {
+        // Create write stream for ZIP file
+        const output = fs.createWriteStream(outputPath);
+        const archive = archiver('zip', {
+          zlib: { level: 9 } // Maximum compression
+        });
+
+        // Listen for completion
+        output.on('close', () => {
+          console.log(`[AgentUpdateService] Bundle created: ${archive.pointer()} bytes`);
+          resolve(outputPath);
+        });
+
+        // Listen for errors
+        archive.on('error', (err) => {
+          console.error('[AgentUpdateService] Error creating bundle:', err);
+          reject(err);
+        });
+
+        archive.on('warning', (err) => {
+          if (err.code === 'ENOENT') {
+            console.warn('[AgentUpdateService] Archive warning:', err);
+          } else {
+            reject(err);
+          }
+        });
+
+        // Pipe archive to output file
+        archive.pipe(output);
+
+        // Add installer to ZIP (at root level)
+        const installerName = path.basename(installerPath);
+        console.log(`[AgentUpdateService] Adding installer: ${installerName}`);
+        archive.file(installerPath, { name: installerName });
+
+        // Add config to ZIP (at root level)
+        console.log('[AgentUpdateService] Adding config: allow2automate-agent-config.json');
+        archive.file(configPath, { name: 'allow2automate-agent-config.json' });
+
+        // Finalize the archive
+        archive.finalize();
+      });
+    } catch (error) {
+      console.error('[AgentUpdateService] Error creating installer bundle:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Export installer bundle as ZIP (installer + config)
+   * @param {string} version - Version to export
+   * @param {string} platform - Platform (darwin, linux, win32)
+   * @param {string} serverUrl - Parent server URL
+   * @param {string} childId - Optional child ID for pre-assignment
+   * @param {boolean} advancedMode - Use fixed IP mode
+   * @returns {Promise<Object>} Bundle information
+   */
+  async exportInstallerBundle(version, platform, serverUrl, childId = null, advancedMode = false) {
+    try {
+      console.log(`[AgentUpdateService] Creating installer bundle for ${platform} v${version}...`);
+
+      // Create temp directory for staging
+      const tempDir = path.join(this.app.getPath('temp'), 'allow2-installer-staging');
+      if (!fs.existsSync(tempDir)) {
+        fs.mkdirSync(tempDir, { recursive: true });
+      }
+
+      // Get installer file (from cache or download)
+      let installerPath;
+      let installerExt;
+
+      const versionCache = this.installerCache.get(version);
+      if (versionCache && versionCache[platform]) {
+        // Use cached installer
+        const installer = versionCache[platform];
+        installerExt = installer.ext;
+        installerPath = installer.path;
+        console.log(`[AgentUpdateService] Using cached installer: ${installerPath}`);
+      } else {
+        // Download from GitHub
+        console.log(`[AgentUpdateService] Downloading installer from GitHub...`);
+
+        const release = this.releases.find(r => r.version === version);
+        if (!release) {
+          throw new Error(`Release version ${version} not found`);
+        }
+
+        const installerAsset = release.assets.find(a =>
+          a.platform === platform && a.type === 'installer'
+        );
+        if (!installerAsset) {
+          throw new Error(`No installer found for ${platform} in version ${version}`);
+        }
+
+        const fileName = installerAsset.name;
+        const cachePath = path.join(this.cacheDir, fileName);
+
+        await this.downloadFile(installerAsset.url, cachePath);
+
+        // Update cache
+        const checksum = await this.calculateChecksum(cachePath);
+        if (!this.installerCache.has(version)) {
+          this.installerCache.set(version, {});
+        }
+        this.installerCache.get(version)[platform] = {
+          path: cachePath,
+          checksum,
+          ext: installerAsset.ext
+        };
+
+        installerPath = cachePath;
+        installerExt = installerAsset.ext;
+      }
+
+      // Generate config file (NO registration code)
+      const configPath = path.join(tempDir, 'allow2automate-agent-config.json');
+      const config = this.generateAgentConfig(serverUrl, childId, platform, advancedMode);
+      fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+
+      console.log(`[AgentUpdateService] Config generated: ${configPath}`);
+
+      // Determine ZIP filename
+      const platformArch = platform === 'darwin' ? 'darwin-x64' :
+                          platform === 'linux' ? 'linux-x64' :
+                          platform === 'win32' ? 'win32-x64' : platform;
+
+      const zipFileName = `allow2automate-agent-${platformArch}-v${version}.zip`;
+      const zipPath = path.join(tempDir, zipFileName);
+
+      // Create ZIP bundle
+      await this.createInstallerBundle(installerPath, configPath, zipPath);
+
+      // Clean up temp config file
+      fs.unlinkSync(configPath);
+
+      console.log(`[AgentUpdateService] Bundle created: ${zipPath}`);
+
+      return {
+        zipPath: zipPath,
+        zipFileName: zipFileName,
+        version: version,
+        platform: platform,
+        installerName: path.basename(installerPath)
+      };
+
+    } catch (error) {
+      console.error('[AgentUpdateService] Error creating installer bundle:', error);
+      throw error;
+    }
   }
 
   /**

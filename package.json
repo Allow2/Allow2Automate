@@ -16,6 +16,7 @@
     "@material-ui/icons": "^4.11.2",
     "@material-ui/lab": "^4.0.0-alpha.61",
     "allow2": "^1.0.0",
+    "archiver": "^6.0.1",
     "async": "^2.6.3",
     "babel-runtime": "^6.22.0",
     "better-sqlite3": "^12.5.0",

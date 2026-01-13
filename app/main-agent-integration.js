@@ -56,6 +56,57 @@ async function findAvailablePort(expressApp, startPort, maxAttempts) {
 }
 
 /**
+ * Get the preferred network IP address for agent connections
+ * Filters out link-local, loopback, and virtual interfaces
+ */
+function getPreferredIPAddress() {
+  const os = require('os');
+  const networkInterfaces = os.networkInterfaces();
+  const candidates = [];
+
+  for (const interfaceName in networkInterfaces) {
+    for (const iface of networkInterfaces[interfaceName]) {
+      // Skip non-IPv4 and internal addresses
+      if (iface.family !== 'IPv4' || iface.internal) continue;
+
+      // Skip link-local addresses (169.254.0.0/16)
+      if (iface.address.startsWith('169.254.')) continue;
+
+      // Skip common virtual interfaces
+      if (interfaceName.startsWith('docker') ||
+          interfaceName.startsWith('veth') ||
+          interfaceName.startsWith('virbr') ||
+          interfaceName.startsWith('br-')) continue;
+
+      // Calculate priority based on interface name
+      let priority = 0;
+      if (interfaceName.startsWith('eth') ||
+          interfaceName.startsWith('en')) {
+        priority = 3; // Ethernet interfaces (highest priority)
+      } else if (interfaceName.startsWith('wlan') ||
+                 interfaceName.startsWith('wl') ||
+                 interfaceName.startsWith('wi-fi')) {
+        priority = 2; // WiFi interfaces
+      } else {
+        priority = 1; // Other interfaces
+      }
+
+      candidates.push({
+        address: iface.address,
+        priority,
+        name: interfaceName
+      });
+    }
+  }
+
+  // Sort by priority (highest first)
+  candidates.sort((a, b) => b.priority - a.priority);
+
+  // Return highest priority address, or localhost as fallback
+  return candidates.length > 0 ? candidates[0].address : 'localhost';
+}
+
+/**
  * Initialize agent services
  */
 export async function initializeAgentServices(app, store, actions) {
@@ -264,32 +315,19 @@ function setupIPCHandlers(agentService, agentUpdateService, actions) {
     }
   });
 
-  // Download installer
-  ipcMain.handle('agents:download-installer', async (event, { platform, childId }) => {
+  // Download installer bundle with save dialog
+  ipcMain.handle('agents:download-installer', async (event, { platform, childId, advancedMode, customIp, customPort }) => {
     try {
-      // Get Downloads folder
-      const downloadsPath = electronApp.getPath('downloads');
-
-      // Generate registration code if childId provided
-      let registrationCode = null;
-      if (childId) {
-        registrationCode = await agentService.generateRegistrationCode(childId);
-      }
-
-      // Get server URL (use local network address)
-      const os = require('os');
-      const networkInterfaces = os.networkInterfaces();
-      const serverPort = (global.services && global.services.serverPort) || 8080;
-      let serverUrl = `http://localhost:${serverPort}`;
-
-      // Find first non-internal IPv4 address
-      for (const interfaceName in networkInterfaces) {
-        for (const iface of networkInterfaces[interfaceName]) {
-          if (iface.family === 'IPv4' && !iface.internal) {
-            serverUrl = `http://${iface.address}:${serverPort}`;
-            break;
-          }
-        }
+      // Determine server URL
+      let serverUrl;
+      if (advancedMode && customIp && customPort) {
+        // Power user mode: use custom IP/port
+        serverUrl = `http://${customIp}:${customPort}`;
+      } else {
+        // Auto-detect mode: use preferred network interface
+        const serverIp = getPreferredIPAddress();
+        const serverPort = (global.services && global.services.serverPort) || 8080;
+        serverUrl = `http://${serverIp}:${serverPort}`;
       }
 
       // Get latest version for this platform
@@ -300,26 +338,100 @@ function setupIPCHandlers(agentService, agentUpdateService, actions) {
         throw new Error(`No installer available for platform: ${platform}`);
       }
 
-      // Export installer (downloads if needed)
-      const result = await agentUpdateService.exportInstaller(
+      // Create installer bundle (ZIP with installer + config)
+      console.log('[AgentIntegration] Creating installer bundle...');
+      const bundle = await agentUpdateService.exportInstallerBundle(
         platformInfo.version,
         platform,
-        downloadsPath,
         serverUrl,
-        registrationCode
+        childId,  // Pass childId for optional pre-assignment
+        advancedMode
       );
+
+      // Show save dialog
+      const saveResult = await dialog.showSaveDialog({
+        title: 'Save Agent Installer',
+        defaultPath: path.join(electronApp.getPath('downloads'), bundle.zipFileName),
+        filters: [
+          { name: 'ZIP Archive', extensions: ['zip'] },
+          { name: 'All Files', extensions: ['*'] }
+        ],
+        properties: ['createDirectory', 'showOverwriteConfirmation']
+      });
+
+      // Check if user cancelled
+      if (saveResult.canceled || !saveResult.filePath) {
+        console.log('[AgentIntegration] User cancelled save dialog');
+        fs.unlinkSync(bundle.zipPath); // Clean up temp file
+        return { success: false, cancelled: true };
+      }
+
+      // Move bundle from temp location to chosen location
+      const finalPath = saveResult.filePath;
+      fs.copyFileSync(bundle.zipPath, finalPath);
+      fs.unlinkSync(bundle.zipPath); // Clean up temp file
+
+      console.log(`[AgentIntegration] Installer bundle saved to: ${finalPath}`);
+
+      // Calculate file size for display
+      const stats = fs.statSync(finalPath);
+      const fileSizeMB = (stats.size / (1024 * 1024)).toFixed(2);
+
+      // Show success dialog with simplified instructions
+      const messageResult = await dialog.showMessageBox({
+        type: 'info',
+        title: 'Agent Installer Ready',
+        message: `Installer saved successfully`,
+        detail:
+          `✅ Saved to: ${finalPath}\n\n` +
+          `📦 Contents:\n` +
+          `  • Agent installer (${bundle.version})\n` +
+          `  • Configuration file\n\n` +
+          `📊 Size: ${fileSizeMB} MB\n` +
+          `🌐 Server: ${serverUrl}\n\n` +
+          `📋 Installation:\n` +
+          `  1. Save installer\n` +
+          `  2. Transfer to target machine\n` +
+          `  3. Run installer\n\n` +
+          (advancedMode ?
+            `⚙️ Advanced: Fixed IP (mDNS disabled)\n` :
+            `🔍 Standard: Auto-discovery via mDNS\n`) +
+          `\n` +
+          `The installer will automatically detect and validate\n` +
+          `the configuration when you extract and run it.`,
+        buttons: ['OK', 'Show in Folder', 'Copy Path'],
+        defaultId: 0
+      });
+
+      // Handle button clicks
+      if (messageResult.response === 1) {
+        require('electron').shell.showItemInFolder(finalPath);
+      } else if (messageResult.response === 2) {
+        const { clipboard } = require('electron');
+        clipboard.writeText(finalPath);
+      }
 
       return {
         success: true,
-        installerPath: result.installerPath,
-        configPath: result.configPath,
+        bundlePath: finalPath,
         serverUrl: serverUrl,
-        registrationCode: registrationCode,
-        version: result.version,
-        checksum: platformInfo.checksum
+        version: bundle.version,
+        platform: platform,
+        advancedMode: advancedMode,
+        childId: childId // Return for tracking
       };
+
     } catch (error) {
-      console.error('[IPC] Error downloading installer:', error);
+      console.error('[IPC] Error creating installer bundle:', error);
+
+      await dialog.showMessageBox({
+        type: 'error',
+        title: 'Download Failed',
+        message: 'Failed to create installer',
+        detail: error.message,
+        buttons: ['OK']
+      });
+
       return { success: false, error: error.message };
     }
   });
