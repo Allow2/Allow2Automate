@@ -8,6 +8,7 @@
 import AgentService from './services/AgentService.js';
 import AgentUpdateService from './services/AgentUpdateService.js';
 import UUIDManager from './services/UUIDManager.js';
+import KeypairManager from './services/KeypairManager.js';
 import ParentAdvertiser from './services/ParentAdvertiser.js';
 import DatabaseModule from './database/DatabaseModule.js';
 import agentRoutes from './routes/agent.js';
@@ -123,6 +124,11 @@ export async function initializeAgentServices(app, store, actions) {
     const uuidManager = new UUIDManager(electronApp);
     const parentUuid = uuidManager.getUUID();
 
+    // Initialize keypair manager (generates/loads RSA keypair for trust)
+    const keypairManager = new KeypairManager(electronApp);
+    const { publicKey } = await keypairManager.getKeypair();
+    console.log('[AgentIntegration] Keypair loaded/generated for trust establishment');
+
     // Initialize agent service
     const agentService = new AgentService(database);
     await agentService.initialize();
@@ -166,6 +172,7 @@ export async function initializeAgentServices(app, store, actions) {
       agent: agentService,
       agentUpdate: agentUpdateService,
       uuid: uuidManager,
+      keypair: keypairManager,
       parentAdvertiser: parentAdvertiser,
       database: database,
       serverPort: actualPort,
@@ -193,6 +200,7 @@ export async function initializeAgentServices(app, store, actions) {
       agentService,
       agentUpdateService,
       uuidManager,
+      keypairManager,
       parentAdvertiser,
       database
     };

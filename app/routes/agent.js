@@ -1,5 +1,6 @@
 import express from 'express';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 
 const router = express.Router();
 
@@ -279,6 +280,42 @@ router.get('/api/agent/installer/:version/:platform', async (req, res) => {
   } catch (error) {
     console.error('[AgentRoutes] Error serving installer:', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Agent handshake - verify parent authenticity
+ * GET /api/agent/handshake
+ *
+ * Returns a cryptographic challenge signed by the parent's private key.
+ * Agents verify this signature using the public key from their config
+ * to ensure they're connecting to the legitimate parent application.
+ */
+router.get('/api/agent/handshake', async (req, res) => {
+  try {
+    const keypairManager = global.services && global.services.keypair;
+    if (!keypairManager) {
+      return res.status(503).json({ error: 'Keypair manager not available' });
+    }
+
+    // Generate challenge
+    const nonce = crypto.randomBytes(32).toString('base64');
+    const timestamp = Date.now();
+    const challengeData = `${nonce}:${timestamp}`;
+
+    // Sign challenge with private key
+    const signature = keypairManager.signChallenge(challengeData);
+
+    res.json({
+      nonce,
+      timestamp,
+      signature,
+      version: '1.0.0'
+    });
+
+  } catch (error) {
+    console.error('[AgentRoutes] Handshake error:', error);
+    res.status(500).json({ error: 'Handshake failed' });
   }
 });
 

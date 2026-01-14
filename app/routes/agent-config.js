@@ -11,6 +11,7 @@ const router = express.Router();
  * - host: Parent's IP address (from request or system default)
  * - port: Parent's API port
  * - host_uuid: Parent's unique UUID for mDNS discovery
+ * - public_key: Parent's RSA public key for cryptographic verification
  * - enableMDNS: true (default)
  */
 router.get('/api/agent/config/download', async (req, res) => {
@@ -22,6 +23,14 @@ router.get('/api/agent/config/download', async (req, res) => {
     }
 
     const parentUuid = uuidManager.getUUID();
+
+    // Get keypair manager for public key
+    const keypairManager = global.services && global.services.keypair;
+    if (!keypairManager) {
+      return res.status(503).json({ error: 'Keypair service not available' });
+    }
+
+    const publicKey = await keypairManager.getPublicKey();
 
     // Determine parent's IP address
     // Priority: query param > header > system network interface
@@ -45,6 +54,7 @@ router.get('/api/agent/config/download', async (req, res) => {
       host,
       port,
       host_uuid: parentUuid,
+      public_key: publicKey,
       enableMDNS: true,
       checkInterval: 30000,
       logLevel: 'info',
