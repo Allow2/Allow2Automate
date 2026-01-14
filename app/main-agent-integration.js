@@ -6,10 +6,12 @@
  */
 
 import AgentService from './services/AgentService.js';
-import AgentDiscovery from './services/AgentDiscovery.js';
 import AgentUpdateService from './services/AgentUpdateService.js';
+import UUIDManager from './services/UUIDManager.js';
+import ParentAdvertiser from './services/ParentAdvertiser.js';
 import DatabaseModule from './database/DatabaseModule.js';
 import agentRoutes from './routes/agent.js';
+import agentConfigRoutes from './routes/agent-config.js';
 import express from 'express';
 import { ipcMain, app as electronApp, dialog } from 'electron';
 import path from 'path';
@@ -117,12 +119,12 @@ export async function initializeAgentServices(app, store, actions) {
     const database = new DatabaseModule();
     await database.initialize();
 
-    // Initialize discovery service
-    const agentDiscovery = new AgentDiscovery();
-    await agentDiscovery.start();
+    // Initialize UUID manager (generates/loads parent UUID)
+    const uuidManager = new UUIDManager(electronApp);
+    const parentUuid = uuidManager.getUUID();
 
     // Initialize agent service
-    const agentService = new AgentService(database, agentDiscovery);
+    const agentService = new AgentService(database);
     await agentService.initialize();
 
     // Initialize update service
@@ -135,9 +137,10 @@ export async function initializeAgentServices(app, store, actions) {
 
     // Mount agent routes
     expressApp.use(agentRoutes);
+    expressApp.use(agentConfigRoutes);
 
     // Start Express server with dynamic port allocation
-    const startPort = process.env.AGENT_API_PORT || 8080;
+    const startPort = parseInt(process.env.AGENT_API_PORT || '8080');
     const server = await findAvailablePort(expressApp, startPort, 100);
 
     if (!server) {
@@ -147,14 +150,26 @@ export async function initializeAgentServices(app, store, actions) {
     const actualPort = server.address().port;
     console.log(`[AgentIntegration] Agent API server listening on port ${actualPort}`);
 
+    // Initialize parent mDNS advertiser
+    const parentAdvertiser = new ParentAdvertiser(parentUuid, actualPort);
+    await parentAdvertiser.start();
+
+    // Get actual IP address for display
+    const ipAddress = getPreferredIPAddress();
+    console.log(`[AgentIntegration] Parent accessible at http://${ipAddress}:${actualPort}`);
+    console.log(`[AgentIntegration] Parent UUID: ${parentUuid}`);
+    console.log(`[AgentIntegration] mDNS service: ${parentUuid}._allow2automate._tcp.local`);
+
     // Expose services globally for routes and plugins
     global.services = {
       ...global.services,
       agent: agentService,
-      agentDiscovery: agentDiscovery,
       agentUpdate: agentUpdateService,
+      uuid: uuidManager,
+      parentAdvertiser: parentAdvertiser,
       database: database,
-      serverPort: actualPort
+      serverPort: actualPort,
+      serverIP: ipAddress
     };
 
     // Setup IPC handlers
@@ -168,16 +183,17 @@ export async function initializeAgentServices(app, store, actions) {
     // Cleanup on app quit
     electronApp.on('will-quit', async () => {
       console.log('[AgentIntegration] Shutting down agent services...');
+      await parentAdvertiser.stop();
       await agentService.shutdown();
-      agentDiscovery.stop();
       agentUpdateService.stop();
       server.close();
     });
 
     return {
       agentService,
-      agentDiscovery,
       agentUpdateService,
+      uuidManager,
+      parentAdvertiser,
       database
     };
 

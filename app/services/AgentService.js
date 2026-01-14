@@ -13,10 +13,9 @@ import crypto from 'crypto';
  * - Child-to-agent mapping
  */
 export default class AgentService extends EventEmitter {
-  constructor(database, discovery) {
+  constructor(database) {
     super();
     this.db = database;
-    this.discovery = discovery;
     this.agents = new Map(); // agentId -> AgentConnection
     this.heartbeatInterval = null;
   }
@@ -34,9 +33,6 @@ export default class AgentService extends EventEmitter {
 
       // Load existing agents from database
       await this.loadAgents();
-
-      // Setup discovery event listeners
-      this.setupDiscoveryListeners();
 
       // Start heartbeat monitoring
       this.startHeartbeatMonitoring();
@@ -66,7 +62,7 @@ export default class AgentService extends EventEmitter {
       const agentRecords = await this.db.query('SELECT * FROM agents');
 
       for (const record of agentRecords) {
-        const connection = new AgentConnection(record.id, this.discovery, this.db);
+        const connection = new AgentConnection(record.id, null, this.db);
         connection.lastKnownIP = record.last_known_ip;
         this.agents.set(record.id, connection);
       }
@@ -77,22 +73,6 @@ export default class AgentService extends EventEmitter {
     }
   }
 
-  /**
-   * Setup event listeners for agent discovery
-   */
-  setupDiscoveryListeners() {
-    if (!this.discovery) return;
-
-    this.discovery.on('agentDiscovered', (agentInfo) => {
-      console.log('[AgentService] Agent discovered via mDNS:', agentInfo.id);
-      this.emit('agentOnline', agentInfo);
-    });
-
-    this.discovery.on('agentLost', (agentId) => {
-      console.log('[AgentService] Agent lost connection:', agentId);
-      this.emit('agentOffline', agentId);
-    });
-  }
 
   /**
    * Start monitoring agent heartbeats
@@ -130,12 +110,17 @@ export default class AgentService extends EventEmitter {
       `);
 
       // Enhance with online status from discovery
-      return agents.map(agent => ({
-        ...agent,
-        online: this.discovery ? this.discovery.isAgentOnline(agent.id) : false,
-        lastHeartbeatAge: agent.last_heartbeat ?
-          Date.now() - new Date(agent.last_heartbeat).getTime() : null
-      }));
+      return agents.map(agent => {
+        const lastHeartbeat = agent.last_heartbeat ? new Date(agent.last_heartbeat).getTime() : 0;
+        const ageMs = lastHeartbeat ? Date.now() - lastHeartbeat : null;
+        const online = ageMs !== null && ageMs < (5 * 60 * 1000); // Online if heartbeat within 5 minutes
+
+        return {
+          ...agent,
+          online,
+          lastHeartbeatAge: ageMs
+        };
+      });
     } catch (error) {
       console.error('[AgentService] Error listing agents:', error);
       return [];
@@ -154,9 +139,13 @@ export default class AgentService extends EventEmitter {
 
       if (!agent) return null;
 
+      const lastHeartbeat = agent.last_heartbeat ? new Date(agent.last_heartbeat).getTime() : 0;
+      const ageMs = lastHeartbeat ? Date.now() - lastHeartbeat : null;
+      const online = ageMs !== null && ageMs < (5 * 60 * 1000);
+
       return {
         ...agent,
-        online: this.discovery ? this.discovery.isAgentOnline(agentId) : false
+        online
       };
     } catch (error) {
       console.error('[AgentService] Error getting agent:', error);
@@ -250,7 +239,7 @@ export default class AgentService extends EventEmitter {
       }
 
       // Create agent connection
-      const connection = new AgentConnection(agentId, this.discovery, this.db);
+      const connection = new AgentConnection(agentId, null, this.db);
       connection.lastKnownIP = agentInfo.ip;
       this.agents.set(agentId, connection);
 
