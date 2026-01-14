@@ -546,112 +546,44 @@ export default function AgentManagement({ ipcRenderer }) {
         maxWidth="md"
         fullWidth
       >
-        <DialogTitle>Agent Installer Downloaded</DialogTitle>
+        <DialogTitle>Download Complete</DialogTitle>
         <DialogContent>
-          <Typography variant="body1" gutterBottom style={{ fontWeight: 'bold' }}>
-            Download Complete!
-          </Typography>
-
           {downloadResult && (
             <Fragment>
               <div style={{ marginTop: 16, marginBottom: 16 }}>
-                <Typography variant="body2" paragraph>
-                  The following files have been downloaded to your Downloads folder:
+                <Typography variant="h6" gutterBottom>
+                  Installation Instructions
                 </Typography>
 
-                <div
-                  style={{
-                    padding: 16,
-                    marginBottom: 16,
-                    backgroundColor: '#f5f5f5',
-                    borderRadius: 4,
-                    fontFamily: 'monospace',
-                    fontSize: '0.85rem'
-                  }}
-                >
-                  <Typography variant="body2" gutterBottom>
-                    <strong>Installer:</strong>
-                  </Typography>
-                  <Typography variant="body2" paragraph style={{ wordBreak: 'break-all' }}>
-                    {downloadResult.installerPath}
-                  </Typography>
+                <Typography variant="body2" paragraph>
+                  <strong>Step 1:</strong> Transfer the installer zip file to the target device
+                </Typography>
 
-                  {downloadResult.configPath && (
-                    <Fragment>
-                      <Typography variant="body2" gutterBottom>
-                        <strong>Configuration:</strong>
-                      </Typography>
-                      <Typography variant="body2" style={{ wordBreak: 'break-all' }}>
-                        {downloadResult.configPath}
-                      </Typography>
-                    </Fragment>
-                  )}
-                </div>
+                <Typography variant="body2" paragraph>
+                  <strong>Step 2:</strong> Unzip the files
+                </Typography>
 
-                <Divider />
+                <Typography variant="body2" paragraph>
+                  <strong>Step 3:</strong> Run the installer
+                  {downloadResult.platform === 'win32' && ' (double-click the MSI file)'}
+                  {downloadResult.platform === 'darwin' && ' (double-click the PKG file)'}
+                  {downloadResult.platform === 'linux' && ' (double-click the DEB file)'}
+                </Typography>
 
-                <div style={{ marginTop: 16, marginBottom: 16 }}>
-                  <Typography variant="h6" gutterBottom>
-                    Installation Instructions
-                  </Typography>
+                <Divider style={{ margin: '16px 0' }} />
 
-                  <Typography variant="body2" paragraph>
-                    <strong>Step 1:</strong> Transfer both files to the target device
-                  </Typography>
+                <Typography variant="body2" paragraph>
+                  The agent will automatically connect to this Allow2Automate app and extend your reach to control that device.
+                </Typography>
 
-                  <Typography variant="body2" paragraph>
-                    <strong>Step 2:</strong> Run the installer
-                    {downloadResult.platform === 'win32' && ' (double-click the MSI file)'}
-                    {downloadResult.platform === 'darwin' && ' (double-click the PKG file)'}
-                    {downloadResult.platform === 'linux' &&
-                      ' (run: sudo dpkg -i <installer-file>)'}
-                  </Typography>
-
-                  <Typography variant="body2" paragraph>
-                    <strong>Step 3:</strong> When prompted, use this registration code:
-                  </Typography>
-
-                  <div className={classes.registrationCode}>
-                    {downloadResult.registrationCode || 'No code generated'}
-                  </div>
-
-                  <Typography variant="body2" paragraph>
-                    <strong>Step 4:</strong> The agent will automatically connect to:
-                  </Typography>
-
-                  <div
-                    style={{
-                      padding: 8,
-                      marginBottom: 16,
-                      backgroundColor: '#f5f5f5',
-                      borderRadius: 4,
-                      fontFamily: 'monospace'
-                    }}
-                  >
-                    <Typography variant="body2">{downloadResult.serverUrl}</Typography>
-                  </div>
-
-                  <Typography variant="caption" color="textSecondary">
-                    The configuration file contains all necessary settings for the agent to
-                    connect to this Allow2Automate server. Version: {downloadResult.version}
-                  </Typography>
-                </div>
+                <Typography variant="body2" paragraph>
+                  This agent allows various plugins to monitor usage and enforce limits on those devices, so make sure you also install and configure the plugins you want to use (like allow2automate-os or allow2automate-steam, etc).
+                </Typography>
               </div>
             </Fragment>
           )}
         </DialogContent>
         <DialogActions>
-          <Button
-            onClick={() => {
-              if (downloadResult && downloadResult.registrationCode) {
-                navigator.clipboard.writeText(downloadResult.registrationCode);
-                showToast('Registration code copied to clipboard!', 'success');
-              }
-            }}
-            color="primary"
-          >
-            Copy Code
-          </Button>
           <Button onClick={() => setDownloadResultDialog(false)} color="primary" variant="contained">
             Done
           </Button>

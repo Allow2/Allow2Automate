@@ -394,9 +394,26 @@ module.exports = function(app, store, actions) {
                 };
 
                 packageJson.shortName = extractShortName(pluginName);
-                //packageJson.fullPath = fullpath;
-                memo[pluginName] = packageJson;
-                console.log('[Plugins] Loading plugin:', pluginName, 'from:', fullPath);
+
+                // Load icon metadata for plugin
+                packageJson.icon = packageJson.icon || null;
+                packageJson.iconType = packageJson.iconType || 'file';
+
+                // Check if plugin exists in Redux store (filter out deleted plugins)
+                const storedPlugins = store.getState().installedPlugins;
+                if (storedPlugins && storedPlugins[pluginName]) {
+                    // Plugin is installed - merge disabled state
+                    packageJson.disabled = storedPlugins[pluginName].disabled || false;
+                    console.log('[Plugins] Loading installed plugin:', pluginName, 'disabled:', packageJson.disabled, 'icon:', packageJson.icon);
+
+                    // Store full path for icon resolution
+                    packageJson.fullPath = fullPath;
+                    memo[pluginName] = packageJson;
+                } else {
+                    // Plugin was deleted from store - skip it
+                    console.log('[Plugins] Skipping deleted plugin:', pluginName);
+                    return memo;
+                }
 
                 // Don't use epm.load() for scoped packages - it doesn't support them
                 // The plugin will be loaded on-demand by the renderer when needed
@@ -476,10 +493,33 @@ module.exports = function(app, store, actions) {
                         return memo;
                     }
 
+                    // Build restricted ipcMain for plugin
+                    const ipcMainRestricted = {
+                        handle: (channel, handler) => {
+                            const prefixedChannel = `${pluginName}.${channel}`;
+                            console.log(`[Plugin ${pluginName}] Registering IPC handler:`, prefixedChannel);
+                            ipcMain.handle(prefixedChannel, handler);
+                        },
+                        on: (channel, listener) => {
+                            const prefixedChannel = `${pluginName}.${channel}`;
+                            console.log(`[Plugin ${pluginName}] Registering IPC listener:`, prefixedChannel);
+                            ipcMain.on(prefixedChannel, listener);
+                        },
+                        removeHandler: (channel) => {
+                            const prefixedChannel = `${pluginName}.${channel}`;
+                            ipcMain.removeHandler(prefixedChannel);
+                        },
+                        removeListener: (channel, listener) => {
+                            const prefixedChannel = `${pluginName}.${channel}`;
+                            ipcMain.removeListener(prefixedChannel, listener);
+                        }
+                    };
+
                     // Build plugin context with all available services
                     const pluginContext = {
                         isMain: true,
-                        ipcMain: ipcMain, // Native ipcMain for full access
+                        ipcMain: ipcMainRestricted, // Restricted ipcMain with auto-prefixing
+                        BrowserWindow: require('electron').BrowserWindow, // For OAuth windows
                         configurationUpdate: configurationUpdate,
                         statusUpdate: statusUpdate,
                         services: global.services || {},
@@ -511,9 +551,11 @@ module.exports = function(app, store, actions) {
 
                         // Send to renderer windows
                         sendToRenderer: (channel, data) => {
+                            const prefixedChannel = `${pluginName}.${channel}`;
+                            console.log(`[Plugin ${pluginName}] Sending to renderer:`, prefixedChannel);
                             const { BrowserWindow } = require('electron');
                             BrowserWindow.getAllWindows().forEach(win => {
-                                win.webContents.send(channel, data);
+                                win.webContents.send(prefixedChannel, data);
                             });
                         }
                     };
@@ -547,6 +589,39 @@ module.exports = function(app, store, actions) {
         }, {});
         callback(null, installedPlugins);
     };
+
+    // Watch for plugin enable/disable state changes
+    let previousPlugins = {};
+    store.subscribe(() => {
+        const state = store.getState();
+        const currentPlugins = state.installedPlugins || {};
+
+        // Check each plugin for enabled/disabled state changes
+        Object.keys(currentPlugins).forEach(pluginName => {
+            const currentPlugin = currentPlugins[pluginName];
+            const previousPlugin = previousPlugins[pluginName];
+
+            // Check if disabled state changed
+            if (previousPlugin && currentPlugin.disabled !== previousPlugin.disabled) {
+                const isEnabled = !currentPlugin.disabled;
+                console.log(`[Plugins] Plugin ${pluginName} state changed to:`, isEnabled ? 'enabled' : 'disabled');
+
+                // Call the plugin's onSetEnabled if it exists
+                const loadedPlugin = plugins.installed[pluginName];
+                if (loadedPlugin && loadedPlugin.plugin && loadedPlugin.plugin.onSetEnabled) {
+                    console.log(`[Plugins] Calling onSetEnabled(${isEnabled}) for ${pluginName}`);
+                    try {
+                        loadedPlugin.plugin.onSetEnabled(isEnabled);
+                    } catch (error) {
+                        console.error(`[Plugins] Error in onSetEnabled for ${pluginName}:`, error);
+                    }
+                }
+            }
+        });
+
+        // Update previous state
+        previousPlugins = JSON.parse(JSON.stringify(currentPlugins));
+    });
 
     return plugins;
 };

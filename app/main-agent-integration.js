@@ -377,40 +377,6 @@ function setupIPCHandlers(agentService, agentUpdateService, actions) {
       const stats = fs.statSync(finalPath);
       const fileSizeMB = (stats.size / (1024 * 1024)).toFixed(2);
 
-      // Show success dialog with simplified instructions
-      const messageResult = await dialog.showMessageBox({
-        type: 'info',
-        title: 'Agent Installer Ready',
-        message: `Installer saved successfully`,
-        detail:
-          `✅ Saved to: ${finalPath}\n\n` +
-          `📦 Contents:\n` +
-          `  • Agent installer (${bundle.version})\n` +
-          `  • Configuration file\n\n` +
-          `📊 Size: ${fileSizeMB} MB\n` +
-          `🌐 Server: ${serverUrl}\n\n` +
-          `📋 Installation:\n` +
-          `  1. Save installer\n` +
-          `  2. Transfer to target machine\n` +
-          `  3. Run installer\n\n` +
-          (advancedMode ?
-            `⚙️ Advanced: Fixed IP (mDNS disabled)\n` :
-            `🔍 Standard: Auto-discovery via mDNS\n`) +
-          `\n` +
-          `The installer will automatically detect and validate\n` +
-          `the configuration when you extract and run it.`,
-        buttons: ['OK', 'Show in Folder', 'Copy Path'],
-        defaultId: 0
-      });
-
-      // Handle button clicks
-      if (messageResult.response === 1) {
-        require('electron').shell.showItemInFolder(finalPath);
-      } else if (messageResult.response === 2) {
-        const { clipboard } = require('electron');
-        clipboard.writeText(finalPath);
-      }
-
       return {
         success: true,
         bundlePath: finalPath,
@@ -418,7 +384,36 @@ function setupIPCHandlers(agentService, agentUpdateService, actions) {
         version: bundle.version,
         platform: platform,
         advancedMode: advancedMode,
-        childId: childId // Return for tracking
+        childId: childId,
+        // Display data for UI dialog
+        installerName: bundle.installerName,
+        fileSizeMB: fileSizeMB,
+        zipFileName: bundle.zipFileName,
+        displayMessage: {
+          title: 'Agent Installer Ready',
+          message: 'Installer saved successfully',
+          details: [
+            `✅ Saved to: ${finalPath}`,
+            '',
+            '📦 Contents:',
+            `  • Agent installer (${bundle.version})`,
+            '  • Configuration file',
+            '',
+            `📊 Size: ${fileSizeMB} MB`,
+            `🌐 Server: ${serverUrl}`,
+            '',
+            '📋 Installation:',
+            '  1. Transfer to target machine',
+            '  2. Run installer',
+            '',
+            advancedMode ?
+              '⚙️ Advanced: Fixed IP (mDNS disabled)' :
+              '🔍 Standard: Auto-discovery via mDNS',
+            '',
+            'The installer will automatically detect and validate',
+            'the configuration when you extract and run it.'
+          ].join('\n')
+        }
       };
 
     } catch (error) {

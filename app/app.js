@@ -31,6 +31,13 @@ Analytics.initialize().then((success) => {
   console.error('[App] Analytics initialization error:', err);
 });
 
+// Listen for app shutdown event from main process
+const { ipcRenderer } = require('electron');
+ipcRenderer.on('app-shutting-down', () => {
+  console.log('[App] Received shutdown signal, tracking app shutdown');
+  Analytics.trackAppShutdown();
+});
+
 const rootElement = document.querySelector(document.currentScript.getAttribute('data-container'));
 
 //<MuiThemeProvider theme={}>

@@ -80,4 +80,79 @@ if (initializeApp) {
   console.error('[Firebase] initializeApp function not loaded');
 }
 
-export { analytics, firebaseApp, setUserId, setUserProperties, logEvent };
+/**
+ * Wrapper function to check if Firebase is initialized
+ */
+function initializeFirebase() {
+  // Firebase is initialized at module load time
+  // Just return whether it was successful
+  return Promise.resolve(!!analytics);
+}
+
+/**
+ * Get the analytics instance
+ */
+function getAnalyticsInstance() {
+  return analytics;
+}
+
+/**
+ * Log an analytics event
+ */
+function logAnalyticsEvent(eventName, eventParams) {
+  if (analytics && logEvent) {
+    try {
+      logEvent(analytics, eventName, eventParams);
+      return true;
+    } catch (err) {
+      console.error('[Firebase] Error logging event:', err);
+      return false;
+    }
+  }
+  return false;
+}
+
+/**
+ * Set analytics user ID
+ */
+function setAnalyticsUserId(userId) {
+  if (analytics && setUserId) {
+    try {
+      setUserId(analytics, userId);
+      return true;
+    } catch (err) {
+      console.error('[Firebase] Error setting user ID:', err);
+      return false;
+    }
+  }
+  return false;
+}
+
+/**
+ * Set analytics user properties
+ */
+function setAnalyticsUserProperties(properties) {
+  if (analytics && setUserProperties) {
+    try {
+      setUserProperties(analytics, properties);
+      return true;
+    } catch (err) {
+      console.error('[Firebase] Error setting user properties:', err);
+      return false;
+    }
+  }
+  return false;
+}
+
+export {
+  analytics,
+  firebaseApp,
+  setUserId,
+  setUserProperties,
+  logEvent,
+  initializeFirebase,
+  getAnalyticsInstance,
+  logAnalyticsEvent,
+  setAnalyticsUserId,
+  setAnalyticsUserProperties
+};

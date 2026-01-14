@@ -307,6 +307,12 @@ export default class Marketplace extends Component {
             loadingReadme: true
         });
 
+        // Track marketplace plugin info popup view
+        Analytics.trackMarketplacePluginInfo(
+            plugin.name,
+            (plugin.releases && plugin.releases.latest) || plugin.version || 'unknown'
+        );
+
         // Fetch README from GitHub
         try {
             const repoUrl = plugin.repository && plugin.repository.url;

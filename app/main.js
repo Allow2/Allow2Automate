@@ -473,6 +473,14 @@ const template = [
 ];
 
 app.on('window-all-closed', () => {
+    // Track app shutdown before quitting
+    // Note: Analytics tracking happens in renderer, so we send an IPC message
+    // to trigger tracking before the window closes
+    const windows = BrowserWindow.getAllWindows();
+    if (windows.length > 0) {
+        windows[0].webContents.send('app-shutting-down');
+    }
+
     // On OS X it is common for applications and their menu bar
     // to stay active until the user quits explicitly with Cmd + Q
     if (process.platform !== 'darwin') {

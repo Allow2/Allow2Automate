@@ -6,13 +6,30 @@ import {
     AppBar,
     Toolbar,
     Tooltip,
-    Snackbar } from '@material-ui/core';
+    Snackbar,
+    Drawer,
+    List,
+    ListItem,
+    ListItemIcon,
+    ListItemText,
+    ListItemSecondaryAction,
+    IconButton,
+    Box } from '@material-ui/core';
 import {
     SocialPerson,
     Warning,
     Error,
     CheckCircle,
-    HelpOutline } from '@material-ui/icons';
+    HelpOutline,
+    Settings as SettingsIcon,
+    ExitToApp,
+    Extension,
+    Router,
+    Terminal,
+    Devices,
+    SportsEsports,
+    Cloud } from '@material-ui/icons';
+import * as MuiIcons from '@material-ui/icons';
 import {
     sortedVisibleDevicesSelector,
     sortedActivePluginSelector,
@@ -32,12 +49,104 @@ import {
     TableHeader,
     TableHeaderColumn,
     TableRow,
-    TableRowColumn,
-    } from '@material-ui/core';
-import {Tabs, Tab, Box } from '@material-ui/core';
+    TableRowColumn } from '@material-ui/core';
 
 var dialogs = Dialogs({});
 
+const drawerWidth = 240;
+
+/**
+ * Get plugin icon component
+ * Resolves custom icons from plugin metadata
+ */
+function getPluginIcon(plugin) {
+    const { ipcRenderer } = require('electron');
+    const fs = require('fs');
+
+    console.log('[PluginIcon] Getting icon for plugin:', plugin.name, 'icon:', plugin.icon, 'fullPath:', plugin.fullPath);
+
+    // Get plugin directory
+    const pluginsDir = ipcRenderer.sendSync('getPath', 'plugins');
+    let pluginDir;
+
+    // Use fullPath if available (set by plugin loader)
+    if (plugin.fullPath) {
+        pluginDir = plugin.fullPath;
+        console.log('[PluginIcon] Using fullPath:', pluginDir);
+    } else if (plugin.dev_plugin && plugin.installation && plugin.installation.local_path) {
+        pluginDir = plugin.installation.local_path;
+        console.log('[PluginIcon] Using local_path:', pluginDir);
+    } else {
+        pluginDir = path.join(pluginsDir, 'node_modules', plugin.name);
+        console.log('[PluginIcon] Using computed path:', pluginDir);
+    }
+
+    // Check if plugin has custom icon
+    if (plugin.icon) {
+        const iconType = plugin.iconType || 'file';
+        console.log('[PluginIcon] Icon type:', iconType);
+
+        if (iconType === 'material-ui') {
+            // Use Material-UI icon by name
+            const IconComponent = MuiIcons[plugin.icon];
+            if (IconComponent) {
+                return <IconComponent />;
+            }
+            console.warn('[PluginIcon] Material-UI icon not found:', plugin.icon);
+        } else if (iconType === 'data-url' || plugin.icon.startsWith('data:')) {
+            // Data URL (base64)
+            return (
+                <img
+                    src={plugin.icon}
+                    width={24}
+                    height={24}
+                    alt=""
+                    style={{ objectFit: 'contain' }}
+                />
+            );
+        } else {
+            // File path - resolve relative to plugin directory
+            let iconPath = path.join(pluginDir, plugin.icon);
+            console.log('[PluginIcon] Initial icon path:', iconPath);
+
+            // Resolve symlinks to get actual file path
+            try {
+                if (fs.existsSync(iconPath)) {
+                    const resolvedPath = fs.realpathSync(iconPath);
+                    console.log('[PluginIcon] Resolved symlink:', iconPath, '->', resolvedPath);
+                    iconPath = resolvedPath;
+                } else {
+                    console.warn('[PluginIcon] Icon file does not exist:', iconPath);
+                }
+            } catch (err) {
+                console.warn('[PluginIcon] Error resolving icon path:', err);
+            }
+
+            console.log('[PluginIcon] Final icon path for', plugin.name, ':', iconPath);
+
+            return (
+                <img
+                    src={`file://${iconPath}`}
+                    width={24}
+                    height={24}
+                    alt=""
+                    style={{ objectFit: 'contain' }}
+                    onError={(e) => {
+                        console.error('[PluginIcon] ❌ Failed to load icon for', plugin.name, '- path:', iconPath);
+                        e.target.style.display = 'none';
+                    }}
+                    onLoad={() => {
+                        console.log('[PluginIcon] ✅ Successfully loaded icon for', plugin.name);
+                    }}
+                />
+            );
+        }
+    }
+
+    console.log('[PluginIcon] No icon specified, using fallback for', plugin.name);
+    // Fallback to default Extension icon
+    return <Extension />;
+}
 
 function TabPanel(props) {
     const { children, value, index, ...other } = props;
@@ -117,6 +226,11 @@ export default class Plugins extends Component {
         this.setState({
             currentTab: tab
         });
+
+        // Track navigation to plugin tabs
+        if (tab !== 'Allow2AutomateSettingsTab') {
+            Analytics.trackPluginTabView(tab);
+        }
     };
 
     render() {
@@ -128,54 +242,117 @@ export default class Plugins extends Component {
         let plugins = sortedActivePluginSelector(this.props);
         let pluginData = pluginDataSelector(this.props);
         let pluginStatuses = allPluginStatusSelector(this.props);
+
         return (
-            <div>
-                <AppBar position="static">
+            <div style={{ display: 'flex' }}>
+                {/* Header AppBar */}
+                <AppBar position="fixed" style={{ zIndex: 1201 }}>
                     <Toolbar>
                         {avatar}
-                        {name}
-                        <Button label="Log Off" onClick={this.handleLogout} />
+                        <span style={{ marginLeft: 8, flexGrow: 1 }}>{name}</span>
+                        <Tooltip title="Log Out">
+                            <IconButton color="inherit" onClick={this.handleLogout}>
+                                <ExitToApp />
+                            </IconButton>
+                        </Tooltip>
                     </Toolbar>
                 </AppBar>
-                <Tabs value={this.state.currentTab} onChange={this.handleTabChange.bind(this)} >
-                    { plugins.map(function (plugin) {
-                        const pluginStatus = pluginStatuses && pluginStatuses[plugin.name];
 
-                        // Determine icon based on status
-                        let statusIcon = null;
-                        let iconStyle = { fontSize: 18, marginRight: 4, verticalAlign: 'middle' };
-
-                        if (!pluginStatus || pluginStatus.status === 'unconfigured') {
-                            statusIcon = <HelpOutline style={{ ...iconStyle, color: '#FFA500' }} />;
-                        } else if (pluginStatus.status === 'error') {
-                            statusIcon = <Error style={{ ...iconStyle, color: '#F44336' }} />;
-                        } else if (pluginStatus.status === 'warning' || pluginStatus.status === 'disconnected') {
-                            statusIcon = <Warning style={{ ...iconStyle, color: '#FF9800' }} />;
-                        } else if (pluginStatus.status === 'connected' || pluginStatus.status === 'configured') {
-                            statusIcon = <CheckCircle style={{ ...iconStyle, color: '#4CAF50' }} />;
+                {/* Left Navigation Drawer */}
+                <Drawer
+                    variant="permanent"
+                    sx={{
+                        width: drawerWidth,
+                        flexShrink: 0,
+                        '& .MuiDrawer-paper': {
+                            width: drawerWidth,
+                            boxSizing: 'border-box',
+                            marginTop: '64px'
                         }
+                    }}
+                    PaperProps={{
+                        style: {
+                            width: drawerWidth,
+                            marginTop: '64px',
+                            height: 'calc(100vh - 64px)',
+                            display: 'flex',
+                            flexDirection: 'column'
+                        }
+                    }}
+                >
+                    {/* Scrollable plugin list */}
+                    <div style={{ flexGrow: 1, overflowY: 'auto' }}>
+                        <List>
+                            { plugins.map(function (plugin) {
+                                const pluginStatus = pluginStatuses && pluginStatuses[plugin.name];
+                                const isSelected = this.state.currentTab === plugin.name;
 
-                        return (
-                            <Tab
-                                label={
-                                    <Tooltip
-                                        title={pluginStatus ? pluginStatus.message : 'Status unknown'}
-                                        placement="bottom"
-                                    >
-                                        <span style={{ display: 'flex', alignItems: 'center' }}>
-                                            {statusIcon}
-                                            {plugin.shortName || plugin.name}
-                                        </span>
-                                    </Tooltip>
+                                // Determine status icon
+                                let statusIcon = null;
+                                let iconStyle = { fontSize: 18 };
+
+                                if (!pluginStatus || pluginStatus.status === 'unconfigured') {
+                                    statusIcon = <HelpOutline style={{ ...iconStyle, color: '#FFA500' }} />;
+                                } else if (pluginStatus.status === 'error') {
+                                    statusIcon = <Error style={{ ...iconStyle, color: '#F44336' }} />;
+                                } else if (pluginStatus.status === 'warning' || pluginStatus.status === 'disconnected') {
+                                    statusIcon = <Warning style={{ ...iconStyle, color: '#FF9800' }} />;
+                                } else if (pluginStatus.status === 'connected' || pluginStatus.status === 'configured') {
+                                    statusIcon = <CheckCircle style={{ ...iconStyle, color: '#4CAF50' }} />;
                                 }
-                                key={ plugin.name }
-                                value={ plugin.name }
-                            />
-                        );
-                    }.bind(this))
-                    }
-                    <Tab label="Settings" key="Allow2AutomateSettingsTab" value="Allow2AutomateSettingsTab" />
-                </Tabs>
+
+                                return (
+                                    <Tooltip
+                                        key={plugin.name}
+                                        title={pluginStatus ? pluginStatus.message : 'Status unknown'}
+                                        placement="right"
+                                    >
+                                        <ListItem
+                                            button
+                                            selected={isSelected}
+                                            onClick={() => this.handleTabChange(null, plugin.name)}
+                                        >
+                                            <ListItemIcon>
+                                                {getPluginIcon(plugin)}
+                                            </ListItemIcon>
+                                            <ListItemText primary={plugin.shortName || plugin.name} />
+                                            <ListItemSecondaryAction>
+                                                {statusIcon}
+                                            </ListItemSecondaryAction>
+                                        </ListItem>
+                                    </Tooltip>
+                                );
+                            }.bind(this))
+                            }
+                        </List>
+                    </div>
+
+                    {/* Fixed footer for Settings */}
+                    <div style={{
+                        borderTop: '1px solid rgba(0, 0, 0, 0.12)',
+                        backgroundColor: '#fafafa'
+                    }}>
+                        <List>
+                            <ListItem
+                                button
+                                selected={this.state.currentTab === 'Allow2AutomateSettingsTab'}
+                                onClick={() => this.handleTabChange(null, 'Allow2AutomateSettingsTab')}
+                            >
+                                <ListItemIcon>
+                                    <SettingsIcon />
+                                </ListItemIcon>
+                                <ListItemText primary="Settings" />
+                            </ListItem>
+                        </List>
+                    </div>
+                </Drawer>
+
+                {/* Main Content Area */}
+                <Box
+                    component="main"
+                    sx={{ flexGrow: 1, p: 3, marginTop: '64px', marginLeft: `${drawerWidth}px` }}
+                    style={{ marginTop: '64px', marginLeft: `${drawerWidth}px`, padding: 24, flexGrow: 1 }}
+                >
 
                 { plugins.map(function (plugin) {
                     const pluginDetail = {
@@ -199,45 +376,45 @@ export default class Plugins extends Component {
                 }.bind(this))
                 }
 
-                <TabPanel index="Allow2AutomateSettingsTab" value={this.state.currentTab} >
-                    <PlugIns {...this.props} />
-                </TabPanel>
+                    <TabPanel index="Allow2AutomateSettingsTab" value={this.state.currentTab} >
+                        <PlugIns {...this.props} />
+                    </TabPanel>
 
-                {/* Stacked toast notifications - bottom right */}
-                {this.state.toasts.map((toast, index) => {
-                    const severityColors = {
-                        success: '#4caf50',
-                        error: '#f44336',
-                        warning: '#ff9800',
-                        info: '#2196f3'
-                    };
+                    {/* Stacked toast notifications - bottom right */}
+                    {this.state.toasts.map((toast, index) => {
+                        const severityColors = {
+                            success: '#4caf50',
+                            error: '#f44336',
+                            warning: '#ff9800',
+                            info: '#2196f3'
+                        };
 
-                    return (
-                        <Snackbar
-                            key={toast.id}
-                            open={true}
-                            autoHideDuration={4000}
-                            onClose={() => this.handleCloseToast(toast.id)}
-                            message={toast.message}
-                            ContentProps={{
-                                style: {
-                                    backgroundColor: severityColors[toast.severity] || severityColors.info,
-                                    color: '#fff',
-                                    fontSize: '14px',
-                                    minWidth: '250px'
-                                }
-                            }}
-                            anchorOrigin={{
-                                vertical: 'bottom',
-                                horizontal: 'right'
-                            }}
-                            style={{
-                                bottom: `${24 + (index * 60)}px`
-                            }}
-                        />
-                    );
-                })}
-
+                        return (
+                            <Snackbar
+                                key={toast.id}
+                                open={true}
+                                autoHideDuration={4000}
+                                onClose={() => this.handleCloseToast(toast.id)}
+                                message={toast.message}
+                                ContentProps={{
+                                    style: {
+                                        backgroundColor: severityColors[toast.severity] || severityColors.info,
+                                        color: '#fff',
+                                        fontSize: '14px',
+                                        minWidth: '250px'
+                                    }
+                                }}
+                                anchorOrigin={{
+                                    vertical: 'bottom',
+                                    horizontal: 'right'
+                                }}
+                                style={{
+                                    bottom: `${24 + (index * 60)}px`
+                                }}
+                            />
+                        );
+                    })}
+                </Box>
             </div>
         );
     }

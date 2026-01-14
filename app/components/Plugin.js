@@ -73,6 +73,7 @@ export default class Login extends Component {
         const entryPoint = this.props.plugin.main || 'dist/index.js';
         const pluginPath = path.join(pluginDir, entryPoint);
         console.log('[Plugin] Plugin entry point:', pluginPath);
+        console.log('[Plugin] Plugin directory:', pluginDir);
 
         // Provide global persist stub for backward compatibility
         // Some older plugins may reference persist at module scope
@@ -83,10 +84,11 @@ export default class Login extends Component {
         }
 
         this.plugin = null;
-        this.pluginPath = pluginPath; // Store for componentDidMount
+        this.pluginPath = pluginPath; // Store for componentDidMount (loading only)
+        this.pluginDir = pluginDir;   // Store plugin directory for TabContent
         this.state = {
             hasError: false,
-            pluginPath: pluginPath,
+            pluginDir: pluginDir,
             isLoading: true
         };
     }
@@ -269,15 +271,29 @@ export default class Login extends Component {
         // }
 
         const ipcRestricted = {
-            send: (channel, ...args) => { ipcSend(`${plugin.name}.${channel}`, ...args) },
-            on: (channel, listener) => { ipcOn(`${plugin.name}.${channel}`, listener) },
-	        invoke: (channel, ...args) => { ipcInvoke(`${plugin.name}.${channel}`, ...args) },
-	        handle: (channel, handler) => { ipcHandle(`${plugin.name}.${channel}`, handler) }
+            send: (channel, ...args) => { this.ipcSend(`${plugin.name}.${channel}`, ...args) },
+            on: (channel, listener) => { this.ipcOn(`${plugin.name}.${channel}`, listener) },
+	        invoke: async (channel, ...args) => { return await this.ipcInvoke(`${plugin.name}.${channel}`, ...args) },
+	        handle: (channel, handler) => { this.ipcHandle(`${plugin.name}.${channel}`, handler) }
         };
 
         const pluginName = this.props.plugin.name;
         const onUpdateConfiguration = this.props.onUpdateConfiguration;
+        const currentConfig = this.props.data || {};
         const configurationUpdate = function(newConfiguration) {
+            // Calculate delta of changed fields
+            const changedFields = {};
+            Object.keys(newConfiguration).forEach(key => {
+                if (JSON.stringify(currentConfig[key]) !== JSON.stringify(newConfiguration[key])) {
+                    changedFields[key] = newConfiguration[key];
+                }
+            });
+
+            // Track configuration changes with delta
+            if (Object.keys(changedFields).length > 0) {
+                Analytics.trackConfigurationChange(pluginName, changedFields);
+            }
+
             onUpdateConfiguration(pluginName, newConfiguration);
         };
 
@@ -306,9 +322,9 @@ export default class Login extends Component {
                 data={this.props.data}
                 children={this.props.children}
                 user={this.props.user}
-                pluginPath={this.state.pluginPath}
-                // remote={remote}
+                pluginDir={this.state.pluginDir}
                 ipcRenderer={ipcRestricted}
+                ipc={ipcRestricted}
                 configurationUpdate={configurationUpdate}
                 statusUpdate={statusUpdate}
                 persist={persist}

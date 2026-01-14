@@ -294,6 +294,112 @@ class Analytics {
       load_time_ms: loadTimeMs
     });
   }
+
+  // === Agent Events ===
+
+  trackAgentDeployed(agentId, agentVersion, platform, hostname) {
+    this.trackEvent('agent_deployed', {
+      agent_id: agentId,
+      agent_version: agentVersion,
+      platform: platform,
+      hostname: hostname
+    });
+  }
+
+  trackAgentRemoved(agentId, agentVersion, platform) {
+    this.trackEvent('agent_removed', {
+      agent_id: agentId,
+      agent_version: agentVersion,
+      platform: platform
+    });
+  }
+
+  trackAgentStateChange(agentId, agentVersion, fromState, toState) {
+    this.trackEvent('agent_state_change', {
+      agent_id: agentId,
+      agent_version: agentVersion,
+      from_state: fromState,
+      to_state: toState
+    });
+  }
+
+  trackAgentInteraction(agentId, agentVersion, interactionType, details) {
+    this.trackEvent('agent_interaction', {
+      agent_id: agentId,
+      agent_version: agentVersion,
+      interaction_type: interactionType,
+      details: details
+    });
+  }
+
+  trackAgentCount(totalAgents, byPlatform = {}) {
+    this.trackEvent('agent_count_snapshot', {
+      total_agents: totalAgents,
+      ...byPlatform
+    });
+  }
+
+  // === Plugin API Call Events ===
+
+  trackPluginApiCall(pluginName, apiMethod, success = true, errorMessage = null) {
+    const eventData = {
+      plugin_name: pluginName,
+      api_method: apiMethod,
+      success: success
+    };
+
+    if (errorMessage) {
+      eventData.error_message = errorMessage;
+    }
+
+    this.trackEvent('plugin_api_call', eventData);
+  }
+
+  // === Navigation & Tab Events ===
+
+  trackPluginTabView(pluginName) {
+    this.trackEvent('plugin_tab_view', {
+      plugin_name: pluginName
+    });
+  }
+
+  trackSettingsTabView(tabName) {
+    this.trackEvent('settings_tab_view', {
+      tab_name: tabName
+    });
+  }
+
+  // === Configuration Change Events ===
+
+  trackConfigurationChange(pluginName, changedFields = {}) {
+    // Convert changed fields to flat key-value pairs for analytics
+    const eventData = {
+      plugin_name: pluginName,
+      field_count: Object.keys(changedFields).length
+    };
+
+    // Add each changed field as a parameter (limited to avoid param explosion)
+    const fieldEntries = Object.entries(changedFields).slice(0, 10);
+    fieldEntries.forEach(([key, value], index) => {
+      eventData[`field_${index}_name`] = key;
+      eventData[`field_${index}_value`] = String(value).substring(0, 100); // Limit value length
+    });
+
+    this.trackEvent('configuration_change', eventData);
+  }
+
+  // === App Lifecycle Events ===
+
+  trackAppShutdown() {
+    this.trackEvent('app_shutdown');
+  }
+
+  trackMarketplacePluginInfo(pluginName, pluginVersion) {
+    this.trackEvent('marketplace_plugin_info', {
+      plugin_name: pluginName,
+      plugin_version: pluginVersion
+    });
+  }
 }
 
 // Export singleton instance

@@ -21,7 +21,11 @@ const pluginSelector = createSelector(
                 // Include latest published version from library
                 latestVersion: available && available.releases && available.releases.latest,
                 // Include installation data from plugin or library
-                installation: plugin.installation || (available && available.installation)
+                installation: plugin.installation || (available && available.installation),
+                // Include icon and fullPath for icon resolution
+                icon: plugin.icon || null,
+                iconType: plugin.iconType || 'file',
+                fullPath: plugin.fullPath || null
             };
 
             memo[key] = newPlugin;

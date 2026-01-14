@@ -1,5 +1,5 @@
 import React, { Component } from 'react';
-import { Avatar, TextField, IconButton, Button, Box, Typography, Divider, Chip } from '@material-ui/core';
+import { Avatar, TextField, IconButton, Button, Box, Typography, Divider, Chip, Tabs, Tab } from '@material-ui/core';
 import {
     sortedPluginSelector,
     activePluginSelector,
@@ -25,7 +25,6 @@ import {
 import { Delete, CloudDownload, AddCircle, Code } from '@material-ui/icons';
 import MarketplacePage from '../containers/MarketplacePage';
 import Analytics from '../analytics';
-//import {Tabs, Tab} from '@material-ui/core';
 const epm = require('electron-plugin-manager');
 const fs = require('fs');
 
@@ -52,7 +51,8 @@ export default class PlugIns extends Component {
             pairing: false,
             pluginName: '',
 	        dir: path.join(appPath, 'allow2automate'),
-            isMarketplaceOpen: false
+            isMarketplaceOpen: false,
+            currentTab: 0 // 0 = Device Monitoring, 1 = Plugins
         };
     }
 
@@ -242,114 +242,144 @@ export default class PlugIns extends Component {
         this.props.onSetPluginEnabled( plugin.name, isChecked );
     };
 
+    handleTabChange = (event, newValue) => {
+        this.setState({ currentTab: newValue });
+
+        // Track settings tab switches
+        const tabNames = ['device_monitoring', 'plugins'];
+        Analytics.trackSettingsTabView(tabNames[newValue] || 'unknown');
+    };
+
     render() {
         let plugins = sortedPluginSelector(this.props);
         let customStyle = {width: 80, textAlign: 'center'};
-        const { isMarketplaceOpen } = this.state;
+        const { isMarketplaceOpen, currentTab } = this.state;
         const installedPluginsCount = this.getInstalledPluginsCount();
 
         return (
             <div>
-                {/* Agent Management Section - Top Priority */}
-                <Box mb={4}>
-                    <AgentManagement ipcRenderer={ipcRenderer} />
-                </Box>
+                {/* Tabs for Settings sections */}
+                <Tabs
+                    value={currentTab}
+                    onChange={this.handleTabChange}
+                    indicatorColor="primary"
+                    textColor="primary"
+                    style={{ borderBottom: '1px solid #e0e0e0' }}
+                >
+                    <Tab label="Device Monitoring" />
+                    <Tab label="Plugins" />
+                </Tabs>
 
-                <Divider style={{ margin: '32px 0' }} />
+                {/* Device Monitoring Tab */}
+                {currentTab === 0 && (
+                    <Box p={3}>
+                        <Typography variant="body2" color="textSecondary" paragraph>
+                            Some plugins use Network Device Monitoring to discover and interact with devices on your local network.
+                            This is optional and only required if you want to use plugins with this capability.
+                        </Typography>
+                        <AgentManagement ipcRenderer={ipcRenderer} />
+                    </Box>
+                )}
 
-                {/* Header with Add Plugin button */}
-                <Box display="flex" justifyContent="space-between" alignItems="center" mb={2} p={2}>
-                    <Typography variant="h5">Plugin Settings</Typography>
-                    <Button
-                        variant="contained"
-                        color="primary"
-                        startIcon={<AddCircle />}
-                        onClick={this.handleOpenMarketplace}
-                    >
-                        Add Plugin
-                    </Button>
-                </Box>
+                {/* Plugins Tab */}
+                {currentTab === 1 && (
+                    <Box p={3}>
+                        {/* Header with Add Plugin button */}
+                        <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+                            <Typography variant="h5">Plugins</Typography>
+                            <Button
+                                variant="contained"
+                                color="primary"
+                                startIcon={<AddCircle />}
+                                onClick={this.handleOpenMarketplace}
+                            >
+                                Add Plugin
+                            </Button>
+                        </Box>
 
-                {/* Manual plugin entry - Hidden for now, may need later */}
-                <div style={{ textAlign: "center", display: "none" }}>
-                    allow2automate-
-                    <TextField id="pluginName" label="Plugin" value={this.state.pluginName} onChange={this.handleChange.bind(this)} />
-                    <IconButton color="primary" aria-label="install plugin" component="span" onClick={this.addPlugin.bind(this)} >
-                        <CloudDownload />
-                    </IconButton>
-                </div>
-                { plugins.length > 0 &&
-                <TableContainer component={Paper}>
-                    <Table>
-                        <TableHead>
-                            <TableRow key="HeaderRow">
-                                <TableCell> <span>Plugin</span> </TableCell>
-                                <TableCell style={customStyle}> <span>Installed Version</span> </TableCell>
-                                <TableCell style={customStyle}> <span>Enabled</span> </TableCell>
-                                <TableCell style={customStyle}> <span>Delete</span> </TableCell>
-                            </TableRow>
-                        </TableHead>
-                        <TableBody>
-                            { plugins.map(function (plugin) {
-                                    //console.log(plugin);
-                                    let version = (plugin.version) || "";
-                                    const isDevPlugin = plugin.dev_plugin || false;
-                                    const latestVersion = plugin.latestVersion;
-                                    const showLatestVersion = isDevPlugin && latestVersion && latestVersion !== version;
+                        {/* Manual plugin entry - Hidden for now, may need later */}
+                        <div style={{ textAlign: "center", display: "none" }}>
+                            allow2automate-
+                            <TextField id="pluginName" label="Plugin" value={this.state.pluginName} onChange={this.handleChange.bind(this)} />
+                            <IconButton color="primary" aria-label="install plugin" component="span" onClick={this.addPlugin.bind(this)} >
+                                <CloudDownload />
+                            </IconButton>
+                        </div>
 
-                                    return (
-                                        <TableRow key={plugin.name}>
-                                            <TableCell>
-                                                <Box display="flex" alignItems="center" gap={1}>
-                                                    <span>{plugin.name}</span>
-                                                    {isDevPlugin && (
-                                                        <Chip
-                                                            label="DEV"
-                                                            size="small"
-                                                            color="secondary"
-                                                            icon={<Code />}
-                                                            style={{ marginLeft: 8 }}
+                        { plugins.length > 0 &&
+                        <TableContainer component={Paper}>
+                            <Table>
+                                <TableHead>
+                                    <TableRow key="HeaderRow">
+                                        <TableCell> <span>Plugin</span> </TableCell>
+                                        <TableCell style={customStyle}> <span>Installed Version</span> </TableCell>
+                                        <TableCell style={customStyle}> <span>Enabled</span> </TableCell>
+                                        <TableCell style={customStyle}> <span>Delete</span> </TableCell>
+                                    </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                    { plugins.map(function (plugin) {
+                                            //console.log(plugin);
+                                            let version = (plugin.version) || "";
+                                            const isDevPlugin = plugin.dev_plugin || false;
+                                            const latestVersion = plugin.latestVersion;
+                                            const showLatestVersion = isDevPlugin && latestVersion && latestVersion !== version;
+
+                                            return (
+                                                <TableRow key={plugin.name}>
+                                                    <TableCell>
+                                                        <Box display="flex" alignItems="center" gap={1}>
+                                                            <span>{plugin.name}</span>
+                                                            {isDevPlugin && (
+                                                                <Chip
+                                                                    label="DEV"
+                                                                    size="small"
+                                                                    color="secondary"
+                                                                    icon={<Code />}
+                                                                    style={{ marginLeft: 8 }}
+                                                                />
+                                                            )}
+                                                        </Box>
+                                                    </TableCell>
+                                                    <TableCell style={customStyle}>
+                                                        {!plugin.missing &&
+                                                        <Box>
+                                                            <span>{version}</span>
+                                                            {showLatestVersion && (
+                                                                <Typography variant="caption" display="block" color="textSecondary">
+                                                                    Latest: {latestVersion}
+                                                                </Typography>
+                                                            )}
+                                                        </Box>
+                                                        }
+                                                        { plugin.missing &&
+                                                        <Button label="Reinstall" onClick={this.reinstallPlugin.bind(this, plugin)}/>
+                                                        }
+                                                    </TableCell>
+                                                    <TableCell style={customStyle}>
+                                                        { !plugin.missing &&
+                                                        <Checkbox
+                                                            label=''
+                                                            isChecked={!plugin.disabled}
+                                                            handleCheckboxChange={this.toggleCheckbox.bind(this, plugin)}
                                                         />
-                                                    )}
-                                                </Box>
-                                            </TableCell>
-                                            <TableCell style={customStyle}>
-                                                {!plugin.missing &&
-                                                <Box>
-                                                    <span>{version}</span>
-                                                    {showLatestVersion && (
-                                                        <Typography variant="caption" display="block" color="textSecondary">
-                                                            Latest: {latestVersion}
-                                                        </Typography>
-                                                    )}
-                                                </Box>
-                                                }
-                                                { plugin.missing &&
-                                                <Button label="Reinstall" onClick={this.reinstallPlugin.bind(this, plugin)}/>
-                                                }
-                                            </TableCell>
-                                            <TableCell style={customStyle}>
-                                                { !plugin.missing &&
-                                                <Checkbox
-                                                    label=''
-                                                    isChecked={!plugin.disabled}
-                                                    handleCheckboxChange={this.toggleCheckbox.bind(this, plugin)}
-                                                />
-                                                }
-                                            </TableCell>
-                                            <TableCell style={customStyle}>
-                                                <IconButton color="primary" aria-label="delete plugin" component="span" onClick={this.deletePlugin.bind(this, plugin)}>
-                                                    <Delete />
-                                                </IconButton>
-                                            </TableCell>
-                                        </TableRow>
-                                    );
-                                }.bind(this)
-                            )}
-                        </TableBody>
-                    </Table>
-                </TableContainer>
-                }
+                                                        }
+                                                    </TableCell>
+                                                    <TableCell style={customStyle}>
+                                                        <IconButton color="primary" aria-label="delete plugin" component="span" onClick={this.deletePlugin.bind(this, plugin)}>
+                                                            <Delete />
+                                                        </IconButton>
+                                                    </TableCell>
+                                                </TableRow>
+                                            );
+                                        }.bind(this)
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </TableContainer>
+                        }
+                    </Box>
+                )}
 
                 {/* Marketplace Modal Overlay */}
                 {isMarketplaceOpen && (
