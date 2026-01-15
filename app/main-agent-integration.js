@@ -7,6 +7,7 @@
 
 import AgentService from './services/AgentService.js';
 import AgentUpdateService from './services/AgentUpdateService.js';
+import PluginExtensionCoordinator from './services/PluginExtensionCoordinator.js';
 import UUIDManager from './services/UUIDManager.js';
 import KeypairManager from './services/KeypairManager.js';
 import ParentAdvertiser from './services/ParentAdvertiser.js';
@@ -137,6 +138,11 @@ export async function initializeAgentServices(app, store, actions) {
     const agentUpdateService = new AgentUpdateService(agentService, electronApp);
     await agentUpdateService.start();
 
+    // Initialize plugin extension coordinator
+    // Note: pluginManager will be set later when plugins are loaded
+    const pluginExtensionCoordinator = new PluginExtensionCoordinator(database, agentService, null);
+    await pluginExtensionCoordinator.initialize();
+
     // Setup Express server for agent API
     const expressApp = express();
     expressApp.use(express.json());
@@ -171,6 +177,7 @@ export async function initializeAgentServices(app, store, actions) {
       ...global.services,
       agent: agentService,
       agentUpdate: agentUpdateService,
+      pluginExtension: pluginExtensionCoordinator,
       uuid: uuidManager,
       keypair: keypairManager,
       parentAdvertiser: parentAdvertiser,
@@ -191,6 +198,7 @@ export async function initializeAgentServices(app, store, actions) {
     electronApp.on('will-quit', async () => {
       console.log('[AgentIntegration] Shutting down agent services...');
       await parentAdvertiser.stop();
+      await pluginExtensionCoordinator.shutdown();
       await agentService.shutdown();
       agentUpdateService.stop();
       server.close();
@@ -199,6 +207,7 @@ export async function initializeAgentServices(app, store, actions) {
     return {
       agentService,
       agentUpdateService,
+      pluginExtensionCoordinator,
       uuidManager,
       keypairManager,
       parentAdvertiser,

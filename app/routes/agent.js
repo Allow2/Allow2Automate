@@ -226,6 +226,8 @@ router.post('/api/agent/violations', authenticateAgent, async (req, res) => {
  * Agent heartbeat
  * POST /api/agent/heartbeat
  * Body: { metadata, userContext (optional) }
+ *
+ * Returns pending actions for the agent to execute
  */
 router.post('/api/agent/heartbeat', authenticateAgent, async (req, res) => {
   try {
@@ -251,13 +253,241 @@ router.post('/api/agent/heartbeat', authenticateAgent, async (req, res) => {
       name: agent.child_name || null
     } : null;
 
+    // Get pending actions from plugin extension coordinator
+    let pendingActions = [];
+    const pluginCoordinator = global.services && global.services.pluginExtension;
+    if (pluginCoordinator) {
+      pendingActions = await pluginCoordinator.getPendingActions(req.agentId);
+
+      // Mark actions as delivered if any
+      if (pendingActions.length > 0) {
+        const triggerIds = pendingActions.map(a => a.triggerId);
+        await pluginCoordinator.markActionsDelivered(req.agentId, triggerIds);
+      }
+    }
+
     res.json({
       success: true,
-      defaultChild
+      defaultChild,
+      pendingActions
     });
 
   } catch (error) {
     console.error('[AgentRoutes] Error updating heartbeat:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Receive plugin data from agent
+ * POST /api/agent/plugin-data
+ * Body: { pluginData: { pluginId: { monitorId: [data, ...] } } }
+ *
+ * Agents send collected monitor data to be processed by parent-side plugins
+ */
+router.post('/api/agent/plugin-data', authenticateAgent, async (req, res) => {
+  try {
+    const { pluginData } = req.body;
+
+    if (!pluginData || typeof pluginData !== 'object') {
+      return res.status(400).json({ error: 'Missing or invalid pluginData' });
+    }
+
+    const pluginCoordinator = global.services && global.services.pluginExtension;
+    if (!pluginCoordinator) {
+      return res.status(503).json({ error: 'Plugin extension coordinator not available' });
+    }
+
+    const result = await pluginCoordinator.processPluginData(req.agentId, pluginData);
+
+    res.json({
+      success: true,
+      processed: result.processed,
+      errors: result.errors.length > 0 ? result.errors : undefined
+    });
+
+  } catch (error) {
+    console.error('[AgentRoutes] Error processing plugin data:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Receive action responses from agent
+ * POST /api/agent/plugin-action-responses
+ * Body: { responses: [{ triggerId, status, returnCode, output, error, executedAt }, ...] }
+ *
+ * Agents send results of action executions back to parent
+ */
+router.post('/api/agent/plugin-action-responses', authenticateAgent, async (req, res) => {
+  try {
+    const { responses } = req.body;
+
+    if (!responses || !Array.isArray(responses)) {
+      return res.status(400).json({ error: 'Missing or invalid responses array' });
+    }
+
+    const pluginCoordinator = global.services && global.services.pluginExtension;
+    if (!pluginCoordinator) {
+      return res.status(503).json({ error: 'Plugin extension coordinator not available' });
+    }
+
+    const result = await pluginCoordinator.processActionResponses(req.agentId, responses);
+
+    res.json({
+      success: true,
+      processed: result.processed,
+      errors: result.errors.length > 0 ? result.errors : undefined
+    });
+
+  } catch (error) {
+    console.error('[AgentRoutes] Error processing action responses:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Deploy monitor to agent (internal API for plugins)
+ * POST /api/agent/:agentId/deploy-monitor
+ * Body: { pluginId, monitorId, script, interval, platforms, metadata }
+ */
+router.post('/api/agent/:agentId/deploy-monitor', async (req, res) => {
+  try {
+    const { agentId } = req.params;
+    const monitorConfig = req.body;
+
+    const pluginCoordinator = global.services && global.services.pluginExtension;
+    if (!pluginCoordinator) {
+      return res.status(503).json({ error: 'Plugin extension coordinator not available' });
+    }
+
+    const result = await pluginCoordinator.deployMonitor(agentId, monitorConfig);
+
+    res.json({
+      success: true,
+      ...result
+    });
+
+  } catch (error) {
+    console.error('[AgentRoutes] Error deploying monitor:', error);
+    res.status(400).json({ error: error.message });
+  }
+});
+
+/**
+ * Deploy action to agent (internal API for plugins)
+ * POST /api/agent/:agentId/deploy-action
+ * Body: { pluginId, actionId, script, platforms, metadata }
+ */
+router.post('/api/agent/:agentId/deploy-action', async (req, res) => {
+  try {
+    const { agentId } = req.params;
+    const actionConfig = req.body;
+
+    const pluginCoordinator = global.services && global.services.pluginExtension;
+    if (!pluginCoordinator) {
+      return res.status(503).json({ error: 'Plugin extension coordinator not available' });
+    }
+
+    const result = await pluginCoordinator.deployAction(agentId, actionConfig);
+
+    res.json({
+      success: true,
+      ...result
+    });
+
+  } catch (error) {
+    console.error('[AgentRoutes] Error deploying action:', error);
+    res.status(400).json({ error: error.message });
+  }
+});
+
+/**
+ * Trigger action on agent (internal API for plugins)
+ * POST /api/agent/:agentId/trigger-action
+ * Body: { pluginId, actionId, arguments }
+ */
+router.post('/api/agent/:agentId/trigger-action', async (req, res) => {
+  try {
+    const { agentId } = req.params;
+    const { pluginId, actionId, arguments: args } = req.body;
+
+    if (!pluginId || !actionId) {
+      return res.status(400).json({ error: 'Missing pluginId or actionId' });
+    }
+
+    const pluginCoordinator = global.services && global.services.pluginExtension;
+    if (!pluginCoordinator) {
+      return res.status(503).json({ error: 'Plugin extension coordinator not available' });
+    }
+
+    const triggerId = await pluginCoordinator.triggerAction(agentId, pluginId, actionId, args || {});
+
+    res.json({
+      success: true,
+      triggerId
+    });
+
+  } catch (error) {
+    console.error('[AgentRoutes] Error triggering action:', error);
+    res.status(400).json({ error: error.message });
+  }
+});
+
+/**
+ * Get deployment status for an agent (internal API)
+ * GET /api/agent/:agentId/deployments
+ */
+router.get('/api/agent/:agentId/deployments', async (req, res) => {
+  try {
+    const { agentId } = req.params;
+
+    const pluginCoordinator = global.services && global.services.pluginExtension;
+    if (!pluginCoordinator) {
+      return res.status(503).json({ error: 'Plugin extension coordinator not available' });
+    }
+
+    const status = await pluginCoordinator.getDeploymentStatus(agentId);
+
+    res.json({
+      success: true,
+      ...status
+    });
+
+  } catch (error) {
+    console.error('[AgentRoutes] Error getting deployments:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Get recent plugin data for an agent (internal API)
+ * GET /api/agent/:agentId/plugin-data
+ * Query: pluginId (optional), limit (optional)
+ */
+router.get('/api/agent/:agentId/plugin-data', async (req, res) => {
+  try {
+    const { agentId } = req.params;
+    const { pluginId, limit } = req.query;
+
+    const pluginCoordinator = global.services && global.services.pluginExtension;
+    if (!pluginCoordinator) {
+      return res.status(503).json({ error: 'Plugin extension coordinator not available' });
+    }
+
+    const data = await pluginCoordinator.getRecentPluginData(
+      agentId,
+      pluginId || null,
+      parseInt(limit) || 100
+    );
+
+    res.json({
+      success: true,
+      data
+    });
+
+  } catch (error) {
+    console.error('[AgentRoutes] Error getting plugin data:', error);
     res.status(500).json({ error: error.message });
   }
 });
