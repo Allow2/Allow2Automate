@@ -554,8 +554,22 @@ jobs:
           Write-Host "=== Downloaded artifacts ==="
           Get-ChildItem -Path "artifacts" -Recurse
 
+      - name: Check Windows Store credentials
+        id: check-creds
+        shell: pwsh
+        env:
+          STORE_CLIENT_ID: ${{ secrets.WINDOWS_STORE_CLIENT_ID }}
+        run: |
+          if (-not [string]::IsNullOrEmpty($env:STORE_CLIENT_ID)) {
+            echo "HAS_CREDS=true" >> $env:GITHUB_OUTPUT
+            Write-Host "Windows Store credentials found"
+          } else {
+            echo "HAS_CREDS=false" >> $env:GITHUB_OUTPUT
+            Write-Host "Windows Store credentials not configured"
+          }
+
       - name: Submit to Microsoft Store
-        if: ${{ secrets.WINDOWS_STORE_CLIENT_ID != '' }}
+        if: steps.check-creds.outputs.HAS_CREDS == 'true'
         uses: microsoft/store-submission@v1
         with:
           command: publish
@@ -566,22 +580,19 @@ jobs:
           tenantId: ${{ secrets.WINDOWS_STORE_TENANT_ID }}
 
       - name: Store submission status
+        if: steps.check-creds.outputs.HAS_CREDS != 'true'
         shell: pwsh
         run: |
-          if ([string]::IsNullOrEmpty("${{ secrets.WINDOWS_STORE_CLIENT_ID }}")) {
-            Write-Host "=== Windows Store Submission ==="
-            Write-Host "Automatic submission not configured."
-            Write-Host ""
-            Write-Host "To enable, add these secrets:"
-            Write-Host "  - WINDOWS_STORE_PRODUCT_ID"
-            Write-Host "  - WINDOWS_STORE_CLIENT_ID"
-            Write-Host "  - WINDOWS_STORE_CLIENT_SECRET"
-            Write-Host "  - WINDOWS_STORE_TENANT_ID"
-            Write-Host ""
-            Write-Host "Manual submission: https://partner.microsoft.com/dashboard"
-          } else {
-            Write-Host "✅ Submitted to Windows Store"
-          }
+          Write-Host "=== Windows Store Submission ==="
+          Write-Host "Automatic submission not configured."
+          Write-Host ""
+          Write-Host "To enable, add these secrets:"
+          Write-Host "  - WINDOWS_STORE_PRODUCT_ID"
+          Write-Host "  - WINDOWS_STORE_CLIENT_ID"
+          Write-Host "  - WINDOWS_STORE_CLIENT_SECRET"
+          Write-Host "  - WINDOWS_STORE_TENANT_ID"
+          Write-Host ""
+          Write-Host "Manual submission: https://partner.microsoft.com/dashboard"
 
   submit-mac-app-store:
     name: Submit to Mac App Store
