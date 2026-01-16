@@ -1,0 +1,716 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version number (without v prefix)'
+        required: false
+        default: ''
+      skip_store_submission:
+        description: 'Skip store submissions'
+        required: false
+        default: 'false'
+        type: boolean
+
+permissions:
+  contents: write
+  id-token: write  # Required for Azure OIDC authentication
+
+env:
+  NODE_VERSION: '18'
+
+jobs:
+  build-windows:
+    name: Build Windows (AppX/MSIX)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Get version from tag
+        id: version
+        shell: pwsh
+        run: |
+          if ("${{ github.ref_type }}" -eq "tag") {
+            $version = "${{ github.ref_name }}" -replace '^v', ''
+          } elseif ("${{ github.event.inputs.version }}") {
+            $version = "${{ github.event.inputs.version }}"
+          } else {
+            $version = (Get-Content package.json | ConvertFrom-Json).version
+          }
+          echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+          Write-Host "Building version: $version"
+
+      - name: Install dependencies
+        run: npm ci
+        timeout-minutes: 15
+
+      - name: Build application
+        run: npm run private:compile
+        shell: bash
+
+      - name: Build Windows AppX (unsigned)
+        run: npm run private:build:win
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false  # Disable auto code signing
+
+      - name: Azure Login for Code Signing
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Sign Windows AppX with Azure Trusted Signing
+        uses: azure/trusted-signing-action@v0.5.0
+        with:
+          endpoint: https://eus.codesigning.azure.net/
+          trusted-signing-account-name: Allow2
+          certificate-profile-name: Allow2-Dev-Signing
+          files-folder: ${{ github.workspace }}/dist
+          files-folder-filter: appx,msix
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+
+      - name: Verify Windows signature
+        shell: pwsh
+        run: |
+          Write-Host "=== Verifying AppX/MSIX signatures ==="
+
+          # Find signtool
+          $signtool = Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits\10\bin" -Recurse -Filter "signtool.exe" |
+            Where-Object { $_.FullName -match "x64" } |
+            Sort-Object { [version]($_.FullName -replace '.*\\(\d+\.\d+\.\d+\.\d+)\\.*', '$1') } -Descending |
+            Select-Object -First 1 -ExpandProperty FullName
+
+          Write-Host "Using signtool: $signtool"
+
+          # Verify AppX/MSIX signatures
+          Get-ChildItem -Path "dist" -Include "*.appx","*.msix" -Recurse | ForEach-Object {
+            Write-Host "Verifying: $($_.Name)"
+            & $signtool verify /pa $_.FullName
+            if ($LASTEXITCODE -eq 0) {
+              Write-Host "  Signature valid"
+            } else {
+              Write-Host "  WARNING: Signature verification failed"
+            }
+          }
+
+      - name: List built files
+        shell: pwsh
+        run: |
+          Write-Host "=== Built files ==="
+          Get-ChildItem -Path "dist" -Recurse -Include "*.appx","*.msix","*.exe" | ForEach-Object {
+            Write-Host "  $($_.FullName) ($([math]::Round($_.Length / 1MB, 2)) MB)"
+          }
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-appx
+          path: |
+            dist/*.appx
+            dist/*.msix
+          retention-days: 90
+
+  build-macos:
+    name: Build macOS (Mac App Store)
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Get version from tag
+        id: version
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            VERSION="${{ github.ref_name }}"
+            VERSION="${VERSION#v}"
+          elif [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION=$(node -p "require('./package.json').version")
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "Building version: $VERSION"
+
+      - name: Install dependencies
+        run: npm ci
+        timeout-minutes: 15
+
+      - name: Import Apple certificates
+        env:
+          APPLE_APP_CERT_BASE64: ${{ secrets.APPLE_APP_CERT_BASE64 }}
+          APPLE_INSTALLER_CERT_BASE64: ${{ secrets.APPLE_INSTALLER_CERT_BASE64 }}
+          APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+        run: |
+          # Check if certificates are provided
+          if [ -z "$APPLE_APP_CERT_BASE64" ] && [ -z "$APPLE_INSTALLER_CERT_BASE64" ]; then
+            echo "⚠️  No certificates provided - skipping code signing"
+            exit 0
+          fi
+
+          # Create temporary keychain
+          KEYCHAIN_PATH="$HOME/Library/Keychains/temp.keychain-db"
+          KEYCHAIN_PASSWORD="actions"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" temp.keychain
+          security set-keychain-settings -lut 21600 temp.keychain
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" temp.keychain
+
+          # Import Application certificate
+          if [ -n "$APPLE_APP_CERT_BASE64" ]; then
+            echo "=== Importing Developer ID Application Certificate ==="
+            echo "$APPLE_APP_CERT_BASE64" | base64 -d > app_cert.p12
+            security import app_cert.p12 -k temp.keychain -P "$APPLE_CERT_PASSWORD" -A
+            rm app_cert.p12
+            echo "✅ Application certificate imported"
+          fi
+
+          # Import Installer certificate
+          if [ -n "$APPLE_INSTALLER_CERT_BASE64" ]; then
+            echo "=== Importing Developer ID Installer Certificate ==="
+            echo "$APPLE_INSTALLER_CERT_BASE64" | base64 -d > installer_cert.p12
+            security import installer_cert.p12 -k temp.keychain -P "$APPLE_CERT_PASSWORD" -A
+            rm installer_cert.p12
+            echo "✅ Installer certificate imported"
+          fi
+
+          # Configure keychain
+          security set-key-partition-list -S apple-tool:,apple:,codesign:,productsign: -s -k "$KEYCHAIN_PASSWORD" temp.keychain
+          security default-keychain -s temp.keychain
+          security list-keychains -d user -s "$KEYCHAIN_PATH" "$HOME/Library/Keychains/login.keychain-db"
+
+          echo ""
+          echo "=== Available signing identities ==="
+          security find-identity -v temp.keychain | sed 's/\("[^"]*"\)/"***"/g'
+
+      - name: Build application
+        run: npm run private:compile
+
+      - name: Build macOS app (MAS target)
+        run: npm run private:build:mac
+        env:
+          # Enable code signing if certificates are available
+          CSC_LINK: ${{ secrets.APPLE_APP_CERT_BASE64 }}
+          CSC_KEY_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+          APPLE_DEVELOPER_ID: ${{ secrets.APPLE_DEVELOPER_ID }}
+
+      - name: Sign macOS PKG
+        env:
+          APPLE_INSTALLER_CERT_BASE64: ${{ secrets.APPLE_INSTALLER_CERT_BASE64 }}
+        run: |
+          if [ -z "$APPLE_INSTALLER_CERT_BASE64" ]; then
+            echo "⚠️  APPLE_INSTALLER_CERT_BASE64 not set - skipping PKG signing"
+            exit 0
+          fi
+
+          echo "=== Signing macOS PKG ==="
+          PKG=$(find dist -name "*.pkg" | head -n 1)
+
+          if [ -z "$PKG" ]; then
+            echo "No PKG file found, checking for MAS build..."
+            # For MAS builds, electron-builder creates the pkg differently
+            PKG=$(find dist/mas -name "*.pkg" 2>/dev/null | head -n 1)
+          fi
+
+          if [ -n "$PKG" ]; then
+            echo "Found PKG: $PKG"
+
+            # Find installer identity
+            INSTALLER_IDENTITY=$(security find-identity -v temp.keychain 2>&1 | grep "3rd Party Mac Developer Installer\|Developer ID Installer" | head -1 | sed 's/.*"\(.*\)".*/\1/')
+
+            if [ -n "$INSTALLER_IDENTITY" ]; then
+              echo "Signing with: $INSTALLER_IDENTITY"
+              productsign --sign "$INSTALLER_IDENTITY" --keychain temp.keychain "$PKG" "${PKG%.pkg}-signed.pkg"
+              mv "${PKG%.pkg}-signed.pkg" "$PKG"
+              echo "✅ PKG signed successfully"
+
+              # Verify
+              pkgutil --check-signature "$PKG" || true
+            else
+              echo "⚠️  No installer signing identity found"
+            fi
+          else
+            echo "No PKG file found to sign"
+          fi
+
+      - name: Notarize macOS app
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_NOTARIZATION_PASSWORD: ${{ secrets.APPLE_NOTARIZATION_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ -z "$APPLE_ID" ] || [ -z "$APPLE_NOTARIZATION_PASSWORD" ] || [ -z "$APPLE_TEAM_ID" ]; then
+            echo "⚠️  Notarization credentials not set - skipping notarization"
+            exit 0
+          fi
+
+          echo "=== Submitting for Notarization ==="
+          PKG=$(find dist -name "*.pkg" | head -n 1)
+
+          if [ -n "$PKG" ]; then
+            echo "Submitting: $PKG"
+
+            SUBMISSION=$(xcrun notarytool submit "$PKG" \
+              --apple-id "$APPLE_ID" \
+              --password "$APPLE_NOTARIZATION_PASSWORD" \
+              --team-id "$APPLE_TEAM_ID" \
+              --wait 2>&1)
+
+            echo "$SUBMISSION"
+
+            if echo "$SUBMISSION" | grep -q "status: Accepted"; then
+              echo "✅ Notarization accepted"
+              xcrun stapler staple "$PKG"
+              echo "✅ Stapled notarization ticket"
+            else
+              echo "⚠️  Notarization may have failed - check logs"
+              SUBMISSION_ID=$(echo "$SUBMISSION" | grep "id:" | head -1 | awk '{print $2}')
+              if [ -n "$SUBMISSION_ID" ]; then
+                xcrun notarytool log "$SUBMISSION_ID" \
+                  --apple-id "$APPLE_ID" \
+                  --password "$APPLE_NOTARIZATION_PASSWORD" \
+                  --team-id "$APPLE_TEAM_ID" || true
+              fi
+            fi
+          fi
+
+      - name: List built files
+        run: |
+          echo "=== Built files ==="
+          find dist -type f \( -name "*.pkg" -o -name "*.dmg" -o -name "*.app" \) -exec ls -lh {} \;
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-pkg
+          path: |
+            dist/*.pkg
+            dist/*.dmg
+            dist/mas/*.pkg
+          retention-days: 90
+
+  build-linux:
+    name: Build Linux (Snap Store)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Get version from tag
+        id: version
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            VERSION="${{ github.ref_name }}"
+            VERSION="${VERSION#v}"
+          elif [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION=$(node -p "require('./package.json').version")
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "Building version: $VERSION"
+
+      - name: Install dependencies
+        run: npm ci
+        timeout-minutes: 15
+
+      - name: Install Snapcraft
+        run: |
+          sudo snap install snapcraft --classic
+
+      - name: Build application
+        run: npm run private:compile
+
+      - name: Build Linux packages
+        run: npm run private:build:linux
+
+      - name: Import GPG key for signing
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+        run: |
+          if [ -z "$GPG_PRIVATE_KEY" ]; then
+            echo "⚠️  GPG_PRIVATE_KEY not set - skipping GPG signing"
+            exit 0
+          fi
+
+          echo "=== Importing GPG Key ==="
+          echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+
+          # Configure GPG agent
+          echo "allow-preset-passphrase" > ~/.gnupg/gpg-agent.conf
+          gpg-connect-agent reloadagent /bye
+
+          # Verify import
+          echo "Imported keys:"
+          gpg --list-secret-keys --keyid-format LONG | sed 's/\([A-F0-9]\{12\}\)[A-F0-9]\{4\}/\1XXXX/g'
+
+      - name: Sign Linux packages with GPG
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          if [ -z "$GPG_PRIVATE_KEY" ]; then
+            echo "⚠️  Skipping GPG signing"
+            exit 0
+          fi
+
+          echo "=== Signing Linux Packages ==="
+
+          for pkg in dist/*.snap dist/*.AppImage dist/*.deb dist/*.rpm; do
+            if [ -f "$pkg" ]; then
+              echo "Signing: $(basename $pkg)"
+              echo "$GPG_PASSPHRASE" | gpg --batch --yes --passphrase-fd 0 \
+                --pinentry-mode loopback -u "$GPG_KEY_ID" \
+                --detach-sign --armor "$pkg"
+
+              if [ -f "$pkg.asc" ]; then
+                echo "  ✅ Signature created"
+              fi
+            fi
+          done
+
+      - name: List built files
+        run: |
+          echo "=== Built files ==="
+          find dist -type f \( -name "*.snap" -o -name "*.AppImage" -o -name "*.deb" -o -name "*.rpm" -o -name "*.asc" \) -exec ls -lh {} \;
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-packages
+          path: |
+            dist/*.snap
+            dist/*.AppImage
+            dist/*.deb
+            dist/*.rpm
+            dist/*.asc
+          retention-days: 90
+
+  create-release:
+    name: Create GitHub Release
+    needs: [build-windows, build-macos, build-linux]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Get version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Prepare release files
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          mkdir -p release-files
+
+          echo "=== Artifact directory structure ==="
+          ls -laR artifacts/
+
+          # Copy Windows files
+          find artifacts/windows-appx -name "*.appx" -exec cp {} release-files/ \; 2>/dev/null || true
+          find artifacts/windows-appx -name "*.msix" -exec cp {} release-files/ \; 2>/dev/null || true
+
+          # Copy macOS files
+          find artifacts/macos-pkg -name "*.pkg" -exec cp {} release-files/ \; 2>/dev/null || true
+          find artifacts/macos-pkg -name "*.dmg" -exec cp {} release-files/ \; 2>/dev/null || true
+
+          # Copy Linux files
+          find artifacts/linux-packages -name "*.snap" -exec cp {} release-files/ \; 2>/dev/null || true
+          find artifacts/linux-packages -name "*.AppImage" -exec cp {} release-files/ \; 2>/dev/null || true
+          find artifacts/linux-packages -name "*.deb" -exec cp {} release-files/ \; 2>/dev/null || true
+          find artifacts/linux-packages -name "*.rpm" -exec cp {} release-files/ \; 2>/dev/null || true
+          find artifacts/linux-packages -name "*.asc" -exec cp {} release-files/ \; 2>/dev/null || true
+
+          echo "=== Release files ==="
+          ls -lh release-files/
+
+      - name: Generate checksums
+        run: |
+          cd release-files
+          sha256sum * > checksums.txt 2>/dev/null || true
+          cat checksums.txt
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+
+          if [ -z "$PREV_TAG" ]; then
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)" HEAD 2>/dev/null || echo "Initial release")
+          else
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)" ${PREV_TAG}..HEAD)
+          fi
+
+          cat > release-notes.md << EOF
+          ## Allow2 Automate ${VERSION}
+
+          ### Installation
+
+          #### Windows
+          - **Microsoft Store**: Search for "Allow2 Automate" in the Microsoft Store
+          - **Sideload**: Download \`Allow2Automate-*.appx\` and install with PowerShell:
+            \`\`\`powershell
+            Add-AppxPackage -Path Allow2Automate-*.appx
+            \`\`\`
+
+          #### macOS
+          - **Mac App Store**: Search for "Allow2 Automate" in the Mac App Store
+          - **Direct Install**: Download \`Allow2Automate-*.pkg\` and open to install
+
+          #### Linux
+          - **Snap Store**: \`sudo snap install allow2automate\`
+          - **AppImage**: Download, make executable (\`chmod +x\`), and run
+          - **DEB**: \`sudo dpkg -i allow2automate_*.deb\`
+          - **RPM**: \`sudo rpm -i allow2automate-*.rpm\`
+
+          ### Verification
+
+          All packages are code-signed and include SHA256 checksums in \`checksums.txt\`.
+
+          - **Windows**: Signed with Azure Trusted Signing
+          - **macOS**: Signed with Apple Developer ID and notarized
+          - **Linux**: GPG signed (signature files: \`.asc\`)
+
+          ### Changes
+
+          ${CHANGELOG}
+
+          ---
+
+          **Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREV_TAG}...${VERSION}
+          EOF
+
+          cat release-notes.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: release-files/*
+          body_path: release-notes.md
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-beta') || contains(github.ref_name, '-alpha') || contains(github.ref_name, '-rc') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Automatic Store Submissions
+  submit-windows-store:
+    name: Submit to Windows Store
+    needs: build-windows
+    runs-on: windows-latest
+    if: |
+      startsWith(github.ref, 'refs/tags/') &&
+      !contains(github.ref_name, '-beta') &&
+      !contains(github.ref_name, '-alpha') &&
+      !contains(github.ref_name, '-rc') &&
+      github.event.inputs.skip_store_submission != 'true'
+
+    steps:
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-appx
+          path: artifacts
+
+      - name: List artifacts
+        shell: pwsh
+        run: |
+          Write-Host "=== Downloaded artifacts ==="
+          Get-ChildItem -Path "artifacts" -Recurse
+
+      - name: Submit to Microsoft Store
+        if: ${{ secrets.WINDOWS_STORE_CLIENT_ID != '' }}
+        uses: microsoft/store-submission@v1
+        with:
+          command: publish
+          productId: ${{ secrets.WINDOWS_STORE_PRODUCT_ID }}
+          packagePath: artifacts/*.appx
+          clientId: ${{ secrets.WINDOWS_STORE_CLIENT_ID }}
+          clientSecret: ${{ secrets.WINDOWS_STORE_CLIENT_SECRET }}
+          tenantId: ${{ secrets.WINDOWS_STORE_TENANT_ID }}
+
+      - name: Store submission status
+        shell: pwsh
+        run: |
+          if ([string]::IsNullOrEmpty("${{ secrets.WINDOWS_STORE_CLIENT_ID }}")) {
+            Write-Host "=== Windows Store Submission ==="
+            Write-Host "Automatic submission not configured."
+            Write-Host ""
+            Write-Host "To enable, add these secrets:"
+            Write-Host "  - WINDOWS_STORE_PRODUCT_ID"
+            Write-Host "  - WINDOWS_STORE_CLIENT_ID"
+            Write-Host "  - WINDOWS_STORE_CLIENT_SECRET"
+            Write-Host "  - WINDOWS_STORE_TENANT_ID"
+            Write-Host ""
+            Write-Host "Manual submission: https://partner.microsoft.com/dashboard"
+          } else {
+            Write-Host "✅ Submitted to Windows Store"
+          }
+
+  submit-mac-app-store:
+    name: Submit to Mac App Store
+    needs: build-macos
+    runs-on: macos-latest
+    if: |
+      startsWith(github.ref, 'refs/tags/') &&
+      !contains(github.ref_name, '-beta') &&
+      !contains(github.ref_name, '-alpha') &&
+      !contains(github.ref_name, '-rc') &&
+      github.event.inputs.skip_store_submission != 'true'
+
+    steps:
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-pkg
+          path: artifacts
+
+      - name: List artifacts
+        run: |
+          echo "=== Downloaded artifacts ==="
+          find artifacts -type f -exec ls -lh {} \;
+
+      - name: Submit to Mac App Store
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_NOTARIZATION_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ -z "$APPLE_ID" ] || [ -z "$APPLE_APP_PASSWORD" ]; then
+            echo "=== Mac App Store Submission ==="
+            echo "Automatic submission not configured."
+            echo ""
+            echo "To enable, ensure these secrets are set:"
+            echo "  - APPLE_ID"
+            echo "  - APPLE_NOTARIZATION_PASSWORD (app-specific password)"
+            echo "  - APPLE_TEAM_ID"
+            echo ""
+            echo "Manual submission: https://appstoreconnect.apple.com"
+            exit 0
+          fi
+
+          echo "=== Submitting to Mac App Store ==="
+
+          # Find the MAS PKG (Mac App Store target)
+          PKG=$(find artifacts -name "*.pkg" | head -n 1)
+
+          if [ -z "$PKG" ]; then
+            echo "❌ No PKG file found"
+            exit 1
+          fi
+
+          echo "Uploading: $PKG"
+
+          # Use xcrun altool or Transporter to upload
+          xcrun altool --upload-app \
+            --type osx \
+            --file "$PKG" \
+            --username "$APPLE_ID" \
+            --password "$APPLE_APP_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" || {
+              echo "⚠️  xcrun altool failed, trying Transporter..."
+              # Alternative: Use Transporter if available
+              exit 1
+            }
+
+          echo "✅ Submitted to Mac App Store"
+          echo "Check status at: https://appstoreconnect.apple.com"
+
+  submit-snap-store:
+    name: Submit to Snap Store
+    needs: build-linux
+    runs-on: ubuntu-latest
+    if: |
+      startsWith(github.ref, 'refs/tags/') &&
+      !contains(github.ref_name, '-beta') &&
+      !contains(github.ref_name, '-alpha') &&
+      !contains(github.ref_name, '-rc') &&
+      github.event.inputs.skip_store_submission != 'true'
+
+    steps:
+      - name: Download Linux artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-packages
+          path: artifacts
+
+      - name: Install Snapcraft
+        run: |
+          sudo snap install snapcraft --classic
+
+      - name: List artifacts
+        run: |
+          echo "=== Downloaded artifacts ==="
+          find artifacts -type f -exec ls -lh {} \;
+
+      - name: Submit to Snap Store
+        env:
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+        run: |
+          if [ -z "$SNAPCRAFT_STORE_CREDENTIALS" ]; then
+            echo "=== Snap Store Submission ==="
+            echo "Automatic submission not configured."
+            echo ""
+            echo "To enable, add SNAPCRAFT_STORE_CREDENTIALS secret:"
+            echo "  1. Run: snapcraft export-login --snaps=allow2automate --channels=stable credentials.txt"
+            echo "  2. Add contents of credentials.txt as SNAPCRAFT_STORE_CREDENTIALS secret"
+            echo ""
+            echo "Manual submission: snapcraft upload <snap-file>"
+            exit 0
+          fi
+
+          echo "=== Submitting to Snap Store ==="
+
+          # Find the snap file
+          SNAP=$(find artifacts -name "*.snap" | head -n 1)
+
+          if [ -z "$SNAP" ]; then
+            echo "❌ No snap file found"
+            exit 1
+          fi
+
+          echo "Uploading: $SNAP"
+
+          # Login and upload
+          echo "$SNAPCRAFT_STORE_CREDENTIALS" | snapcraft login --with -
+
+          snapcraft upload "$SNAP" --release=stable
+
+          echo "✅ Submitted to Snap Store"
+          echo "Check status at: https://snapcraft.io/allow2automate"

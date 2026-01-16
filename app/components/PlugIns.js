@@ -22,11 +22,12 @@ import {
     TableRow,
     TableCell
     } from '@material-ui/core';
-import { Delete, CloudDownload, AddCircle, Code } from '@material-ui/icons';
+import { Delete, CloudDownload, AddCircle, Code, Info } from '@material-ui/icons';
 import MarketplacePage from '../containers/MarketplacePage';
 import Analytics from '../analytics';
 const epm = require('electron-plugin-manager');
 const fs = require('fs');
+const packageJson = require('../../package.json');
 
 // const apiUrl = 'https://api.allow2.com/';
 
@@ -246,7 +247,7 @@ export default class PlugIns extends Component {
         this.setState({ currentTab: newValue });
 
         // Track settings tab switches
-        const tabNames = ['device_monitoring', 'plugins'];
+        const tabNames = ['device_monitoring', 'plugins', 'about'];
         Analytics.trackSettingsTabView(tabNames[newValue] || 'unknown');
     };
 
@@ -268,6 +269,7 @@ export default class PlugIns extends Component {
                 >
                     <Tab label="Device Monitoring" />
                     <Tab label="Plugins" />
+                    <Tab label="About" />
                 </Tabs>
 
                 {/* Device Monitoring Tab */}
@@ -278,6 +280,34 @@ export default class PlugIns extends Component {
                             This is optional and only required if you want to use plugins with this capability.
                         </Typography>
                         <AgentManagement ipcRenderer={ipcRenderer} />
+                    </Box>
+                )}
+
+                {/* About Tab */}
+                {currentTab === 2 && (
+                    <Box p={3}>
+                        <Typography variant="h5" gutterBottom>About Allow2Automate</Typography>
+                        <Divider style={{ marginBottom: 16 }} />
+
+                        <Box mb={3}>
+                            <Typography variant="subtitle1" color="textSecondary">Version</Typography>
+                            <Typography variant="h6">{packageJson.version}</Typography>
+                        </Box>
+
+                        <Box mb={3}>
+                            <Typography variant="subtitle1" color="textSecondary">Platform</Typography>
+                            <Typography variant="body1">{process.platform === 'darwin' ? 'macOS' : process.platform === 'win32' ? 'Windows' : 'Linux'} ({process.arch})</Typography>
+                        </Box>
+
+                        <Box mb={3}>
+                            <Typography variant="subtitle1" color="textSecondary">Electron Version</Typography>
+                            <Typography variant="body1">{process.versions.electron}</Typography>
+                        </Box>
+
+                        <Divider style={{ marginTop: 24, marginBottom: 16 }} />
+                        <Typography variant="body2" color="textSecondary">
+                            Allow2Automate is a parental control system that helps families manage device usage and screen time across multiple platforms.
+                        </Typography>
                     </Box>
                 )}
 

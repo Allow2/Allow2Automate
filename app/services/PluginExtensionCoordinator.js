@@ -170,7 +170,7 @@ export default class PluginExtensionCoordinator extends EventEmitter {
     // Check if already deployed with same checksum
     const existingKey = `${pluginId}:${monitorId}`;
     const agentExtensions = this.deployedExtensions.get(agentId);
-    const existing = agentExtensions?.monitors.get(existingKey);
+    const existing = agentExtensions && agentExtensions.monitors ? agentExtensions.monitors.get(existingKey) : null;
 
     if (existing && existing.script_checksum === checksum) {
       console.log(`[PluginExtensionCoordinator] Monitor ${monitorId} already deployed to agent ${agentId}`);
@@ -202,7 +202,7 @@ export default class PluginExtensionCoordinator extends EventEmitter {
       this.deployedExtensions.set(agentId, { monitors: new Map(), actions: new Map() });
     }
     this.deployedExtensions.get(agentId).monitors.set(existingKey, {
-      id: existing?.id || deploymentId,
+      id: (existing && existing.id) || deploymentId,
       agent_id: agentId,
       plugin_id: pluginId,
       extension_id: monitorId,
@@ -222,11 +222,11 @@ export default class PluginExtensionCoordinator extends EventEmitter {
     };
 
     console.log(`[PluginExtensionCoordinator] Deployed monitor ${monitorId} to agent ${agentId}`);
-    this.emit('monitorDeployed', { agentId, pluginId, monitorId, deploymentId: existing?.id || deploymentId });
+    this.emit('monitorDeployed', { agentId, pluginId, monitorId, deploymentId: (existing && existing.id) || deploymentId });
 
     return {
       status: existing ? 'updated' : 'deployed',
-      deploymentId: existing?.id || deploymentId,
+      deploymentId: (existing && existing.id) || deploymentId,
       payload: deploymentPayload
     };
   }
@@ -258,7 +258,7 @@ export default class PluginExtensionCoordinator extends EventEmitter {
     // Check if already deployed with same checksum
     const existingKey = `${pluginId}:${actionId}`;
     const agentExtensions = this.deployedExtensions.get(agentId);
-    const existing = agentExtensions?.actions.get(existingKey);
+    const existing = agentExtensions && agentExtensions.actions ? agentExtensions.actions.get(existingKey) : null;
 
     if (existing && existing.script_checksum === checksum) {
       console.log(`[PluginExtensionCoordinator] Action ${actionId} already deployed to agent ${agentId}`);
@@ -288,7 +288,7 @@ export default class PluginExtensionCoordinator extends EventEmitter {
       this.deployedExtensions.set(agentId, { monitors: new Map(), actions: new Map() });
     }
     this.deployedExtensions.get(agentId).actions.set(existingKey, {
-      id: existing?.id || deploymentId,
+      id: (existing && existing.id) || deploymentId,
       agent_id: agentId,
       plugin_id: pluginId,
       extension_id: actionId,
@@ -307,11 +307,11 @@ export default class PluginExtensionCoordinator extends EventEmitter {
     };
 
     console.log(`[PluginExtensionCoordinator] Deployed action ${actionId} to agent ${agentId}`);
-    this.emit('actionDeployed', { agentId, pluginId, actionId, deploymentId: existing?.id || deploymentId });
+    this.emit('actionDeployed', { agentId, pluginId, actionId, deploymentId: (existing && existing.id) || deploymentId });
 
     return {
       status: existing ? 'updated' : 'deployed',
-      deploymentId: existing?.id || deploymentId,
+      deploymentId: (existing && existing.id) || deploymentId,
       payload: deploymentPayload
     };
   }
@@ -331,7 +331,7 @@ export default class PluginExtensionCoordinator extends EventEmitter {
     const agentExtensions = this.deployedExtensions.get(agentId);
     const actionKey = `${pluginId}:${actionId}`;
 
-    if (!agentExtensions?.actions.has(actionKey)) {
+    if (!agentExtensions || !agentExtensions.actions || !agentExtensions.actions.has(actionKey)) {
       throw new Error(`Action ${actionId} not deployed to agent ${agentId}`);
     }
 
@@ -449,7 +449,9 @@ export default class PluginExtensionCoordinator extends EventEmitter {
    */
   async routeDataToPlugin(agentId, pluginId, monitorId, data) {
     // Get the plugin from plugin manager
-    const plugin = this.pluginManager?.getPlugin?.(pluginId);
+    const plugin = this.pluginManager && typeof this.pluginManager.getPlugin === 'function'
+      ? this.pluginManager.getPlugin(pluginId)
+      : null;
 
     if (!plugin) {
       console.warn(`[PluginExtensionCoordinator] Plugin not found: ${pluginId}`);
@@ -529,7 +531,9 @@ export default class PluginExtensionCoordinator extends EventEmitter {
    * @param {object} response - Action response
    */
   async routeActionResponseToPlugin(agentId, pluginId, actionId, response) {
-    const plugin = this.pluginManager?.getPlugin?.(pluginId);
+    const plugin = this.pluginManager && typeof this.pluginManager.getPlugin === 'function'
+      ? this.pluginManager.getPlugin(pluginId)
+      : null;
 
     if (!plugin) {
       console.warn(`[PluginExtensionCoordinator] Plugin not found for response routing: ${pluginId}`);

@@ -378,12 +378,6 @@ export default function AgentManagement({ ipcRenderer }) {
               </li>
             </ul>
 
-            {serverUrl && (
-              <Typography variant="caption" color="textSecondary" paragraph>
-                Server URL: {serverUrl}
-              </Typography>
-            )}
-
             <div style={{ display: 'flex', flexWrap: 'wrap', marginTop: 16, gap: '16px', justifyContent: 'center' }}>
               {/* Windows Platform */}
               <div className={classes.platformButton}>

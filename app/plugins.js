@@ -587,6 +587,170 @@ module.exports = function(app, store, actions) {
             }
             return memo;
         }, {});
+
+        // ==========================================
+        // DEV-PLUGINS MAIN PROCESS INITIALIZATION
+        // ==========================================
+        // Dev-plugins are loaded from <project-root>/dev-plugins in development mode
+        // They need the same main process initialization as installed plugins
+        if (process.env.NODE_ENV === 'development') {
+            const devPluginsDir = path.join(__dirname, '..', 'dev-plugins');
+            console.log('[Plugins] Checking for dev-plugins requiring main process at:', devPluginsDir);
+
+            if (fs.existsSync(devPluginsDir)) {
+                const devPluginDirs = fs.readdirSync(devPluginsDir, { withFileTypes: true })
+                    .filter(d => d.isDirectory() && d.name.startsWith('allow2automate-'));
+
+                console.log(`[Plugins] Found ${devPluginDirs.length} potential dev-plugins`);
+
+                for (const dir of devPluginDirs) {
+                    try {
+                        const pluginDir = path.join(devPluginsDir, dir.name);
+                        const pkgPath = path.join(pluginDir, 'package.json');
+
+                        if (!fs.existsSync(pkgPath)) continue;
+
+                        const pkgData = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+                        const pluginName = pkgData.name; // e.g., @allow2/allow2automate-operating-system
+                        const mainEntry = pkgData.main || 'dist/index.js';
+                        const fullPath = path.join(pluginDir, mainEntry);
+
+                        console.log(`[Plugins] Checking dev-plugin ${pluginName} at ${fullPath}`);
+
+                        // Check if plugin requires main process
+                        if (!fs.existsSync(fullPath)) {
+                            console.log(`[Plugins] Dev-plugin ${pluginName} main entry not found - skipping`);
+                            continue;
+                        }
+
+                        let loadedPlugin;
+                        try {
+                            loadedPlugin = require(fullPath);
+                        } catch (err) {
+                            console.error(`[Plugins] Failed to load dev-plugin ${pluginName}:`, err.message);
+                            continue;
+                        }
+
+                        if (loadedPlugin.requiresMainProcess !== true) {
+                            console.log(`[Plugins] Dev-plugin ${pluginName} does not require main process`);
+                            continue;
+                        }
+
+                        console.log(`[Plugins] ✅ Initializing dev-plugin ${pluginName} in main process...`);
+
+                        // Build restricted ipcMain for dev-plugin (same as installed plugins)
+                        const { ipcMain } = require('electron');
+                        const ipcMainRestricted = {
+                            handle: (channel, handler) => {
+                                const prefixedChannel = `${pluginName}.${channel}`;
+                                console.log(`[Plugin ${pluginName}] Registering IPC handler:`, prefixedChannel);
+                                ipcMain.handle(prefixedChannel, handler);
+                            },
+                            on: (channel, listener) => {
+                                const prefixedChannel = `${pluginName}.${channel}`;
+                                console.log(`[Plugin ${pluginName}] Registering IPC listener:`, prefixedChannel);
+                                ipcMain.on(prefixedChannel, listener);
+                            },
+                            removeHandler: (channel) => {
+                                const prefixedChannel = `${pluginName}.${channel}`;
+                                ipcMain.removeHandler(prefixedChannel);
+                            },
+                            removeListener: (channel, listener) => {
+                                const prefixedChannel = `${pluginName}.${channel}`;
+                                ipcMain.removeListener(prefixedChannel, listener);
+                            }
+                        };
+
+                        // Configuration and status update functions for dev-plugin
+                        const devConfigurationUpdate = function(newConfiguration) {
+                            console.log("[Dev-Plugin] updateConfiguration:", pluginName, "=", newConfiguration);
+                            actions.configurationUpdate({ [pluginName]: newConfiguration });
+                            store.save();
+                        };
+
+                        const devStatusUpdate = function(statusData) {
+                            console.log('[Dev-Plugin] Status update from', pluginName, ':', statusData.status);
+                            actions.pluginStatusUpdate(pluginName, {
+                                status: statusData.status,
+                                message: statusData.message || '',
+                                timestamp: statusData.timestamp || Date.now(),
+                                details: statusData.details || {}
+                            });
+                            store.save();
+                        };
+
+                        // Build plugin context
+                        const pluginContext = {
+                            isMain: true,
+                            ipcMain: ipcMainRestricted,
+                            BrowserWindow: require('electron').BrowserWindow,
+                            configurationUpdate: devConfigurationUpdate,
+                            statusUpdate: devStatusUpdate,
+                            services: global.services || {},
+                            allow2: store && store.getState && store.getState().user ? {
+                                on: (event, handler) => {
+                                    console.log(`[Dev-Plugin ${pluginName}] Allow2 event listener registered:`, event);
+                                },
+                                getChildState: async (childId) => {
+                                    const state = store.getState();
+                                    const child = state.user && state.user.children && state.user.children.find(c => c.id === childId);
+                                    return child ? {
+                                        paused: child.paused || false,
+                                        quota: child.timeToday || 0
+                                    } : { paused: true, quota: 0 };
+                                }
+                            } : null,
+                            logActivity: (activityData) => {
+                                console.log(`[Dev-Plugin ${pluginName}] Activity:`, activityData);
+                            },
+                            notify: (notification) => {
+                                console.log(`[Dev-Plugin ${pluginName}] Notification:`, notification);
+                            },
+                            sendToRenderer: (channel, data) => {
+                                const prefixedChannel = `${pluginName}.${channel}`;
+                                console.log(`[Dev-Plugin ${pluginName}] Sending to renderer:`, prefixedChannel);
+                                const { BrowserWindow } = require('electron');
+                                BrowserWindow.getAllWindows().forEach(win => {
+                                    win.webContents.send(prefixedChannel, data);
+                                });
+                            }
+                        };
+
+                        // Initialize plugin
+                        const initializedPlugin = loadedPlugin.plugin(pluginContext);
+
+                        // Load plugin state and call onLoad
+                        let devPluginState = currentState[pluginName];
+                        if (initializedPlugin.onLoad) {
+                            console.log(`[Plugins] Calling onLoad for dev-plugin ${pluginName}`);
+                            initializedPlugin.onLoad(devPluginState);
+                        }
+
+                        // Store in installed plugins map
+                        plugins.installed[pluginName] = {
+                            name: pluginName,
+                            plugin: initializedPlugin,
+                            currentState: devPluginState,
+                            isDevPlugin: true
+                        };
+
+                        // Register status update IPC handler
+                        ipcMain.on(`${pluginName}.status.update`, (event, statusData) => {
+                            devStatusUpdate(statusData);
+                        });
+
+                        console.log(`[Plugins] ✅ Dev-plugin ${pluginName} initialized successfully`);
+
+                    } catch (err) {
+                        console.error(`[Plugins] Error initializing dev-plugin ${dir.name}:`, err);
+                    }
+                }
+            }
+        }
+        // ==========================================
+        // END DEV-PLUGINS MAIN PROCESS INITIALIZATION
+        // ==========================================
+
         callback(null, installedPlugins);
     };
 

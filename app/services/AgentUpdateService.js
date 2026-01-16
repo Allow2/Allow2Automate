@@ -556,7 +556,7 @@ export default class AgentUpdateService {
         const configFileName = 'allow2automate-agent-config.json';
         configFile = path.join(destinationPath, configFileName);
 
-        const config = this.generateAgentConfig(serverUrl, registrationCode, platform);
+        const config = await this.generateAgentConfig(serverUrl, registrationCode, platform);
         fs.writeFileSync(configFile, JSON.stringify(config, null, 2), 'utf8');
 
         console.log(`[AgentUpdateService] Generated config file at ${configFile}`);
@@ -570,19 +570,67 @@ export default class AgentUpdateService {
   }
 
   /**
-   * Generate agent configuration file
-   * @param {string} serverUrl - Parent server URL
+   * Generate agent configuration file with cryptographic trust fields
+   * @param {string} serverUrl - Parent server URL (e.g., "http://192.168.1.100:8080")
    * @param {string} childId - Optional child ID for pre-assignment
    * @param {string} platform - Platform (win32, darwin, linux)
    * @param {boolean} advancedMode - Use fixed IP (disable mDNS)
+   * @returns {Promise<Object>} Agent configuration object
    */
-  generateAgentConfig(serverUrl, childId, platform, advancedMode = false) {
-    const config = {
-      // Parent server URL (auto-detected or user-specified)
-      parentApiUrl: serverUrl,
+  async generateAgentConfig(serverUrl, childId, platform, advancedMode = false) {
+    // Parse serverUrl to extract host and port
+    let host = '127.0.0.1';
+    let port = 8080;
 
-      // Agent API port (default: 8443)
-      apiPort: 8443,
+    if (serverUrl) {
+      try {
+        const url = new URL(serverUrl);
+        host = url.hostname;
+        port = parseInt(url.port) || (url.protocol === 'https:' ? 443 : 8080);
+      } catch (e) {
+        // If URL parsing fails, try to extract host/port manually
+        const match = serverUrl.match(/^(?:https?:\/\/)?([^:\/]+)(?::(\d+))?/);
+        if (match) {
+          host = match[1];
+          port = parseInt(match[2]) || 8080;
+        }
+      }
+    }
+
+    // Get parent UUID from global services
+    let hostUuid = null;
+    const uuidManager = global.services && global.services.uuid;
+    if (uuidManager) {
+      hostUuid = uuidManager.getUUID();
+    } else {
+      console.warn('[AgentUpdateService] UUID service not available for config generation');
+    }
+
+    // Get public key from global services
+    let publicKey = null;
+    const keypairManager = global.services && global.services.keypair;
+    if (keypairManager) {
+      try {
+        publicKey = await keypairManager.getPublicKey();
+      } catch (e) {
+        console.warn('[AgentUpdateService] Failed to get public key:', e.message);
+      }
+    } else {
+      console.warn('[AgentUpdateService] Keypair service not available for config generation');
+    }
+
+    const config = {
+      // Parent server host (IP or hostname)
+      host,
+
+      // Parent server port
+      port,
+
+      // Parent's UUID for mDNS discovery
+      host_uuid: hostUuid,
+
+      // Parent's public key for cryptographic verification
+      public_key: publicKey,
 
       // Policy sync interval in milliseconds (default: 30 seconds)
       checkInterval: 30000,
@@ -748,7 +796,7 @@ export default class AgentUpdateService {
 
       // Generate config file (NO registration code)
       const configPath = path.join(tempDir, 'allow2automate-agent-config.json');
-      const config = this.generateAgentConfig(serverUrl, childId, platform, advancedMode);
+      const config = await this.generateAgentConfig(serverUrl, childId, platform, advancedMode);
       fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
 
       console.log(`[AgentUpdateService] Config generated: ${configPath}`);
@@ -859,7 +907,7 @@ export default class AgentUpdateService {
         const configFileName = 'allow2automate-agent-config.json';
         configFile = path.join(destinationPath, configFileName);
 
-        const agentConfig = this.generateAgentConfig(serverUrl, registrationCode, platform);
+        const agentConfig = await this.generateAgentConfig(serverUrl, registrationCode, platform);
         fs.writeFileSync(configFile, JSON.stringify(agentConfig, null, 2), 'utf8');
 
         console.log(`[AgentUpdateService] Generated config file at ${configFile}`);
