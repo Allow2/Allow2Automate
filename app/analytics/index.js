@@ -2,22 +2,21 @@
  * Analytics API - Main interface for tracking user behavior and app events
  *
  * This module provides a comprehensive analytics system for Allow2Automate with:
- * - Firebase Analytics integration
+ * - GA4 Measurement Protocol (direct REST API calls)
  * - Event tracking for user actions, plugin usage, and system events
  * - User identification and properties
  * - App source tagging (Mac App Store, development, direct download)
  *
- * IMPORTANT: This module must only be imported in renderer processes.
- * The main process should not import Firebase Analytics.
+ * Uses direct GA4 REST API instead of Firebase SDK for better Electron compatibility.
  */
 
 const {
-  initializeFirebase,
-  getAnalyticsInstance,
-  logAnalyticsEvent,
-  setAnalyticsUserId,
-  setAnalyticsUserProperties
-} = require('./firebase-config');
+  initializeGA4,
+  getAnalyticsInfo,
+  logEvent,
+  setUserId: setAnalyticsUserId,
+  setUserProperties: setAnalyticsUserProperties
+} = require('./ga4-client');
 
 const { getAppSourceTag } = require('./environment');
 
@@ -32,7 +31,7 @@ class Analytics {
   }
 
   /**
-   * Initialize Firebase Analytics
+   * Initialize GA4 Analytics
    * Must be called before any tracking methods
    */
   async initialize() {
@@ -42,9 +41,9 @@ class Analytics {
     }
 
     try {
-      const success = await initializeFirebase();
+      const success = await initializeGA4();
       if (success) {
-        this.analytics = getAnalyticsInstance();
+        this.analytics = getAnalyticsInfo();
         this.initialized = true;
 
         // Set app source properties on initialization
@@ -61,7 +60,7 @@ class Analytics {
         console.log('[Analytics] Initialized successfully');
         return true;
       } else {
-        console.warn('[Analytics] Firebase initialization failed');
+        console.warn('[Analytics] GA4 initialization failed');
         return false;
       }
     } catch (err) {
@@ -124,7 +123,7 @@ class Analytics {
         app_source: appSource ? appSource.type : 'unknown'
       };
 
-      logAnalyticsEvent(eventName, enrichedParams);
+      logEvent(eventName, enrichedParams);
     } catch (err) {
       console.error('[Analytics] Error tracking event:', eventName, err);
     }

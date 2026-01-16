@@ -19,7 +19,7 @@ const routerHistory = createMemoryHistory();
 const store = configureStore(routerHistory);
 syncHistoryWithStore(store, routerHistory);
 
-// Initialize Firebase Analytics
+// Initialize GA4 Analytics
 Analytics.initialize().then((success) => {
   if (success) {
     console.log('[App] Analytics initialized successfully');

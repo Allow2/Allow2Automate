@@ -38,6 +38,11 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
 
+      - name: Setup Python 3.11 for node-gyp
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
       - name: Get version from tag
         id: version
         shell: pwsh
@@ -138,6 +143,11 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
+
+      - name: Setup Python 3.11 for node-gyp
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
       - name: Get version from tag
         id: version
@@ -323,6 +333,11 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
+
+      - name: Setup Python 3.11 for node-gyp
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
       - name: Get version from tag
         id: version

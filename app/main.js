@@ -45,9 +45,9 @@ sharedModulePaths.forEach(modulePath => {
 console.log('[Main] Configured shared module paths for plugins:', sharedModulePaths);
 
 //
-// NOTE: Firebase Analytics initialization happens in renderer process only
+// NOTE: GA4 Analytics initialization happens in renderer process only
 // Analytics is imported and initialized in app/analytics/index.js
-// Main process does not need to initialize Firebase
+// Main process does not need to initialize analytics
 //
 
 // Make React faster
