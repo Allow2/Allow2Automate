@@ -188,8 +188,10 @@ export default function AgentManagement({ ipcRenderer }) {
         });
         setDownloadResultDialog(true);
         showToast('Installer downloaded successfully', 'success');
+      } else if (result.cancelled) {
+        // User cancelled the save dialog - do nothing silently
       } else {
-        showToast(`Error: ${result.error}`, 'error');
+        showToast(`Error: ${result.error || 'Download failed'}`, 'error');
       }
     } catch (error) {
       console.error('Error downloading installer:', error);

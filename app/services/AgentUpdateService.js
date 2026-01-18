@@ -729,6 +729,90 @@ export default class AgentUpdateService {
   }
 
   /**
+   * Create DMG bundle with installer and config file (macOS only)
+   * @param {string} installerPath - Path to PKG installer file
+   * @param {string} configPath - Path to config file
+   * @param {string} outputPath - Path for output DMG file
+   * @param {string} volumeName - Name for the mounted volume
+   * @returns {Promise<string>} Path to created DMG file
+   */
+  async createDMGBundle(installerPath, configPath, outputPath, volumeName = 'Allow2 Automate Agent') {
+    try {
+      console.log('[AgentUpdateService] Creating DMG bundle...');
+
+      // DMG creation only works on macOS
+      if (process.platform !== 'darwin') {
+        console.log('[AgentUpdateService] Not on macOS, falling back to ZIP bundle');
+        const zipPath = outputPath.replace(/\.dmg$/i, '.zip');
+        return await this.createInstallerBundle(installerPath, configPath, zipPath);
+      }
+
+      const { execSync } = require('child_process');
+      const fs = require('fs');
+      const path = require('path');
+
+      // Create staging directory
+      const stagingDir = path.join(path.dirname(outputPath), 'dmg-staging-' + Date.now());
+      fs.mkdirSync(stagingDir, { recursive: true });
+
+      try {
+        // Copy installer to staging
+        const installerName = path.basename(installerPath);
+        fs.copyFileSync(installerPath, path.join(stagingDir, installerName));
+        console.log(`[AgentUpdateService] Added installer: ${installerName}`);
+
+        // Copy config to staging
+        fs.copyFileSync(configPath, path.join(stagingDir, 'allow2automate-agent-config.json'));
+        console.log('[AgentUpdateService] Added config: allow2automate-agent-config.json');
+
+        // Create README file
+        const readmeContent = `Allow2 Automate Agent Installer
+================================
+
+Installation Instructions:
+1. Double-click the PKG file (${installerName}) to start installation
+2. The configuration file (allow2automate-agent-config.json) will be
+   automatically detected from this mounted volume during installation
+
+The installer will:
+- Install the Allow2 Automate Agent service
+- Configure it to connect to your parent device
+- Start the agent automatically
+
+After installation, the agent will appear in your parent's device list
+within a few minutes.
+
+For support, visit: https://allow2.com/support
+`;
+        fs.writeFileSync(path.join(stagingDir, 'README.txt'), readmeContent);
+
+        // Remove existing DMG if present
+        if (fs.existsSync(outputPath)) {
+          fs.unlinkSync(outputPath);
+        }
+
+        // Create DMG using hdiutil
+        console.log('[AgentUpdateService] Creating DMG with hdiutil...');
+        const cmd = `hdiutil create -volname "${volumeName}" -srcfolder "${stagingDir}" -ov -format UDZO "${outputPath}"`;
+        execSync(cmd, { stdio: 'pipe' });
+
+        console.log(`[AgentUpdateService] DMG created: ${outputPath}`);
+        return outputPath;
+
+      } finally {
+        // Clean up staging directory
+        if (fs.existsSync(stagingDir)) {
+          fs.rmSync(stagingDir, { recursive: true, force: true });
+        }
+      }
+
+    } catch (error) {
+      console.error('[AgentUpdateService] Error creating DMG bundle:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Export installer bundle as ZIP (installer + config)
    * @param {string} version - Version to export
    * @param {string} platform - Platform (darwin, linux, win32)
@@ -801,28 +885,45 @@ export default class AgentUpdateService {
 
       console.log(`[AgentUpdateService] Config generated: ${configPath}`);
 
-      // Determine ZIP filename
+      // Determine bundle filename and type
       const platformArch = platform === 'darwin' ? 'darwin-x64' :
                           platform === 'linux' ? 'linux-x64' :
                           platform === 'win32' ? 'win32-x64' : platform;
 
-      const zipFileName = `allow2automate-agent-${platformArch}-v${version}.zip`;
-      const zipPath = path.join(tempDir, zipFileName);
+      let bundlePath;
+      let bundleFileName;
 
-      // Create ZIP bundle
-      await this.createInstallerBundle(installerPath, configPath, zipPath);
+      // For macOS target, create DMG if we're running on macOS (hdiutil available)
+      // Otherwise fall back to ZIP
+      if (platform === 'darwin' && process.platform === 'darwin') {
+        bundleFileName = `allow2automate-agent-${platformArch}-v${version}.dmg`;
+        bundlePath = path.join(tempDir, bundleFileName);
+
+        // Create DMG bundle
+        await this.createDMGBundle(installerPath, configPath, bundlePath);
+      } else {
+        bundleFileName = `allow2automate-agent-${platformArch}-v${version}.zip`;
+        bundlePath = path.join(tempDir, bundleFileName);
+
+        // Create ZIP bundle
+        await this.createInstallerBundle(installerPath, configPath, bundlePath);
+      }
 
       // Clean up temp config file
       fs.unlinkSync(configPath);
 
-      console.log(`[AgentUpdateService] Bundle created: ${zipPath}`);
+      console.log(`[AgentUpdateService] Bundle created: ${bundlePath}`);
 
       return {
-        zipPath: zipPath,
-        zipFileName: zipFileName,
+        bundlePath: bundlePath,
+        bundleFileName: bundleFileName,
+        // Keep legacy zipPath/zipFileName for backward compatibility
+        zipPath: bundlePath,
+        zipFileName: bundleFileName,
         version: version,
         platform: platform,
-        installerName: path.basename(installerPath)
+        installerName: path.basename(installerPath),
+        bundleType: bundleFileName.endsWith('.dmg') ? 'dmg' : 'zip'
       };
 
     } catch (error) {

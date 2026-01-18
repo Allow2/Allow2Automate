@@ -4,8 +4,24 @@ import { bindActionCreators } from 'redux';
 import LoggedIn from '../components/LoggedIn';
 import allActions from '../actions';
 
+/**
+ * OPTIMIZED: Only map the specific state slices that LoggedIn actually needs.
+ * Previously returned entire state, causing re-renders on ANY state change.
+ * Now only re-renders when these specific slices change.
+ */
 const mapStateToProps = (state) => {
-    return state;
+    return {
+        user: state.user,
+        children: state.children,
+        installedPlugins: state.installedPlugins,
+        configurations: state.configurations,
+        pluginLibrary: state.pluginLibrary,
+        pluginStatus: state.pluginStatus,
+        // For PlugIns (Settings) component
+        devices: state.devices,
+        marketplace: state.marketplace,
+        pairings: state.pairings
+    };
 };
 
 const mapDispatchToProps = (dispatch) => { // eslint-disable-line no-unused-vars

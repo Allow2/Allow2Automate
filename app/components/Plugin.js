@@ -3,8 +3,7 @@ import PropTypes from 'prop-types';
 import { allow2AvatarURL } from '../util';
 import Dialogs from 'dialogs';
 import path from 'path';
-import { ipcRenderer, BrowserWindow } from 'electron';
-import url from 'url';
+import { ipcRenderer } from 'electron';
 import Module from 'module';
 import Analytics from '../analytics';
 
@@ -176,35 +175,36 @@ export default class Login extends Component {
         return this.plugin !== undefined && this.plugin.TabContent !== undefined
     }
 
-    assign(device, token) {
-        //let onPaired = this.props.onPaired;
-        //function openModal() {
-        let win = new BrowserWindow({
-            parent: BrowserWindow.getCurrentWindow(),
-            modal: true,
-            width: 500,
-            height: 600,
-            minWidth: 500,
-            maxWidth: 500,
-            minHeight: 600,
-            maxHeight: 800,
-	        webPreferences: {
-		        enableRemoteModule: true
-	        }
-        });
+    /**
+     * Open the child picker and return the result
+     *
+     * @param {Object} device - Device being assigned (any device info object)
+     * @param {string} token - Device token for pairing API
+     * @param {Object} options - Additional options
+     * @param {string} options.currentSelection - Currently assigned child ID
+     * @param {boolean} options.allowClear - Whether to show clear button (default: true)
+     * @returns {Promise<Object>} Result object:
+     *   - { selected: true, childId, childName, device, token }
+     *   - { cleared: true, device, token }
+     *   - { cancelled: true, device, token }
+     */
+    async assign(device, token, options = {}) {
+        try {
+            const result = await ipcRenderer.invoke('openChildPicker', {
+                title: (device && device.friendlyName) ? `Assign: ${device.friendlyName}` : 'Select a Child',
+                currentSelection: options.currentSelection || null,
+                allowClear: options.allowClear !== false,
+                context: { device, token }
+            });
 
-        //win.loadURL(theUrl);
-        win.loadURL(url.format({
-            pathname: path.join(__dirname, '../pairModal.html'),
-            protocol: 'file:',
-            slashes: true
-        }));
+            console.log('[Plugin] Child picker result:', result);
 
-        win.webContents.on('did-finish-load', () => {
-            win.webContents.send('device', { device: device, token: token });
-        });
-
-        win.webContents.openDevTools();
+            // Return the result for the plugin to handle
+            return result;
+        } catch (error) {
+            console.error('[Plugin] Error opening child picker:', error);
+            return { cancelled: true, error: error.message, context: { device, token } };
+        }
     }
 
     // IPC masking
@@ -270,11 +270,18 @@ export default class Login extends Component {
         //   <key> : <data1>
         // }
 
+        // Plugin-specific IPC (channels prefixed with plugin name)
         const ipcRestricted = {
             send: (channel, ...args) => { this.ipcSend(`${plugin.name}.${channel}`, ...args) },
             on: (channel, listener) => { this.ipcOn(`${plugin.name}.${channel}`, listener) },
 	        invoke: async (channel, ...args) => { return await this.ipcInvoke(`${plugin.name}.${channel}`, ...args) },
 	        handle: (channel, handler) => { this.ipcHandle(`${plugin.name}.${channel}`, handler) }
+        };
+
+        // Global IPC for app-wide handlers (pairDevice, unpairDevice, openChildPicker, etc.)
+        const globalIpc = {
+            invoke: async (channel, ...args) => { return await ipcRenderer.invoke(channel, ...args) },
+            send: (channel, ...args) => { ipcRenderer.send(channel, ...args) }
         };
 
         const pluginName = this.props.plugin.name;
@@ -325,6 +332,7 @@ export default class Login extends Component {
                 pluginDir={this.state.pluginDir}
                 ipcRenderer={ipcRestricted}
                 ipc={ipcRestricted}
+                globalIpc={globalIpc}
                 configurationUpdate={configurationUpdate}
                 statusUpdate={statusUpdate}
                 persist={persist}

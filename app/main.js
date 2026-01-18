@@ -214,6 +214,303 @@ ipcMain.handle('clearCredentials', async (event) => {
     }
 });
 
+/**
+ * Child Picker API - Standard function for plugins to request child assignment
+ *
+ * Options:
+ *   - currentSelection: string | null - currently selected child ID
+ *   - title: string - modal title (default: "Select a Child")
+ *   - allowClear: boolean - show clear button (default: true)
+ *   - context: object - any context to pass back with result (e.g., device info)
+ *
+ * Returns:
+ *   - { selected: true, childId: string, childName: string, context: object }
+ *   - { cleared: true, context: object }
+ *   - { cancelled: true, context: object }
+ */
+ipcMain.handle('openChildPicker', async (event, options = {}) => {
+    const parentWindow = BrowserWindow.fromWebContents(event.sender);
+
+    // Get children from store
+    const state = store.getState();
+    const children = state.children ? Object.values(state.children).sort((a, b) =>
+        (a.name || '').localeCompare(b.name || '')
+    ) : [];
+
+    return new Promise((resolve) => {
+        const pickerWindow = new BrowserWindow({
+            parent: parentWindow,
+            modal: true,
+            width: 400,
+            height: 500,
+            minWidth: 350,
+            maxWidth: 500,
+            minHeight: 400,
+            maxHeight: 700,
+            resizable: true,
+            title: options.title || 'Select a Child',
+            webPreferences: {
+                nodeIntegration: true,
+                contextIsolation: false
+            }
+        });
+
+        // Track if we've resolved to avoid double-resolve
+        let resolved = false;
+
+        const cleanup = () => {
+            ipcMain.removeListener('childPicker:result', onResult);
+            ipcMain.removeListener('childPicker:ready', onReady);
+        };
+
+        const onResult = (resultEvent, result) => {
+            // Only handle results from this window
+            if (BrowserWindow.fromWebContents(resultEvent.sender) !== pickerWindow) {
+                return;
+            }
+
+            if (!resolved) {
+                resolved = true;
+                cleanup();
+                pickerWindow.close();
+                resolve(result);
+            }
+        };
+
+        const onReady = (readyEvent) => {
+            // Only handle ready from this window
+            if (BrowserWindow.fromWebContents(readyEvent.sender) !== pickerWindow) {
+                return;
+            }
+
+            // Send options to the picker window
+            pickerWindow.webContents.send('childPicker:options', {
+                children: children,
+                currentSelection: options.currentSelection || null,
+                title: options.title || 'Select a Child',
+                allowClear: options.allowClear !== false,
+                context: options.context || {}
+            });
+        };
+
+        // Listen for result from picker
+        ipcMain.on('childPicker:result', onResult);
+
+        // Listen for ready signal (in case window loads after we set up listeners)
+        ipcMain.on('childPicker:ready', onReady);
+
+        // Handle window close as cancel
+        pickerWindow.on('closed', () => {
+            if (!resolved) {
+                resolved = true;
+                cleanup();
+                resolve({
+                    cancelled: true,
+                    context: options.context || {}
+                });
+            }
+        });
+
+        pickerWindow.loadURL(url.format({
+            pathname: path.join(__dirname, 'childPicker.html'),
+            protocol: 'file:',
+            slashes: true
+        }));
+
+        // Send options once window is loaded
+        pickerWindow.webContents.on('did-finish-load', () => {
+            pickerWindow.webContents.send('childPicker:options', {
+                children: children,
+                currentSelection: options.currentSelection || null,
+                title: options.title || 'Select a Child',
+                allowClear: options.allowClear !== false,
+                context: options.context || {}
+            });
+        });
+
+        // For debugging (uncomment if needed)
+        // pickerWindow.webContents.openDevTools();
+    });
+});
+
+// Legacy support: Keep openPairingModal as alias for openChildPicker
+ipcMain.handle('openPairingModal', async (event, { device, token }) => {
+    // Convert old API to new API
+    const result = await ipcMain.emit('openChildPicker', event, {
+        title: (device && device.friendlyName) ? `Assign: ${device.friendlyName}` : 'Select a Child',
+        currentSelection: null,
+        allowClear: false,
+        context: { device, token }
+    });
+
+    // For now, just open the new picker
+    const parentWindow = BrowserWindow.fromWebContents(event.sender);
+    const state = store.getState();
+    const children = state.children ? Object.values(state.children).sort((a, b) =>
+        (a.name || '').localeCompare(b.name || '')
+    ) : [];
+
+    return new Promise((resolve) => {
+        const pickerWindow = new BrowserWindow({
+            parent: parentWindow,
+            modal: true,
+            width: 400,
+            height: 500,
+            minWidth: 350,
+            maxWidth: 500,
+            minHeight: 400,
+            maxHeight: 700,
+            title: (device && device.friendlyName) ? `Assign: ${device.friendlyName}` : 'Select a Child',
+            webPreferences: {
+                nodeIntegration: true,
+                contextIsolation: false
+            }
+        });
+
+        let resolved = false;
+
+        const cleanup = () => {
+            ipcMain.removeListener('childPicker:result', onResult);
+        };
+
+        const onResult = (resultEvent, result) => {
+            if (BrowserWindow.fromWebContents(resultEvent.sender) !== pickerWindow) return;
+            if (!resolved) {
+                resolved = true;
+                cleanup();
+                pickerWindow.close();
+                resolve({ ...result, device, token });
+            }
+        };
+
+        ipcMain.on('childPicker:result', onResult);
+
+        pickerWindow.on('closed', () => {
+            if (!resolved) {
+                resolved = true;
+                cleanup();
+                resolve({ cancelled: true, device, token });
+            }
+        });
+
+        pickerWindow.loadURL(url.format({
+            pathname: path.join(__dirname, 'childPicker.html'),
+            protocol: 'file:',
+            slashes: true
+        }));
+
+        pickerWindow.webContents.on('did-finish-load', () => {
+            pickerWindow.webContents.send('childPicker:options', {
+                children: children,
+                currentSelection: null,
+                title: (device && device.friendlyName) ? `Assign: ${device.friendlyName}` : 'Select a Child',
+                allowClear: false,
+                context: { device, token }
+            });
+        });
+    });
+});
+
+/**
+ * Device Pairing API - Register a device with a child in Allow2
+ *
+ * Options:
+ *   - deviceId: string - Device unique identifier (e.g., UDN for Wemo)
+ *   - deviceName: string - Friendly device name
+ *   - token: string - Device type token
+ *   - childId: string - Child ID to assign
+ *
+ * Returns:
+ *   - { success: true, pairing: { ChildId, ... } }
+ *   - { success: false, error: string }
+ */
+ipcMain.handle('pairDevice', async (event, options = {}) => {
+    const { deviceId, deviceName, token, childId } = options;
+
+    if (!deviceId || !token || !childId) {
+        return { success: false, error: 'Missing required parameters' };
+    }
+
+    // Get user auth token from store
+    const state = store.getState();
+    const accessToken = state.user && state.user.access_token;
+
+    if (!accessToken) {
+        return { success: false, error: 'Not logged in' };
+    }
+
+    return new Promise((resolve) => {
+        const request = require('request');
+        request({
+            url: 'https://api.allow2.com/rest/pairDevice',
+            method: 'POST',
+            json: true,
+            auth: {
+                bearer: accessToken
+            },
+            body: {
+                device: deviceId,
+                name: deviceName || deviceId,
+                token: token,
+                childId: childId
+            }
+        }, (error, response, body) => {
+            if (error) {
+                console.error('[Main] pairDevice error:', error);
+                resolve({ success: false, error: error.message });
+                return;
+            }
+
+            if (!response || response.statusCode !== 200) {
+                console.error('[Main] pairDevice failed:', response && response.statusCode, body);
+                resolve({
+                    success: false,
+                    error: (body && body.message) || ('API error: ' + (response && response.statusCode))
+                });
+                return;
+            }
+
+            console.log('[Main] pairDevice success:', body);
+
+            // NOTE: We no longer update global pairings state here.
+            // Each plugin is responsible for storing its own pairings
+            // in its configuration namespace via configurationUpdate().
+            // This ensures proper separation of plugin data.
+
+            resolve({
+                success: true,
+                pairing: body
+            });
+        });
+    });
+});
+
+/**
+ * Remove Device Pairing - Unassign a device from a child
+ *
+ * Options:
+ *   - deviceId: string - Device unique identifier
+ *
+ * Returns:
+ *   - { success: true }
+ *   - { success: false, error: string }
+ */
+ipcMain.handle('unpairDevice', async (event, options = {}) => {
+    const { deviceId } = options;
+
+    if (!deviceId) {
+        return { success: false, error: 'Missing device ID' };
+    }
+
+    // NOTE: We no longer maintain global pairings state.
+    // Each plugin is responsible for managing its own pairings
+    // in its configuration namespace via configurationUpdate().
+    // This handler exists for future API calls (e.g., notifying Allow2
+    // that a device has been unpaired) but currently just returns success.
+
+    return { success: true };
+});
+
 actions.deviceInit();
 actions.timezoneGuess(moment.tz.guess());
 
@@ -685,6 +982,9 @@ app.on('ready', async () => {
     }
     showMainWindow();
 
+    // Store last poll data to compare and avoid unnecessary state updates
+    let lastPollDataHash = null;
+
     function pollInfo() {
         let state = store.getState();
         console.log("polling info");
@@ -717,7 +1017,22 @@ app.on('ready', async () => {
                 },
 
                 function (data) {
-                    actions.newData(data);
+                    // Only dispatch newData if data has actually changed
+                    // This prevents unnecessary re-renders every 30 seconds
+                    try {
+                        const dataHash = JSON.stringify(data);
+                        if (dataHash !== lastPollDataHash) {
+                            console.log('[pollInfo] Data changed, dispatching newData');
+                            lastPollDataHash = dataHash;
+                            actions.newData(data);
+                        } else {
+                            console.log('[pollInfo] Data unchanged, skipping dispatch');
+                        }
+                    } catch (e) {
+                        // If comparison fails, dispatch anyway to be safe
+                        console.warn('[pollInfo] Could not compare data, dispatching:', e);
+                        actions.newData(data);
+                    }
                 });
         }
     }

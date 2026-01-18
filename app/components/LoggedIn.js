@@ -173,17 +173,72 @@ export default class Plugins extends Component {
     constructor(...args) {
         super(...args);
 
+        // Restore currentTab from localStorage to preserve navigation across refreshes
+        let savedTab = 'Allow2AutomateSettingsTab';
+        try {
+            const stored = localStorage.getItem('allow2automate-current-tab');
+            if (stored) {
+                savedTab = stored;
+            }
+        } catch (e) {
+            console.warn('[LoggedIn] Could not read currentTab from localStorage:', e);
+        }
+
         this.state = {
-            currentTab: 'Allow2AutomateSettingsTab',
+            currentTab: savedTab,
             toasts: [] // Array of {id, message, severity}
         };
     }
 
     messageDevices = {};
 
+    /**
+     * Optimize re-renders: only update when relevant props/state actually change.
+     * This prevents the component from re-rendering when unrelated state changes.
+     */
+    shouldComponentUpdate(nextProps, nextState) {
+        // Always update if local state changed (tab switch, toasts)
+        if (this.state.currentTab !== nextState.currentTab) {
+            return true;
+        }
+        if (this.state.toasts.length !== nextState.toasts.length) {
+            return true;
+        }
+
+        // Check if relevant props changed (shallow comparison of references)
+        // These are the props that actually affect rendering
+        if (
+            this.props.user !== nextProps.user ||
+            this.props.children !== nextProps.children ||
+            this.props.installedPlugins !== nextProps.installedPlugins ||
+            this.props.configurations !== nextProps.configurations ||
+            this.props.pluginLibrary !== nextProps.pluginLibrary ||
+            this.props.pluginStatus !== nextProps.pluginStatus
+        ) {
+            return true;
+        }
+
+        // No relevant changes, skip re-render
+        return false;
+    }
+
     componentDidMount = () => {
         // Track screen view
         Analytics.trackScreenView('logged_in');
+
+        // Validate saved tab - ensure the plugin still exists
+        const { currentTab } = this.state;
+        if (currentTab && currentTab !== 'Allow2AutomateSettingsTab') {
+            const plugins = sortedActivePluginSelector(this.props);
+            const pluginExists = plugins.some(p => p.name === currentTab);
+            if (!pluginExists) {
+                console.log('[LoggedIn] Saved tab plugin no longer exists, reverting to Settings');
+                this.setState({ currentTab: 'Allow2AutomateSettingsTab' });
+                try {
+                    localStorage.setItem('allow2automate-current-tab', 'Allow2AutomateSettingsTab');
+                } catch (e) {}
+            }
+        }
 
 	    ipcRenderer.on('loggedOut', function(event) {
             this.props.dispatch(push('/'));
@@ -226,6 +281,13 @@ export default class Plugins extends Component {
         this.setState({
             currentTab: tab
         });
+
+        // Persist to localStorage so navigation survives refreshes
+        try {
+            localStorage.setItem('allow2automate-current-tab', tab);
+        } catch (e) {
+            console.warn('[LoggedIn] Could not save currentTab to localStorage:', e);
+        }
 
         // Track navigation to plugin tabs
         if (tab !== 'Allow2AutomateSettingsTab') {
