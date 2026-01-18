@@ -27,6 +27,7 @@ jobs:
   build-windows:
     name: Build Windows (AppX/MSIX)
     runs-on: windows-latest
+    environment: release  # Required for Azure OIDC federated identity
 
     steps:
       - name: Checkout code

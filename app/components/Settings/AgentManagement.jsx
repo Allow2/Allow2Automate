@@ -1,4 +1,4 @@
-import React, { useState, useEffect, Fragment } from 'react';
+import React, { useState, useEffect, Fragment, useCallback, useRef } from 'react';
 import {
   Card,
   CardContent,
@@ -16,9 +16,11 @@ import {
   DialogActions,
   TextField,
   CircularProgress,
+  LinearProgress,
   Divider,
   Snackbar,
-  Link
+  Link,
+  Box
 } from '@material-ui/core';
 import {
   Computer as ComputerIcon,
@@ -95,14 +97,50 @@ const useStyles = makeStyles((theme) => ({
     marginTop: theme.spacing(0.5),
     cursor: 'pointer',
   },
+  progressContainer: {
+    width: '100%',
+    marginTop: theme.spacing(1),
+  },
+  progressBar: {
+    height: 6,
+    borderRadius: 3,
+  },
+  progressStage: {
+    fontSize: '0.7rem',
+    color: theme.palette.text.secondary,
+    marginTop: theme.spacing(0.5),
+    textAlign: 'center',
+    minHeight: '1.2em',
+  },
+  progressComplete: {
+    color: theme.palette.success.main,
+  },
 }));
+
+// Initial download state for each platform
+const initialDownloadState = {
+  downloading: false,
+  progress: 0,
+  stage: '',
+  complete: false,
+  error: null
+};
 
 export default function AgentManagement({ ipcRenderer }) {
   const classes = useStyles();
   const [agents, setAgents] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [installerDownloading, setInstallerDownloading] = useState(false);
-  const [downloadingPlatform, setDownloadingPlatform] = useState(null);
+
+  // Per-platform download state
+  const [downloadState, setDownloadState] = useState({
+    win32: { ...initialDownloadState },
+    darwin: { ...initialDownloadState },
+    linux: { ...initialDownloadState }
+  });
+
+  // Refs for cleanup timers
+  const progressCleanupTimers = useRef({});
+
   const [registrationDialog, setRegistrationDialog] = useState(false);
   const [downloadResultDialog, setDownloadResultDialog] = useState(false);
   const [downloadResult, setDownloadResult] = useState(null);
@@ -118,7 +156,28 @@ export default function AgentManagement({ ipcRenderer }) {
     loadServerUrl();
     checkLatestVersions();
     const interval = setInterval(loadAgents, 30000); // Refresh every 30 seconds
-    return () => clearInterval(interval);
+
+    // Listen for download progress events from main process
+    const handleDownloadProgress = (event, { platform, progress, stage }) => {
+      setDownloadState(prev => ({
+        ...prev,
+        [platform]: {
+          ...prev[platform],
+          progress,
+          stage,
+          downloading: progress < 100
+        }
+      }));
+    };
+
+    ipcRenderer.on('agents:download-progress', handleDownloadProgress);
+
+    return () => {
+      clearInterval(interval);
+      ipcRenderer.removeListener('agents:download-progress', handleDownloadProgress);
+      // Clean up any pending timers
+      Object.values(progressCleanupTimers.current).forEach(timer => clearTimeout(timer));
+    };
   }, []);
 
   const loadAgents = async () => {
@@ -166,9 +225,42 @@ export default function AgentManagement({ ipcRenderer }) {
     }
   };
 
+  // Helper to update download state for a platform
+  const updatePlatformState = useCallback((platform, updates) => {
+    setDownloadState(prev => ({
+      ...prev,
+      [platform]: {
+        ...prev[platform],
+        ...updates
+      }
+    }));
+  }, []);
+
+  // Schedule cleanup of progress UI after completion
+  const scheduleProgressCleanup = useCallback((platform, delayMs = 3000) => {
+    // Clear any existing timer for this platform
+    if (progressCleanupTimers.current[platform]) {
+      clearTimeout(progressCleanupTimers.current[platform]);
+    }
+
+    progressCleanupTimers.current[platform] = setTimeout(() => {
+      updatePlatformState(platform, {
+        ...initialDownloadState
+      });
+      delete progressCleanupTimers.current[platform];
+    }, delayMs);
+  }, [updatePlatformState]);
+
   const downloadInstaller = async (platform) => {
-    setInstallerDownloading(true);
-    setDownloadingPlatform(platform);
+    // Reset state and start download
+    updatePlatformState(platform, {
+      downloading: true,
+      progress: 0,
+      stage: 'Initializing...',
+      complete: false,
+      error: null
+    });
+
     try {
       // Download with auto-generated registration code
       const result = await ipcRenderer.invoke('agents:download-installer', {
@@ -177,6 +269,18 @@ export default function AgentManagement({ ipcRenderer }) {
       });
 
       if (result.success) {
+        // Mark as complete
+        updatePlatformState(platform, {
+          downloading: false,
+          progress: 100,
+          stage: 'Download complete!',
+          complete: true,
+          error: null
+        });
+
+        // Schedule cleanup after a few seconds
+        scheduleProgressCleanup(platform, 4000);
+
         setDownloadResult({
           platform,
           installerPath: result.installerPath,
@@ -189,16 +293,31 @@ export default function AgentManagement({ ipcRenderer }) {
         setDownloadResultDialog(true);
         showToast('Installer downloaded successfully', 'success');
       } else if (result.cancelled) {
-        // User cancelled the save dialog - do nothing silently
+        // User cancelled the save dialog - reset state silently
+        updatePlatformState(platform, { ...initialDownloadState });
       } else {
+        // Error occurred
+        updatePlatformState(platform, {
+          downloading: false,
+          progress: 0,
+          stage: 'Error: ' + (result.error || 'Download failed'),
+          complete: false,
+          error: result.error || 'Download failed'
+        });
+        scheduleProgressCleanup(platform, 5000);
         showToast(`Error: ${result.error || 'Download failed'}`, 'error');
       }
     } catch (error) {
       console.error('Error downloading installer:', error);
+      updatePlatformState(platform, {
+        downloading: false,
+        progress: 0,
+        stage: 'Error: ' + error.message,
+        complete: false,
+        error: error.message
+      });
+      scheduleProgressCleanup(platform, 5000);
       showToast('Failed to download installer. Ensure you have an internet connection and GitHub is accessible.', 'error');
-    } finally {
-      setInstallerDownloading(false);
-      setDownloadingPlatform(null);
     }
   };
 
@@ -387,17 +506,33 @@ export default function AgentManagement({ ipcRenderer }) {
                   variant="contained"
                   color="primary"
                   onClick={() => downloadInstaller('win32')}
-                  disabled={installerDownloading || checkingVersions}
+                  disabled={downloadState.win32.downloading || checkingVersions}
                   fullWidth
                 >
-                  {downloadingPlatform === 'win32' ? (
+                  {downloadState.win32.downloading ? (
                     <CircularProgress size={20} style={{ marginRight: 8 }} />
                   ) : (
                     <DownloadIcon style={{ marginRight: 8 }} />
                   )}
                   Windows
                 </Button>
-                {versionInfo.win32 && (
+                {/* Progress indicator */}
+                {(downloadState.win32.downloading || downloadState.win32.complete || downloadState.win32.error) && (
+                  <Box className={classes.progressContainer}>
+                    <LinearProgress
+                      variant="determinate"
+                      value={downloadState.win32.progress}
+                      className={classes.progressBar}
+                      color={downloadState.win32.error ? 'secondary' : 'primary'}
+                    />
+                    <Typography
+                      className={`${classes.progressStage} ${downloadState.win32.complete ? classes.progressComplete : ''}`}
+                    >
+                      {downloadState.win32.stage}
+                    </Typography>
+                  </Box>
+                )}
+                {versionInfo.win32 && !downloadState.win32.downloading && !downloadState.win32.complete && (
                   <Fragment>
                     <Typography className={classes.versionInfo}>
                       v{versionInfo.win32.version}
@@ -425,17 +560,33 @@ export default function AgentManagement({ ipcRenderer }) {
                   variant="contained"
                   color="primary"
                   onClick={() => downloadInstaller('darwin')}
-                  disabled={installerDownloading || checkingVersions}
+                  disabled={downloadState.darwin.downloading || checkingVersions}
                   fullWidth
                 >
-                  {downloadingPlatform === 'darwin' ? (
+                  {downloadState.darwin.downloading ? (
                     <CircularProgress size={20} style={{ marginRight: 8 }} />
                   ) : (
                     <DownloadIcon style={{ marginRight: 8 }} />
                   )}
                   macOS
                 </Button>
-                {versionInfo.darwin && (
+                {/* Progress indicator */}
+                {(downloadState.darwin.downloading || downloadState.darwin.complete || downloadState.darwin.error) && (
+                  <Box className={classes.progressContainer}>
+                    <LinearProgress
+                      variant="determinate"
+                      value={downloadState.darwin.progress}
+                      className={classes.progressBar}
+                      color={downloadState.darwin.error ? 'secondary' : 'primary'}
+                    />
+                    <Typography
+                      className={`${classes.progressStage} ${downloadState.darwin.complete ? classes.progressComplete : ''}`}
+                    >
+                      {downloadState.darwin.stage}
+                    </Typography>
+                  </Box>
+                )}
+                {versionInfo.darwin && !downloadState.darwin.downloading && !downloadState.darwin.complete && (
                   <Fragment>
                     <Typography className={classes.versionInfo}>
                       v{versionInfo.darwin.version}
@@ -463,17 +614,33 @@ export default function AgentManagement({ ipcRenderer }) {
                   variant="contained"
                   color="primary"
                   onClick={() => downloadInstaller('linux')}
-                  disabled={installerDownloading || checkingVersions}
+                  disabled={downloadState.linux.downloading || checkingVersions}
                   fullWidth
                 >
-                  {downloadingPlatform === 'linux' ? (
+                  {downloadState.linux.downloading ? (
                     <CircularProgress size={20} style={{ marginRight: 8 }} />
                   ) : (
                     <DownloadIcon style={{ marginRight: 8 }} />
                   )}
                   Linux
                 </Button>
-                {versionInfo.linux && (
+                {/* Progress indicator */}
+                {(downloadState.linux.downloading || downloadState.linux.complete || downloadState.linux.error) && (
+                  <Box className={classes.progressContainer}>
+                    <LinearProgress
+                      variant="determinate"
+                      value={downloadState.linux.progress}
+                      className={classes.progressBar}
+                      color={downloadState.linux.error ? 'secondary' : 'primary'}
+                    />
+                    <Typography
+                      className={`${classes.progressStage} ${downloadState.linux.complete ? classes.progressComplete : ''}`}
+                    >
+                      {downloadState.linux.stage}
+                    </Typography>
+                  </Box>
+                )}
+                {versionInfo.linux && !downloadState.linux.downloading && !downloadState.linux.complete && (
                   <Fragment>
                     <Typography className={classes.versionInfo}>
                       v{versionInfo.linux.version}

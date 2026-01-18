@@ -597,26 +597,31 @@ export default class AgentUpdateService {
       }
     }
 
-    // Get parent UUID from global services
+    // Get parent UUID from global services (REQUIRED)
     let hostUuid = null;
     const uuidManager = global.services && global.services.uuid;
     if (uuidManager) {
       hostUuid = uuidManager.getUUID();
-    } else {
-      console.warn('[AgentUpdateService] UUID service not available for config generation');
+    }
+    if (!hostUuid) {
+      throw new Error('Cannot generate agent config: Parent UUID not available. Ensure the agent service is fully initialized.');
     }
 
-    // Get public key from global services
+    // Get public key from global services (REQUIRED)
     let publicKey = null;
     const keypairManager = global.services && global.services.keypair;
     if (keypairManager) {
       try {
         publicKey = await keypairManager.getPublicKey();
       } catch (e) {
-        console.warn('[AgentUpdateService] Failed to get public key:', e.message);
+        throw new Error(`Cannot generate agent config: Failed to get public key: ${e.message}`);
       }
-    } else {
-      console.warn('[AgentUpdateService] Keypair service not available for config generation');
+    }
+    if (!publicKey) {
+      throw new Error('Cannot generate agent config: Public key not available. Ensure the keypair service is initialized.');
+    }
+    if (!publicKey.includes('-----BEGIN PUBLIC KEY-----')) {
+      throw new Error('Cannot generate agent config: Invalid public key format. Expected PEM-encoded public key.');
     }
 
     const config = {
@@ -747,22 +752,25 @@ export default class AgentUpdateService {
         return await this.createInstallerBundle(installerPath, configPath, zipPath);
       }
 
-      const { execSync } = require('child_process');
+      const { exec } = require('child_process');
+      const { promisify } = require('util');
+      const execAsync = promisify(exec);
+      const fsPromises = require('fs').promises;
       const fs = require('fs');
       const path = require('path');
 
       // Create staging directory
       const stagingDir = path.join(path.dirname(outputPath), 'dmg-staging-' + Date.now());
-      fs.mkdirSync(stagingDir, { recursive: true });
+      await fsPromises.mkdir(stagingDir, { recursive: true });
 
       try {
         // Copy installer to staging
         const installerName = path.basename(installerPath);
-        fs.copyFileSync(installerPath, path.join(stagingDir, installerName));
+        await fsPromises.copyFile(installerPath, path.join(stagingDir, installerName));
         console.log(`[AgentUpdateService] Added installer: ${installerName}`);
 
         // Copy config to staging
-        fs.copyFileSync(configPath, path.join(stagingDir, 'allow2automate-agent-config.json'));
+        await fsPromises.copyFile(configPath, path.join(stagingDir, 'allow2automate-agent-config.json'));
         console.log('[AgentUpdateService] Added config: allow2automate-agent-config.json');
 
         // Create README file
@@ -784,25 +792,29 @@ within a few minutes.
 
 For support, visit: https://allow2.com/support
 `;
-        fs.writeFileSync(path.join(stagingDir, 'README.txt'), readmeContent);
+        await fsPromises.writeFile(path.join(stagingDir, 'README.txt'), readmeContent);
 
         // Remove existing DMG if present
-        if (fs.existsSync(outputPath)) {
-          fs.unlinkSync(outputPath);
+        try {
+          await fsPromises.unlink(outputPath);
+        } catch (e) {
+          // File doesn't exist, that's fine
         }
 
-        // Create DMG using hdiutil
+        // Create DMG using hdiutil (async)
         console.log('[AgentUpdateService] Creating DMG with hdiutil...');
         const cmd = `hdiutil create -volname "${volumeName}" -srcfolder "${stagingDir}" -ov -format UDZO "${outputPath}"`;
-        execSync(cmd, { stdio: 'pipe' });
+        await execAsync(cmd);
 
         console.log(`[AgentUpdateService] DMG created: ${outputPath}`);
         return outputPath;
 
       } finally {
         // Clean up staging directory
-        if (fs.existsSync(stagingDir)) {
-          fs.rmSync(stagingDir, { recursive: true, force: true });
+        try {
+          await fsPromises.rm(stagingDir, { recursive: true, force: true });
+        } catch (e) {
+          // Ignore cleanup errors
         }
       }
 
@@ -819,11 +831,20 @@ For support, visit: https://allow2.com/support
    * @param {string} serverUrl - Parent server URL
    * @param {string} childId - Optional child ID for pre-assignment
    * @param {boolean} advancedMode - Use fixed IP mode
+   * @param {Function} onProgress - Optional progress callback (progress: number, stage: string) => void
    * @returns {Promise<Object>} Bundle information
    */
-  async exportInstallerBundle(version, platform, serverUrl, childId = null, advancedMode = false) {
+  async exportInstallerBundle(version, platform, serverUrl, childId = null, advancedMode = false, onProgress = null) {
+    // Helper to report progress
+    const reportProgress = (progress, stage) => {
+      if (onProgress) {
+        onProgress(progress, stage);
+      }
+    };
+
     try {
       console.log(`[AgentUpdateService] Creating installer bundle for ${platform} v${version}...`);
+      reportProgress(20, 'Preparing...');
 
       // Create temp directory for staging
       const tempDir = path.join(this.app.getPath('temp'), 'allow2-installer-staging');
@@ -842,9 +863,11 @@ For support, visit: https://allow2.com/support
         installerExt = installer.ext;
         installerPath = installer.path;
         console.log(`[AgentUpdateService] Using cached installer: ${installerPath}`);
+        reportProgress(50, 'Using cached installer...');
       } else {
         // Download from GitHub
         console.log(`[AgentUpdateService] Downloading installer from GitHub...`);
+        reportProgress(25, 'Downloading from GitHub...');
 
         const release = this.releases.find(r => r.version === version);
         if (!release) {
@@ -861,7 +884,9 @@ For support, visit: https://allow2.com/support
         const fileName = installerAsset.name;
         const cachePath = path.join(this.cacheDir, fileName);
 
+        reportProgress(30, 'Downloading installer...');
         await this.downloadFile(installerAsset.url, cachePath);
+        reportProgress(50, 'Download complete...');
 
         // Update cache
         const checksum = await this.calculateChecksum(cachePath);
@@ -879,14 +904,16 @@ For support, visit: https://allow2.com/support
       }
 
       // Generate config file (NO registration code)
+      reportProgress(55, 'Generating configuration...');
       const configPath = path.join(tempDir, 'allow2automate-agent-config.json');
       const config = await this.generateAgentConfig(serverUrl, childId, platform, advancedMode);
-      fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+      await fs.promises.writeFile(configPath, JSON.stringify(config, null, 2), 'utf8');
 
       console.log(`[AgentUpdateService] Config generated: ${configPath}`);
+      reportProgress(60, 'Configuration ready...');
 
       // Determine bundle filename and type
-      const platformArch = platform === 'darwin' ? 'darwin-x64' :
+      const platformArch = platform === 'darwin' ? 'darwin-universal' :
                           platform === 'linux' ? 'linux-x64' :
                           platform === 'win32' ? 'win32-x64' : platform;
 
@@ -900,17 +927,21 @@ For support, visit: https://allow2.com/support
         bundlePath = path.join(tempDir, bundleFileName);
 
         // Create DMG bundle
+        reportProgress(65, 'Creating DMG bundle...');
         await this.createDMGBundle(installerPath, configPath, bundlePath);
       } else {
         bundleFileName = `allow2automate-agent-${platformArch}-v${version}.zip`;
         bundlePath = path.join(tempDir, bundleFileName);
 
         // Create ZIP bundle
+        reportProgress(65, 'Creating ZIP bundle...');
         await this.createInstallerBundle(installerPath, configPath, bundlePath);
       }
 
+      reportProgress(80, 'Bundle ready...');
+
       // Clean up temp config file
-      fs.unlinkSync(configPath);
+      await fs.promises.unlink(configPath).catch(() => {});
 
       console.log(`[AgentUpdateService] Bundle created: ${bundlePath}`);
 

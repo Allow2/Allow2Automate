@@ -18,6 +18,11 @@ import express from 'express';
 import { ipcMain, app as electronApp, dialog } from 'electron';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
+
+// Bundle cache for installer downloads
+// Key: hash of (platform, version, config), Value: { bundlePath, timestamp }
+const bundleCache = new Map();
 
 /**
  * Find an available port for the server
@@ -350,7 +355,14 @@ function setupIPCHandlers(agentService, agentUpdateService, actions) {
 
   // Download installer bundle with save dialog
   ipcMain.handle('agents:download-installer', async (event, { platform, childId, advancedMode, customIp, customPort }) => {
+    // Helper to send progress updates to renderer
+    const sendProgress = (progress, stage) => {
+      event.sender.send('agents:download-progress', { platform, progress, stage });
+    };
+
     try {
+      sendProgress(5, 'Initializing...');
+
       // Determine server URL
       let serverUrl;
       if (advancedMode && customIp && customPort) {
@@ -363,6 +375,8 @@ function setupIPCHandlers(agentService, agentUpdateService, actions) {
         serverUrl = `http://${serverIp}:${serverPort}`;
       }
 
+      sendProgress(10, 'Checking versions...');
+
       // Get latest version for this platform
       const latestVersions = agentUpdateService.getLatestVersions();
       const platformInfo = latestVersions[platform];
@@ -371,44 +385,104 @@ function setupIPCHandlers(agentService, agentUpdateService, actions) {
         throw new Error(`No installer available for platform: ${platform}`);
       }
 
-      // Create installer bundle (ZIP with installer + config)
-      console.log('[AgentIntegration] Creating installer bundle...');
-      const bundle = await agentUpdateService.exportInstallerBundle(
-        platformInfo.version,
-        platform,
+      // Build config for cache key calculation
+      const hostUuid = (global.services && global.services.uuid) ? global.services.uuid.getUUID() : null;
+      let publicKey = null;
+      if (global.services && global.services.keypair) {
+        try {
+          publicKey = await global.services.keypair.getPublicKey();
+        } catch (e) {
+          // Ignore
+        }
+      }
+
+      // Create cache key from platform, version, and config details
+      const configForHash = {
         serverUrl,
-        childId,  // Pass childId for optional pre-assignment
-        advancedMode
-      );
+        childId: childId || null,
+        advancedMode: advancedMode || false,
+        hostUuid,
+        publicKey
+      };
+      const cacheKey = crypto.createHash('sha256')
+        .update(`${platform}:${platformInfo.version}:${JSON.stringify(configForHash)}`)
+        .digest('hex');
+
+      sendProgress(15, 'Checking cache...');
+
+      // Check if we have a cached bundle
+      const cached = bundleCache.get(cacheKey);
+      let bundle;
+
+      if (cached && fs.existsSync(cached.bundlePath)) {
+        // Use cached bundle
+        console.log('[AgentIntegration] Using cached installer bundle');
+        sendProgress(80, 'Using cached bundle...');
+        bundle = cached.bundle;
+      } else {
+        // Create new installer bundle with progress callback
+        console.log('[AgentIntegration] Creating installer bundle...');
+        bundle = await agentUpdateService.exportInstallerBundle(
+          platformInfo.version,
+          platform,
+          serverUrl,
+          childId,  // Pass childId for optional pre-assignment
+          advancedMode,
+          // Progress callback - forward to renderer
+          (progress, stage) => sendProgress(progress, stage)
+        );
+
+        // Cache the bundle for future use
+        bundleCache.set(cacheKey, {
+          bundlePath: bundle.zipPath,
+          bundle: bundle,
+          timestamp: Date.now()
+        });
+      }
+
+      sendProgress(85, 'Preparing download...');
+
+      // Determine file type and appropriate filters
+      const isDMG = bundle.bundleType === 'dmg' || bundle.bundleFileName.endsWith('.dmg');
+      const filters = isDMG
+        ? [
+            { name: 'Disk Image', extensions: ['dmg'] },
+            { name: 'All Files', extensions: ['*'] }
+          ]
+        : [
+            { name: 'ZIP Archive', extensions: ['zip'] },
+            { name: 'All Files', extensions: ['*'] }
+          ];
 
       // Show save dialog
       const saveResult = await dialog.showSaveDialog({
         title: 'Save Agent Installer',
-        defaultPath: path.join(electronApp.getPath('downloads'), bundle.zipFileName),
-        filters: [
-          { name: 'ZIP Archive', extensions: ['zip'] },
-          { name: 'All Files', extensions: ['*'] }
-        ],
+        defaultPath: path.join(electronApp.getPath('downloads'), bundle.bundleFileName || bundle.zipFileName),
+        filters,
         properties: ['createDirectory', 'showOverwriteConfirmation']
       });
 
       // Check if user cancelled
       if (saveResult.canceled || !saveResult.filePath) {
         console.log('[AgentIntegration] User cancelled save dialog');
-        fs.unlinkSync(bundle.zipPath); // Clean up temp file
+        // Don't delete the bundle - it's cached for reuse
+        sendProgress(0, '');
         return { success: false, cancelled: true };
       }
 
-      // Move bundle from temp location to chosen location
+      sendProgress(90, 'Saving file...');
+
+      // Copy bundle to chosen location (keep original for cache)
       const finalPath = saveResult.filePath;
-      fs.copyFileSync(bundle.zipPath, finalPath);
-      fs.unlinkSync(bundle.zipPath); // Clean up temp file
+      await fs.promises.copyFile(bundle.bundlePath || bundle.zipPath, finalPath);
 
       console.log(`[AgentIntegration] Installer bundle saved to: ${finalPath}`);
 
       // Calculate file size for display
-      const stats = fs.statSync(finalPath);
+      const stats = await fs.promises.stat(finalPath);
       const fileSizeMB = (stats.size / (1024 * 1024)).toFixed(2);
+
+      sendProgress(100, 'Complete!');
 
       return {
         success: true,
@@ -421,7 +495,8 @@ function setupIPCHandlers(agentService, agentUpdateService, actions) {
         // Display data for UI dialog
         installerName: bundle.installerName,
         fileSizeMB: fileSizeMB,
-        zipFileName: bundle.zipFileName,
+        bundleFileName: bundle.bundleFileName || bundle.zipFileName,
+        bundleType: bundle.bundleType || 'zip',
         displayMessage: {
           title: 'Agent Installer Ready',
           message: 'Installer saved successfully',
@@ -451,6 +526,8 @@ function setupIPCHandlers(agentService, agentUpdateService, actions) {
 
     } catch (error) {
       console.error('[IPC] Error creating installer bundle:', error);
+
+      sendProgress(0, `Error: ${error.message}`);
 
       await dialog.showMessageBox({
         type: 'error',
