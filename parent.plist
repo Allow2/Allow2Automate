@@ -2,13 +2,40 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
     <dict>
+        <!-- Required: App Sandbox for Mac App Store -->
         <key>com.apple.security.app-sandbox</key>
         <true/>
+
+        <!-- Application group for shared data -->
         <key>com.apple.security.application-groups</key>
-        <string>L44G2T7U48.com.allow2.automate</string>
+        <array>
+            <string>L44G2T7U48.com.allow2.automate</string>
+        </array>
+
+        <!-- Network access -->
         <key>com.apple.security.network.client</key>
         <true/>
         <key>com.apple.security.network.server</key>
+        <true/>
+
+        <!-- Required for Electron/V8 JIT compilation (better-sqlite3 and other native modules) -->
+        <key>com.apple.security.cs.allow-jit</key>
+        <true/>
+
+        <!-- Required for V8 to allocate executable memory -->
+        <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+        <true/>
+
+        <!-- Required for loading native modules like better-sqlite3 -->
+        <key>com.apple.security.cs.disable-library-validation</key>
+        <true/>
+
+        <!-- File access for user-selected files (Open/Save dialogs) -->
+        <key>com.apple.security.files.user-selected.read-write</key>
+        <true/>
+
+        <!-- Downloads folder access -->
+        <key>com.apple.security.files.downloads.read-write</key>
         <true/>
     </dict>
 </plist>

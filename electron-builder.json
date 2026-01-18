@@ -16,6 +16,12 @@
     "node_modules"
   ],
 
+  "asar": true,
+  "asarUnpack": [
+    "**/*.node",
+    "**/better-sqlite3/**"
+  ],
+
   "dmg": {
     "contents": [{
       "type": "file",
@@ -30,13 +36,32 @@
   },
 
   "mac": {
-    "target": "mas",
+    "target": [
+      {
+        "target": "mas",
+        "arch": ["universal"]
+      }
+    ],
     "provisioningProfile": "./Allow2Automate_Distribution.provisionprofile",
     "category": "public.app-category.lifestyle",
     "icon": "./app/assets/icons/mac/icon.icns",
     "entitlements": "./parent.plist",
     "entitlementsInherit": "./child.plist",
-    "bundleVersion": 46
+    "bundleVersion": 46,
+    "hardenedRuntime": true,
+    "gatekeeperAssess": false,
+    "extendInfo": {
+      "NSAppTransportSecurity": {
+        "NSAllowsArbitraryLoads": true
+      }
+    }
+  },
+
+  "mas": {
+    "hardenedRuntime": false,
+    "entitlements": "./parent.plist",
+    "entitlementsInherit": "./child.plist",
+    "provisioningProfile": "./Allow2Automate_Distribution.provisionprofile"
   },
 
   "appx": {
@@ -53,7 +78,10 @@
   },
 
   "linux": {
-    "target": [ "snap", "AppImage" ],
+    "target": ["snap", "AppImage"],
     "category": "Utility"
-  }
+  },
+
+  "nativeRebuilder": "sequential",
+  "npmRebuild": true
 }
