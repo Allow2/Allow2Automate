@@ -21,7 +21,7 @@ permissions:
   id-token: write  # Required for Azure OIDC authentication
 
 env:
-  NODE_VERSION: '18'
+  NODE_VERSION: '20'
 
 jobs:
   build-windows:
