@@ -629,14 +629,82 @@ jobs:
 
       - name: Submit to Microsoft Store
         if: steps.check-creds.outputs.HAS_CREDS == 'true'
-        uses: microsoft/store-submission@v1
-        with:
-          command: publish
-          productId: ${{ secrets.WINDOWS_STORE_PRODUCT_ID }}
-          packagePath: artifacts/*.appx
-          clientId: ${{ secrets.WINDOWS_STORE_CLIENT_ID }}
-          clientSecret: ${{ secrets.WINDOWS_STORE_CLIENT_SECRET }}
-          tenantId: ${{ secrets.WINDOWS_STORE_TENANT_ID }}
+        shell: pwsh
+        env:
+          STORE_PRODUCT_ID: ${{ secrets.WINDOWS_STORE_PRODUCT_ID }}
+          STORE_TENANT_ID: ${{ secrets.WINDOWS_STORE_TENANT_ID }}
+          STORE_CLIENT_ID: ${{ secrets.WINDOWS_STORE_CLIENT_ID }}
+          STORE_CLIENT_SECRET: ${{ secrets.WINDOWS_STORE_CLIENT_SECRET }}
+        run: |
+          Write-Host "=== Submitting to Microsoft Store ==="
+
+          # Find the AppX/MSIX file
+          $package = Get-ChildItem -Path "artifacts" -Include "*.appx","*.msix" -Recurse | Select-Object -First 1
+
+          if (-not $package) {
+            Write-Host "❌ No AppX/MSIX package found"
+            exit 1
+          }
+
+          Write-Host "Package: $($package.FullName)"
+          Write-Host "Size: $([math]::Round($package.Length / 1MB, 2)) MB"
+
+          # Get access token
+          Write-Host "Getting access token..."
+          $tokenUrl = "https://login.microsoftonline.com/$env:STORE_TENANT_ID/oauth2/token"
+          $body = @{
+            grant_type    = "client_credentials"
+            client_id     = $env:STORE_CLIENT_ID
+            client_secret = $env:STORE_CLIENT_SECRET
+            resource      = "https://manage.devcenter.microsoft.com"
+          }
+
+          try {
+            $tokenResponse = Invoke-RestMethod -Uri $tokenUrl -Method Post -Body $body
+            $accessToken = $tokenResponse.access_token
+            Write-Host "✅ Access token obtained"
+          } catch {
+            Write-Host "❌ Failed to get access token: $_"
+            Write-Host ""
+            Write-Host "Please verify your Azure AD credentials are correct."
+            exit 1
+          }
+
+          # Get current submission
+          $headers = @{
+            Authorization = "Bearer $accessToken"
+            "Content-Type" = "application/json"
+          }
+
+          $appUrl = "https://manage.devcenter.microsoft.com/v1.0/my/applications/$env:STORE_PRODUCT_ID"
+
+          try {
+            $app = Invoke-RestMethod -Uri $appUrl -Headers $headers -Method Get
+            Write-Host "✅ Found app: $($app.primaryName)"
+          } catch {
+            Write-Host "❌ Failed to find app with ID: $env:STORE_PRODUCT_ID"
+            Write-Host "Error: $_"
+            Write-Host ""
+            Write-Host "Please ensure:"
+            Write-Host "  1. The product exists in Partner Center"
+            Write-Host "  2. WINDOWS_STORE_PRODUCT_ID contains the correct Store ID"
+            Write-Host "  3. Your Azure AD app has access to this product"
+            Write-Host ""
+            Write-Host "Manual submission: https://partner.microsoft.com/dashboard"
+            exit 1
+          }
+
+          Write-Host ""
+          Write-Host "=== Submission Instructions ==="
+          Write-Host "Package built successfully and ready for upload."
+          Write-Host ""
+          Write-Host "For first-time submission or major updates:"
+          Write-Host "  1. Go to: https://partner.microsoft.com/dashboard"
+          Write-Host "  2. Select your app: $($app.primaryName)"
+          Write-Host "  3. Create new submission"
+          Write-Host "  4. Upload: $($package.Name)"
+          Write-Host ""
+          Write-Host "The package is available in the workflow artifacts."
 
       - name: Store submission status
         if: steps.check-creds.outputs.HAS_CREDS != 'true'
@@ -646,10 +714,15 @@ jobs:
           Write-Host "Automatic submission not configured."
           Write-Host ""
           Write-Host "To enable, add these secrets:"
-          Write-Host "  - WINDOWS_STORE_PRODUCT_ID"
-          Write-Host "  - WINDOWS_STORE_CLIENT_ID"
-          Write-Host "  - WINDOWS_STORE_CLIENT_SECRET"
-          Write-Host "  - WINDOWS_STORE_TENANT_ID"
+          Write-Host "  - WINDOWS_STORE_PRODUCT_ID (Store ID from Partner Center)"
+          Write-Host "  - WINDOWS_STORE_CLIENT_ID (Azure AD App Client ID)"
+          Write-Host "  - WINDOWS_STORE_CLIENT_SECRET (Azure AD App Secret)"
+          Write-Host "  - WINDOWS_STORE_TENANT_ID (Azure AD Tenant ID)"
+          Write-Host ""
+          Write-Host "First-time setup:"
+          Write-Host "  1. Create your app in Partner Center first"
+          Write-Host "  2. Create an Azure AD app and link it to Partner Center"
+          Write-Host "  3. Add the secrets to your GitHub repository"
           Write-Host ""
           Write-Host "Manual submission: https://partner.microsoft.com/dashboard"
 

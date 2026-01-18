@@ -50,6 +50,7 @@
     "bundleVersion": 46,
     "hardenedRuntime": true,
     "gatekeeperAssess": false,
+    "x64ArchFiles": "**/darwin-x64-*/**",
     "extendInfo": {
       "NSAppTransportSecurity": {
         "NSAllowsArbitraryLoads": true
