@@ -314,33 +314,86 @@ jobs:
           fi
 
           echo "=== Signing macOS PKG ==="
+
+          # CRITICAL: Unlock keychain immediately before productsign
+          # The keychain may have auto-locked since import step
+          echo "Unlocking keychain..."
+          security unlock-keychain -p "actions" temp.keychain
+          security set-keychain-settings -lut 21600 temp.keychain
+
+          # Ensure temp.keychain is in search path and default
+          security list-keychains -d user -s "$HOME/Library/Keychains/temp.keychain-db" "$HOME/Library/Keychains/login.keychain-db"
+          security default-keychain -s temp.keychain
+
           PKG=$(find dist -name "*.pkg" | head -n 1)
 
           if [ -z "$PKG" ]; then
             echo "No PKG file found, checking for MAS build..."
-            # For MAS builds, electron-builder creates the pkg differently
             PKG=$(find dist/mas -name "*.pkg" 2>/dev/null | head -n 1)
+          fi
+
+          if [ -z "$PKG" ]; then
+            PKG=$(find dist/mas-universal -name "*.pkg" 2>/dev/null | head -n 1)
           fi
 
           if [ -n "$PKG" ]; then
             echo "Found PKG: $PKG"
+            echo "PKG size: $(ls -lh "$PKG" | awk '{print $5}')"
 
             # Find installer identity
             INSTALLER_IDENTITY=$(security find-identity -v temp.keychain 2>&1 | grep "3rd Party Mac Developer Installer\|Developer ID Installer" | head -1 | sed 's/.*"\(.*\)".*/\1/')
 
             if [ -n "$INSTALLER_IDENTITY" ]; then
               echo "Signing with: $INSTALLER_IDENTITY"
-              productsign --sign "$INSTALLER_IDENTITY" --keychain temp.keychain "$PKG" "${PKG%.pkg}-signed.pkg"
-              mv "${PKG%.pkg}-signed.pkg" "$PKG"
-              echo "✅ PKG signed successfully"
 
-              # Verify
-              pkgutil --check-signature "$PKG" || true
+              # Run productsign with timeout to prevent hanging (macOS compatible)
+              # 5 minute timeout should be more than enough for any PKG
+              (
+                productsign --sign "$INSTALLER_IDENTITY" --keychain temp.keychain "$PKG" "${PKG%.pkg}-signed.pkg"
+              ) &
+              SIGN_PID=$!
+
+              # Wait up to 300 seconds (5 minutes)
+              TIMEOUT=300
+              while [ $TIMEOUT -gt 0 ]; do
+                if ! kill -0 $SIGN_PID 2>/dev/null; then
+                  # Process finished
+                  wait $SIGN_PID
+                  EXIT_CODE=$?
+                  break
+                fi
+                sleep 1
+                TIMEOUT=$((TIMEOUT - 1))
+              done
+
+              if [ $TIMEOUT -eq 0 ]; then
+                echo "❌ productsign timed out after 5 minutes"
+                kill -9 $SIGN_PID 2>/dev/null || true
+                echo "This usually means keychain access is blocked."
+                echo "Keychain info:"
+                security list-keychains
+                security default-keychain
+                exit 1
+              elif [ $EXIT_CODE -eq 0 ]; then
+                mv "${PKG%.pkg}-signed.pkg" "$PKG"
+                echo "✅ PKG signed successfully"
+
+                # Verify signature
+                echo "Verifying signature..."
+                pkgutil --check-signature "$PKG" || true
+              else
+                echo "❌ productsign failed with exit code $EXIT_CODE"
+                exit 1
+              fi
             else
               echo "⚠️  No installer signing identity found"
+              echo "Available identities:"
+              security find-identity -v temp.keychain
             fi
           else
             echo "No PKG file found to sign"
+            echo "Contents of dist/:"
+            find dist -type f -name "*.pkg" -o -name "*.app" 2>/dev/null || true
           fi
 
       - name: Notarize macOS app
