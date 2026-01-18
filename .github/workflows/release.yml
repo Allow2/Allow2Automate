@@ -193,20 +193,22 @@ jobs:
 
           # Import Application certificate
           if [ -n "$APPLE_APP_CERT_BASE64" ]; then
-            echo "=== Importing Developer ID Application Certificate ==="
+            echo "=== Importing 3rd Party Mac Developer Application Certificate ==="
             echo "$APPLE_APP_CERT_BASE64" | base64 -d > app_cert.p12
-            security import app_cert.p12 -k temp.keychain -P "$APPLE_CERT_PASSWORD" -A
+            security import app_cert.p12 -k temp.keychain -P "$APPLE_CERT_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
             rm app_cert.p12
             echo "✅ Application certificate imported"
           fi
 
-          # Import Installer certificate
+          # Import Installer certificate with productsign ACL
           if [ -n "$APPLE_INSTALLER_CERT_BASE64" ]; then
-            echo "=== Importing Developer ID Installer Certificate ==="
+            echo "=== Importing 3rd Party Mac Developer Installer Certificate ==="
             echo "$APPLE_INSTALLER_CERT_BASE64" | base64 -d > installer_cert.p12
-            security import installer_cert.p12 -k temp.keychain -P "$APPLE_CERT_PASSWORD" -A
+            # CRITICAL: Must include -T /usr/bin/productsign for installer cert to work
+            # The -p codesigning policy doesn't include installer certs (different EKU)
+            security import installer_cert.p12 -k temp.keychain -P "$APPLE_CERT_PASSWORD" -T /usr/bin/codesign -T /usr/bin/productsign -T /usr/bin/security
             rm installer_cert.p12
-            echo "✅ Installer certificate imported"
+            echo "✅ Installer certificate imported with productsign ACL"
           fi
 
           # Download and import Apple WWDR intermediate certificate (required for cert chain validation)
@@ -274,9 +276,14 @@ jobs:
 
       - name: Build macOS app (MAS target - Universal)
         env:
-          # Enable code signing if certificates are available
+          # Application signing certificate (for codesign)
           CSC_LINK: ${{ secrets.APPLE_APP_CERT_BASE64 }}
           CSC_KEY_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+          # Installer signing certificate (for productsign) - CRITICAL for MAS PKG
+          # electron-builder uses these separate env vars because installer certs
+          # have different Extended Key Usage and aren't found by -p codesigning policy
+          CSC_INSTALLER_LINK: ${{ secrets.APPLE_INSTALLER_CERT_BASE64 }}
+          CSC_INSTALLER_KEY_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
           APPLE_DEVELOPER_ID: ${{ secrets.APPLE_DEVELOPER_ID }}
           APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
         run: |
@@ -285,10 +292,14 @@ jobs:
           security list-keychains -d user -s "$HOME/Library/Keychains/temp.keychain-db" "$HOME/Library/Keychains/login.keychain-db"
           security default-keychain -s temp.keychain
 
-          # Verify installer identity is available
-          echo "=== Checking for installer identity ==="
-          security find-identity -v -p codesigning temp.keychain | grep -i "installer" || echo "Warning: No installer identity found in temp.keychain"
-          security find-identity -v temp.keychain | grep -i "installer" || echo "Warning: No installer identity found"
+          # Verify identities are available
+          echo "=== Checking for signing identities ==="
+          echo "Application identities (codesigning policy):"
+          security find-identity -v -p codesigning temp.keychain | grep -i "3rd Party Mac Developer Application" || echo "  No app signing identity found"
+
+          echo ""
+          echo "Installer identities (no policy filter - installer certs have different EKU):"
+          security find-identity -v temp.keychain | grep -i "3rd Party Mac Developer Installer" || echo "  No installer identity found"
 
           # Run the build
           npm run private:build:mac
@@ -389,7 +400,7 @@ jobs:
           retention-days: 90
 
   build-linux:
-    name: Build Linux (Snap Store)
+    name: Build Linux & Publish to Snap Store
     runs-on: ubuntu-latest
 
     steps:
@@ -407,27 +418,12 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Get version from tag
-        id: version
-        run: |
-          if [ "${{ github.ref_type }}" = "tag" ]; then
-            VERSION="${{ github.ref_name }}"
-            VERSION="${VERSION#v}"
-          elif [ -n "${{ github.event.inputs.version }}" ]; then
-            VERSION="${{ github.event.inputs.version }}"
-          else
-            VERSION=$(node -p "require('./package.json').version")
-          fi
-          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-          echo "Building version: $VERSION"
-
       - name: Install dependencies
         run: npm ci
         timeout-minutes: 15
 
       - name: Install Snapcraft
-        run: |
-          sudo snap install snapcraft --classic
+        run: sudo snap install snapcraft --classic
 
       - name: Build application
         run: npm run private:compile
@@ -435,56 +431,44 @@ jobs:
       - name: Build Linux packages
         run: npm run private:build:linux
 
-      - name: Import GPG key for signing
-        env:
-          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
-        run: |
-          if [ -z "$GPG_PRIVATE_KEY" ]; then
-            echo "⚠️  GPG_PRIVATE_KEY not set - skipping GPG signing"
-            exit 0
-          fi
-
-          echo "=== Importing GPG Key ==="
-          echo "$GPG_PRIVATE_KEY" | gpg --batch --import
-
-          # Configure GPG agent
-          echo "allow-preset-passphrase" > ~/.gnupg/gpg-agent.conf
-          gpg-connect-agent reloadagent /bye
-
-          # Verify import
-          echo "Imported keys:"
-          gpg --list-secret-keys --keyid-format LONG | sed 's/\([A-F0-9]\{12\}\)[A-F0-9]\{4\}/\1XXXX/g'
-
-      - name: Sign Linux packages with GPG
-        env:
-          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
-          GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-        run: |
-          if [ -z "$GPG_PRIVATE_KEY" ]; then
-            echo "⚠️  Skipping GPG signing"
-            exit 0
-          fi
-
-          echo "=== Signing Linux Packages ==="
-
-          for pkg in dist/*.snap dist/*.AppImage dist/*.deb dist/*.rpm; do
-            if [ -f "$pkg" ]; then
-              echo "Signing: $(basename $pkg)"
-              echo "$GPG_PASSPHRASE" | gpg --batch --yes --passphrase-fd 0 \
-                --pinentry-mode loopback -u "$GPG_KEY_ID" \
-                --detach-sign --armor "$pkg"
-
-              if [ -f "$pkg.asc" ]; then
-                echo "  ✅ Signature created"
-              fi
-            fi
-          done
-
       - name: List built files
         run: |
           echo "=== Built files ==="
-          find dist -type f \( -name "*.snap" -o -name "*.AppImage" -o -name "*.deb" -o -name "*.rpm" -o -name "*.asc" \) -exec ls -lh {} \;
+          find dist -type f \( -name "*.snap" -o -name "*.AppImage" \) -exec ls -lh {} \;
+
+      - name: Publish to Snap Store
+        if: |
+          startsWith(github.ref, 'refs/tags/') &&
+          !contains(github.ref_name, '-beta') &&
+          !contains(github.ref_name, '-alpha') &&
+          !contains(github.ref_name, '-rc')
+        env:
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+        run: |
+          if [ -z "$SNAPCRAFT_STORE_CREDENTIALS" ]; then
+            echo "=== Snap Store Submission ==="
+            echo "⚠️  SNAPCRAFT_STORE_CREDENTIALS not configured."
+            echo ""
+            echo "To enable automatic publishing:"
+            echo "  1. Run: snapcraft export-login --snaps=allow2automate --channels=stable,candidate,beta,edge credentials.txt"
+            echo "  2. Add contents as SNAPCRAFT_STORE_CREDENTIALS secret in GitHub"
+            exit 0
+          fi
+
+          SNAP=$(find dist -name "*.snap" | head -n 1)
+          if [ -z "$SNAP" ]; then
+            echo "❌ No snap file found"
+            exit 1
+          fi
+
+          echo "=== Publishing to Snap Store ==="
+          echo "Snap: $SNAP"
+
+          echo "$SNAPCRAFT_STORE_CREDENTIALS" | snapcraft login --with -
+          snapcraft upload "$SNAP" --release=stable
+
+          echo "✅ Published to Snap Store"
+          echo "View at: https://snapcraft.io/allow2automate"
 
       - name: Upload Linux artifacts
         uses: actions/upload-artifact@v4
@@ -493,9 +477,6 @@ jobs:
           path: |
             dist/*.snap
             dist/*.AppImage
-            dist/*.deb
-            dist/*.rpm
-            dist/*.asc
           retention-days: 90
 
   create-release:
@@ -819,65 +800,3 @@ jobs:
           echo "✅ Submitted to Mac App Store"
           echo "Check status at: https://appstoreconnect.apple.com"
 
-  submit-snap-store:
-    name: Submit to Snap Store
-    needs: build-linux
-    runs-on: ubuntu-latest
-    if: |
-      startsWith(github.ref, 'refs/tags/') &&
-      !contains(github.ref_name, '-beta') &&
-      !contains(github.ref_name, '-alpha') &&
-      !contains(github.ref_name, '-rc') &&
-      github.event.inputs.skip_store_submission != 'true'
-
-    steps:
-      - name: Download Linux artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: linux-packages
-          path: artifacts
-
-      - name: Install Snapcraft
-        run: |
-          sudo snap install snapcraft --classic
-
-      - name: List artifacts
-        run: |
-          echo "=== Downloaded artifacts ==="
-          find artifacts -type f -exec ls -lh {} \;
-
-      - name: Submit to Snap Store
-        env:
-          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
-        run: |
-          if [ -z "$SNAPCRAFT_STORE_CREDENTIALS" ]; then
-            echo "=== Snap Store Submission ==="
-            echo "Automatic submission not configured."
-            echo ""
-            echo "To enable, add SNAPCRAFT_STORE_CREDENTIALS secret:"
-            echo "  1. Run: snapcraft export-login --snaps=allow2automate --channels=stable credentials.txt"
-            echo "  2. Add contents of credentials.txt as SNAPCRAFT_STORE_CREDENTIALS secret"
-            echo ""
-            echo "Manual submission: snapcraft upload <snap-file>"
-            exit 0
-          fi
-
-          echo "=== Submitting to Snap Store ==="
-
-          # Find the snap file
-          SNAP=$(find artifacts -name "*.snap" | head -n 1)
-
-          if [ -z "$SNAP" ]; then
-            echo "❌ No snap file found"
-            exit 1
-          fi
-
-          echo "Uploading: $SNAP"
-
-          # Login and upload
-          echo "$SNAPCRAFT_STORE_CREDENTIALS" | snapcraft login --with -
-
-          snapcraft upload "$SNAP" --release=stable
-
-          echo "✅ Submitted to Snap Store"
-          echo "Check status at: https://snapcraft.io/allow2automate"
