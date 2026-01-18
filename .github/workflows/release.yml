@@ -195,20 +195,21 @@ jobs:
           if [ -n "$APPLE_APP_CERT_BASE64" ]; then
             echo "=== Importing 3rd Party Mac Developer Application Certificate ==="
             echo "$APPLE_APP_CERT_BASE64" | base64 -d > app_cert.p12
-            security import app_cert.p12 -k temp.keychain -P "$APPLE_CERT_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+            # Use -A flag to allow ALL applications access (required for CI)
+            security import app_cert.p12 -k temp.keychain -P "$APPLE_CERT_PASSWORD" -A
             rm app_cert.p12
-            echo "✅ Application certificate imported"
+            echo "✅ Application certificate imported with unrestricted access"
           fi
 
           # Import Installer certificate with productsign ACL
           if [ -n "$APPLE_INSTALLER_CERT_BASE64" ]; then
             echo "=== Importing 3rd Party Mac Developer Installer Certificate ==="
             echo "$APPLE_INSTALLER_CERT_BASE64" | base64 -d > installer_cert.p12
-            # CRITICAL: Must include -T /usr/bin/productsign for installer cert to work
-            # The -p codesigning policy doesn't include installer certs (different EKU)
-            security import installer_cert.p12 -k temp.keychain -P "$APPLE_CERT_PASSWORD" -T /usr/bin/codesign -T /usr/bin/productsign -T /usr/bin/security
+            # CRITICAL: Use -A flag to allow ALL applications access (required for CI)
+            # Individual -T flags may not be sufficient on GitHub Actions runners
+            security import installer_cert.p12 -k temp.keychain -P "$APPLE_CERT_PASSWORD" -A
             rm installer_cert.p12
-            echo "✅ Installer certificate imported with productsign ACL"
+            echo "✅ Installer certificate imported with unrestricted access"
           fi
 
           # Download and import Apple WWDR intermediate certificate (required for cert chain validation)
@@ -218,8 +219,13 @@ jobs:
           rm AppleWWDRCAG3.cer
           echo "✅ Apple WWDR G3 intermediate certificate imported"
 
-          # Configure keychain
-          security set-key-partition-list -S apple-tool:,apple:,codesign:,productsign: -s -k "$KEYCHAIN_PASSWORD" temp.keychain
+          # Configure keychain partition list for unrestricted access
+          # The -A flag during import should have set this, but we ensure it here
+          # Using empty string ("") after -S allows unrestricted access
+          security set-key-partition-list -S "apple-tool:,apple:,codesign:,productsign:" -s -k "$KEYCHAIN_PASSWORD" temp.keychain 2>/dev/null || {
+            echo "Warning: Could not set partition list with specific tools, trying unrestricted..."
+            security set-key-partition-list -S "" -s -k "$KEYCHAIN_PASSWORD" temp.keychain 2>/dev/null || true
+          }
           security default-keychain -s temp.keychain
           security list-keychains -d user -s "$KEYCHAIN_PATH" "$HOME/Library/Keychains/login.keychain-db"
 
@@ -307,6 +313,7 @@ jobs:
       - name: Sign macOS PKG
         env:
           APPLE_INSTALLER_CERT_BASE64: ${{ secrets.APPLE_INSTALLER_CERT_BASE64 }}
+          APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
         run: |
           if [ -z "$APPLE_INSTALLER_CERT_BASE64" ]; then
             echo "⚠️  APPLE_INSTALLER_CERT_BASE64 not set - skipping PKG signing"
@@ -315,15 +322,35 @@ jobs:
 
           echo "=== Signing macOS PKG ==="
 
-          # CRITICAL: Unlock keychain immediately before productsign
-          # The keychain may have auto-locked since import step
-          echo "Unlocking keychain..."
+          # CRITICAL: Re-unlock keychain and reset partition list
+          # The build step takes time and keychain may have locked or partition list may need refresh
+          echo "Step 1: Unlocking keychain..."
           security unlock-keychain -p "actions" temp.keychain
           security set-keychain-settings -lut 21600 temp.keychain
 
           # Ensure temp.keychain is in search path and default
           security list-keychains -d user -s "$HOME/Library/Keychains/temp.keychain-db" "$HOME/Library/Keychains/login.keychain-db"
           security default-keychain -s temp.keychain
+
+          # CRITICAL: Re-apply partition list for ALL keys in keychain
+          # This ensures productsign can access the private key without UI prompts
+          echo "Step 2: Re-applying partition list for productsign access..."
+          security set-key-partition-list -S "apple-tool:,apple:,codesign:,productsign:" -s -k "actions" temp.keychain 2>/dev/null || {
+            echo "Warning: Could not set partition list, trying alternative method..."
+            # Alternative: allow all partitions
+            security set-key-partition-list -S "apple-tool:,apple:,codesign:,productsign:,teamid:" -s -k "actions" temp.keychain 2>/dev/null || true
+          }
+
+          # Verify keychain is unlocked and has the right identity
+          echo "Step 3: Verifying keychain state..."
+          echo "Keychain list:"
+          security list-keychains
+          echo ""
+          echo "Default keychain:"
+          security default-keychain
+          echo ""
+          echo "Installer identities available:"
+          security find-identity -v temp.keychain | grep -i "installer" || echo "WARNING: No installer identities found!"
 
           PKG=$(find dist -name "*.pkg" | head -n 1)
 
@@ -337,6 +364,7 @@ jobs:
           fi
 
           if [ -n "$PKG" ]; then
+            echo ""
             echo "Found PKG: $PKG"
             echo "PKG size: $(ls -lh "$PKG" | awk '{print $5}')"
 
@@ -344,12 +372,20 @@ jobs:
             INSTALLER_IDENTITY=$(security find-identity -v temp.keychain 2>&1 | grep "3rd Party Mac Developer Installer\|Developer ID Installer" | head -1 | sed 's/.*"\(.*\)".*/\1/')
 
             if [ -n "$INSTALLER_IDENTITY" ]; then
-              echo "Signing with: $INSTALLER_IDENTITY"
+              echo "Signing with: $(echo "$INSTALLER_IDENTITY" | sed 's/Allow2.*/Allow2 ***/')"
+
+              # Final keychain unlock right before signing
+              security unlock-keychain -p "actions" temp.keychain
+
+              echo ""
+              echo "Step 4: Running productsign..."
 
               # Run productsign with timeout to prevent hanging (macOS compatible)
               # 5 minute timeout should be more than enough for any PKG
               (
-                productsign --sign "$INSTALLER_IDENTITY" --keychain temp.keychain "$PKG" "${PKG%.pkg}-signed.pkg"
+                # Use KEYCHAIN environment variable as fallback
+                export KEYCHAIN="$HOME/Library/Keychains/temp.keychain-db"
+                productsign --sign "$INSTALLER_IDENTITY" --keychain temp.keychain "$PKG" "${PKG%.pkg}-signed.pkg" 2>&1
               ) &
               SIGN_PID=$!
 
@@ -369,16 +405,30 @@ jobs:
               if [ $TIMEOUT -eq 0 ]; then
                 echo "❌ productsign timed out after 5 minutes"
                 kill -9 $SIGN_PID 2>/dev/null || true
-                echo "This usually means keychain access is blocked."
+                echo ""
+                echo "=== DEBUGGING INFO ==="
+                echo "This usually means keychain access is blocked by macOS security."
+                echo ""
                 echo "Keychain info:"
                 security list-keychains
+                echo ""
+                echo "Default keychain:"
                 security default-keychain
+                echo ""
+                echo "Keychain status:"
+                security show-keychain-info temp.keychain 2>&1 || true
+                echo ""
+                echo "Possible causes:"
+                echo "1. Keychain partition list not set correctly for productsign"
+                echo "2. Certificate private key requires interactive authorization"
+                echo "3. Certificate chain validation failing"
                 exit 1
               elif [ $EXIT_CODE -eq 0 ]; then
                 mv "${PKG%.pkg}-signed.pkg" "$PKG"
                 echo "✅ PKG signed successfully"
 
                 # Verify signature
+                echo ""
                 echo "Verifying signature..."
                 pkgutil --check-signature "$PKG" || true
               else

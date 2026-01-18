@@ -630,25 +630,10 @@ migrateWemo();
     }
 })();
 
-plugins.getInstalled((err, installedPlugins) => {
-    if (err) {
-        console.log('[Plugins] Error getting installed plugins:', err);
-        return;
-    }
-
-    console.log('[Plugins] Found installed plugins:', Object.keys(installedPlugins || {}).length);
-    if (installedPlugins && Object.keys(installedPlugins).length > 0) {
-        console.log('[Plugins] Installed plugin names:', Object.keys(installedPlugins));
-    }
-
-    // Dispatch action to update store
-    actions.installedPluginReplace(installedPlugins);
-    console.log('[Plugins] Dispatched installedPluginReplace action to main store');
-
-    // Verify it's in the store
-    const currentState = store.getState();
-    console.log('[Plugins] Installed plugins in main store:', Object.keys(currentState.installedPlugins || {}).length);
-});
+// NOTE: plugins.getInstalled() is now called inside app.on('ready') AFTER
+// agent services are initialized. This ensures global.services is populated
+// before plugins try to access agent service.
+// See the initializeInstalledPlugins() function in the ready handler.
 
 // seed test data
 function testData() {
@@ -849,6 +834,29 @@ app.on('ready', async () => {
         console.error('[Main] Error stack:', error.stack);
         // Continue without agent services - they are optional
     }
+
+    // CRITICAL: Initialize installed plugins AFTER agent services are ready
+    // This ensures global.services is populated before plugins try to access it
+    console.log('[Main] Initializing installed plugins (after agent services)...');
+    plugins.getInstalled((err, installedPlugins) => {
+        if (err) {
+            console.log('[Plugins] Error getting installed plugins:', err);
+            return;
+        }
+
+        console.log('[Plugins] Found installed plugins:', Object.keys(installedPlugins || {}).length);
+        if (installedPlugins && Object.keys(installedPlugins).length > 0) {
+            console.log('[Plugins] Installed plugin names:', Object.keys(installedPlugins));
+        }
+
+        // Dispatch action to update store
+        actions.installedPluginReplace(installedPlugins);
+        console.log('[Plugins] Dispatched installedPluginReplace action to main store');
+
+        // Verify it's in the store
+        const currentState = store.getState();
+        console.log('[Plugins] Installed plugins in main store:', Object.keys(currentState.installedPlugins || {}).length);
+    });
 
     if (process.platform === 'darwin') {
         template.unshift({
