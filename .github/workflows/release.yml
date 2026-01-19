@@ -171,6 +171,26 @@ jobs:
         run: npm ci
         timeout-minutes: 15
 
+      - name: Install Rosetta (for x64 cross-compilation)
+        run: |
+          # Install Rosetta 2 to enable x64 binary compilation on ARM64 runners
+          # This is required for building universal native modules
+          if [ "$(uname -m)" = "arm64" ]; then
+            echo "ARM64 runner detected, installing Rosetta..."
+            softwareupdate --install-rosetta --agree-to-license || true
+          else
+            echo "x64 runner, Rosetta not needed"
+          fi
+
+      - name: Build universal native modules
+        run: |
+          echo "=== Building Universal Native Modules ==="
+          echo "This ensures better-sqlite3 and other native modules work on both Intel and Apple Silicon Macs"
+          node scripts/build-universal-native.js
+        env:
+          # Ensure we have the right Python for node-gyp
+          npm_config_python: python3
+
       - name: Import Apple certificates
         env:
           APPLE_APP_CERT_BASE64: ${{ secrets.APPLE_APP_CERT_BASE64 }}
@@ -491,6 +511,55 @@ jobs:
         run: |
           echo "=== Built files ==="
           find dist -type f \( -name "*.pkg" -o -name "*.dmg" -o -name "*.app" \) -exec ls -lh {} \;
+
+      - name: Verify native modules are universal
+        run: |
+          echo "=== Verifying Native Modules are Universal ==="
+
+          # Find the .app bundle
+          APP=$(find dist -name "*.app" -type d | head -n 1)
+
+          if [ -z "$APP" ]; then
+            echo "No .app bundle found, checking node_modules..."
+            APP="."
+          fi
+
+          # Find all .node files
+          NODE_FILES=$(find "$APP" -name "*.node" -type f 2>/dev/null || find node_modules -name "*.node" -type f 2>/dev/null | head -10)
+
+          if [ -z "$NODE_FILES" ]; then
+            echo "No .node files found in bundle"
+            exit 0
+          fi
+
+          echo "Checking .node files for universal architecture:"
+          FAILED=0
+
+          for NODE_FILE in $NODE_FILES; do
+            ARCHS=$(lipo -info "$NODE_FILE" 2>/dev/null || echo "unknown")
+            FILE_NAME=$(basename "$NODE_FILE")
+
+            if echo "$ARCHS" | grep -q "x86_64" && echo "$ARCHS" | grep -q "arm64"; then
+              echo "  ✅ $FILE_NAME: Universal (x86_64 + arm64)"
+            elif echo "$ARCHS" | grep -q "x86_64"; then
+              echo "  ⚠️  $FILE_NAME: x86_64 only (Intel)"
+              FAILED=1
+            elif echo "$ARCHS" | grep -q "arm64"; then
+              echo "  ⚠️  $FILE_NAME: arm64 only (Apple Silicon)"
+              FAILED=1
+            else
+              echo "  ❓ $FILE_NAME: $ARCHS"
+            fi
+          done
+
+          if [ $FAILED -eq 1 ]; then
+            echo ""
+            echo "⚠️  WARNING: Some native modules are not universal binaries"
+            echo "Users on different architectures may experience issues"
+          else
+            echo ""
+            echo "✅ All native modules are universal binaries"
+          fi
 
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4

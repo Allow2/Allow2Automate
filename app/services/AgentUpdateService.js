@@ -56,6 +56,168 @@ export default class AgentUpdateService {
     if (!fs.existsSync(this.cacheDir)) {
       fs.mkdirSync(this.cacheDir, { recursive: true });
     }
+
+    // Clean up temp staging directory on startup
+    await this.cleanupTempStaging();
+  }
+
+  /**
+   * Clean up temporary staging directory
+   * Removes old bundle files (DMG, ZIP) that are no longer needed
+   * Also unmounts any orphaned DMG volumes on macOS
+   */
+  async cleanupTempStaging() {
+    try {
+      // On macOS, also clean up orphaned DMG mounts
+      if (process.platform === 'darwin') {
+        const { exec } = require('child_process');
+        const { promisify } = require('util');
+        const execAsync = promisify(exec);
+
+        try {
+          // Find all mounted volumes matching our naming pattern
+          const volumes = fs.readdirSync('/Volumes').filter(v =>
+            v.startsWith('Allow2 Automate Agent')
+          );
+
+          for (const volume of volumes) {
+            const volumePath = `/Volumes/${volume}`;
+            try {
+              console.log(`[AgentUpdateService] Unmounting orphaned DMG on startup: ${volumePath}`);
+              await execAsync(`hdiutil detach "${volumePath}" -force`);
+            } catch (e) {
+              // Ignore - might not be a DMG or already unmounted
+            }
+          }
+        } catch (e) {
+          // Ignore - /Volumes might not be readable
+        }
+      }
+
+      const tempDir = path.join(this.app.getPath('temp'), 'allow2-installer-staging');
+      if (!fs.existsSync(tempDir)) {
+        return;
+      }
+
+      const files = fs.readdirSync(tempDir);
+      const now = Date.now();
+      const maxAge = 24 * 60 * 60 * 1000; // 24 hours
+
+      for (const file of files) {
+        const filePath = path.join(tempDir, file);
+        try {
+          const stat = fs.statSync(filePath);
+          const age = now - stat.mtimeMs;
+
+          // Remove files older than 24 hours, or any dmg-staging directories
+          if (age > maxAge || file.startsWith('dmg-staging-')) {
+            if (stat.isDirectory()) {
+              fs.rmSync(filePath, { recursive: true, force: true });
+            } else {
+              fs.unlinkSync(filePath);
+            }
+            console.log(`[AgentUpdateService] Cleaned up old temp file: ${file}`);
+          }
+        } catch (e) {
+          // Ignore errors for individual files
+        }
+      }
+    } catch (error) {
+      console.warn('[AgentUpdateService] Error cleaning up temp staging:', error.message);
+    }
+  }
+
+  /**
+   * Clean up old bundle files (DMG/ZIP) for a specific platform before creating new ones
+   * @param {string} tempDir - The staging directory
+   * @param {string} platform - Platform to clean up (darwin, linux, win32)
+   */
+  async cleanupOldBundles(tempDir, platform) {
+    try {
+      if (!fs.existsSync(tempDir)) {
+        return;
+      }
+
+      const files = fs.readdirSync(tempDir);
+      const platformArch = platform === 'darwin' ? 'darwin-universal' :
+                          platform === 'linux' ? 'linux-x64' :
+                          platform === 'win32' ? 'win32-x64' : platform;
+
+      // Pattern to match bundle files for this platform
+      const bundlePattern = new RegExp(`^allow2automate-agent-${platformArch}-v.*\\.(dmg|zip)$`);
+
+      for (const file of files) {
+        if (bundlePattern.test(file)) {
+          const filePath = path.join(tempDir, file);
+          try {
+            fs.unlinkSync(filePath);
+            console.log(`[AgentUpdateService] Cleaned up old bundle: ${file}`);
+          } catch (e) {
+            // Ignore errors
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('[AgentUpdateService] Error cleaning up old bundles:', error.message);
+    }
+  }
+
+  /**
+   * Clean up old cached installers, keeping only the latest version per platform
+   */
+  async pruneInstallerCache() {
+    try {
+      // Group cached versions by platform
+      const platformVersions = {};
+
+      for (const [version, platforms] of this.installerCache.entries()) {
+        for (const platform of Object.keys(platforms)) {
+          if (!platformVersions[platform]) {
+            platformVersions[platform] = [];
+          }
+          platformVersions[platform].push({ version, ...platforms[platform] });
+        }
+      }
+
+      // Sort versions and keep only the latest for each platform
+      for (const [platform, versions] of Object.entries(platformVersions)) {
+        // Sort by version (semver-like comparison)
+        versions.sort((a, b) => {
+          const aParts = a.version.split('.').map(Number);
+          const bParts = b.version.split('.').map(Number);
+          for (let i = 0; i < Math.max(aParts.length, bParts.length); i++) {
+            const aVal = aParts[i] || 0;
+            const bVal = bParts[i] || 0;
+            if (aVal !== bVal) return bVal - aVal; // Descending
+          }
+          return 0;
+        });
+
+        // Keep only the latest version, delete the rest
+        for (let i = 1; i < versions.length; i++) {
+          const oldVersion = versions[i];
+          try {
+            if (fs.existsSync(oldVersion.path)) {
+              fs.unlinkSync(oldVersion.path);
+              console.log(`[AgentUpdateService] Pruned old installer: ${path.basename(oldVersion.path)}`);
+            }
+
+            // Remove from cache
+            const versionCache = this.installerCache.get(oldVersion.version);
+            if (versionCache) {
+              delete versionCache[platform];
+              if (Object.keys(versionCache).length === 0) {
+                this.installerCache.delete(oldVersion.version);
+              }
+            }
+          } catch (e) {
+            console.warn(`[AgentUpdateService] Failed to prune ${oldVersion.path}:`, e.message);
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('[AgentUpdateService] Error pruning installer cache:', error.message);
+    }
   }
 
   /**
@@ -66,7 +228,21 @@ export default class AgentUpdateService {
       const files = fs.readdirSync(this.cacheDir);
 
       for (const file of files) {
-        const match = file.match(/^allow2automate-agent-(.+)-(win32|darwin|linux)\.(exe|dmg|deb)$/);
+        // Match installer files: allow2automate-agent-VERSION-PLATFORM.EXT
+        // Also match GitHub release format: allow2automate-agent-darwin-universal-vVERSION.pkg
+        let match = file.match(/^allow2automate-agent-(.+)-(win32|darwin|linux)\.(exe|dmg|deb|pkg|msi|rpm)$/);
+
+        // Try alternate GitHub release naming pattern
+        if (!match) {
+          match = file.match(/^allow2automate-agent-(darwin|linux|win)-(?:universal|x64|amd64)-v?(.+)\.(pkg|deb|rpm|exe|msi)$/);
+          if (match) {
+            // Swap platform and version for alternate pattern
+            const [, platformPart, version, ext] = match;
+            const platform = platformPart === 'darwin' ? 'darwin' : platformPart === 'linux' ? 'linux' : 'win32';
+            match = [null, version, platform, ext];
+          }
+        }
+
         if (match) {
           const [, version, platform, ext] = match;
           const filePath = path.join(this.cacheDir, file);
@@ -85,6 +261,9 @@ export default class AgentUpdateService {
       }
 
       console.log(`[AgentUpdateService] Loaded ${this.installerCache.size} versions from cache`);
+
+      // Prune old versions, keeping only the latest per platform
+      await this.pruneInstallerCache();
     } catch (error) {
       console.error('[AgentUpdateService] Error loading cached installers:', error);
     }
@@ -467,6 +646,39 @@ export default class AgentUpdateService {
   }
 
   /**
+   * Get available disk space for a given path
+   * @param {string} dirPath - Directory path to check
+   * @returns {Promise<number>} Available space in bytes
+   */
+  async getAvailableDiskSpace(dirPath) {
+    try {
+      const { exec } = require('child_process');
+      const { promisify } = require('util');
+      const execAsync = promisify(exec);
+
+      if (process.platform === 'darwin' || process.platform === 'linux') {
+        // Use df command on Unix-like systems
+        const { stdout } = await execAsync(`df -k "${dirPath}" | tail -1 | awk '{print $4}'`);
+        const availableKB = parseInt(stdout.trim(), 10);
+        return availableKB * 1024; // Convert KB to bytes
+      } else if (process.platform === 'win32') {
+        // Use wmic on Windows
+        const driveLetter = path.parse(dirPath).root.charAt(0);
+        const { stdout } = await execAsync(`wmic logicaldisk where "DeviceID='${driveLetter}:'" get FreeSpace /format:value`);
+        const match = stdout.match(/FreeSpace=(\d+)/);
+        return match ? parseInt(match[1], 10) : 0;
+      }
+
+      // Fallback: return a large number to skip the check
+      return Number.MAX_SAFE_INTEGER;
+    } catch (error) {
+      console.warn('[AgentUpdateService] Could not check disk space:', error.message);
+      // Return a large number to skip the check on error
+      return Number.MAX_SAFE_INTEGER;
+    }
+  }
+
+  /**
    * Get available installer versions
    */
   getAvailableVersions() {
@@ -734,6 +946,55 @@ export default class AgentUpdateService {
   }
 
   /**
+   * Unmount orphaned DMG volumes that match a name pattern
+   * @param {string} volumeNamePattern - Pattern to match volume names
+   */
+  async unmountOrphanedDMGs(volumeNamePattern) {
+    try {
+      const { exec } = require('child_process');
+      const { promisify } = require('util');
+      const execAsync = promisify(exec);
+      const fs = require('fs');
+
+      // Find all mounted volumes matching the pattern (including temp mounts)
+      const volumes = fs.readdirSync('/Volumes').filter(v =>
+        v.startsWith(volumeNamePattern) || v === volumeNamePattern ||
+        v === `${volumeNamePattern}-temp`
+      );
+
+      for (const volume of volumes) {
+        const volumePath = `/Volumes/${volume}`;
+        try {
+          console.log(`[AgentUpdateService] Unmounting orphaned DMG: ${volumePath}`);
+          await execAsync(`hdiutil detach "${volumePath}" -force`);
+          console.log(`[AgentUpdateService] Successfully unmounted: ${volumePath}`);
+        } catch (e) {
+          // Volume might already be unmounted or busy
+          console.warn(`[AgentUpdateService] Could not unmount ${volumePath}: ${e.message}`);
+        }
+      }
+
+      // Also clean up any orphaned sparse images in temp directory
+      const tempDir = this.app.getPath('temp');
+      const stagingDir = path.join(tempDir, 'allow2-installer-staging');
+      if (fs.existsSync(stagingDir)) {
+        const files = fs.readdirSync(stagingDir);
+        for (const file of files) {
+          if (file.endsWith('.sparseimage')) {
+            try {
+              fs.unlinkSync(path.join(stagingDir, file));
+              console.log(`[AgentUpdateService] Cleaned up orphaned sparse image: ${file}`);
+            } catch (e) { /* ignore */ }
+          }
+        }
+      }
+    } catch (error) {
+      // Ignore errors - /Volumes might not exist or be readable
+      console.warn('[AgentUpdateService] Error checking for orphaned DMGs:', error.message);
+    }
+  }
+
+  /**
    * Create DMG bundle with installer and config file (macOS only)
    * @param {string} installerPath - Path to PKG installer file
    * @param {string} configPath - Path to config file
@@ -758,6 +1019,29 @@ export default class AgentUpdateService {
       const fsPromises = require('fs').promises;
       const fs = require('fs');
       const path = require('path');
+
+      // CRITICAL: Clean up any orphaned DMG mounts from previous failed attempts
+      // These consume virtual disk space and cause "No space left on device" errors
+      console.log('[AgentUpdateService] Checking for orphaned DMG mounts...');
+      await this.unmountOrphanedDMGs(volumeName);
+
+      // Check available disk space before proceeding
+      const installerSize = fs.statSync(installerPath).size;
+      const requiredSpace = installerSize * 3; // Need 3x installer size (staging + DMG creation overhead)
+      const availableSpace = await this.getAvailableDiskSpace(path.dirname(outputPath));
+
+      if (availableSpace < requiredSpace) {
+        console.warn(`[AgentUpdateService] Low disk space: ${Math.round(availableSpace / 1024 / 1024)}MB available, ${Math.round(requiredSpace / 1024 / 1024)}MB required`);
+
+        // Try to clean up temp staging to free space
+        await this.cleanupTempStaging();
+
+        // Check again
+        const newAvailableSpace = await this.getAvailableDiskSpace(path.dirname(outputPath));
+        if (newAvailableSpace < requiredSpace) {
+          throw new Error(`Insufficient disk space: ${Math.round(newAvailableSpace / 1024 / 1024)}MB available, ${Math.round(requiredSpace / 1024 / 1024)}MB required. Please free up disk space and try again.`);
+        }
+      }
 
       // Create staging directory
       const stagingDir = path.join(path.dirname(outputPath), 'dmg-staging-' + Date.now());
@@ -801,12 +1085,69 @@ For support, visit: https://allow2.com/support
           // File doesn't exist, that's fine
         }
 
-        // Create DMG using hdiutil (async)
-        console.log('[AgentUpdateService] Creating DMG with hdiutil...');
-        const cmd = `hdiutil create -volname "${volumeName}" -srcfolder "${stagingDir}" -ov -format UDZO "${outputPath}"`;
-        await execAsync(cmd);
+        // Calculate required size with generous padding
+        // hdiutil's auto-sizing often fails, so we calculate manually
+        let totalSize = 0;
+        const stagingFiles = await fsPromises.readdir(stagingDir);
+        for (const file of stagingFiles) {
+          const fileStat = await fsPromises.stat(path.join(stagingDir, file));
+          totalSize += fileStat.size;
+        }
+        // Add 50% padding for filesystem overhead, minimum 50MB
+        const sizeInMB = Math.max(50, Math.ceil((totalSize * 1.5) / (1024 * 1024)));
+        console.log(`[AgentUpdateService] Content size: ${Math.round(totalSize / 1024 / 1024)}MB, allocating ${sizeInMB}MB for DMG`);
 
-        console.log(`[AgentUpdateService] DMG created: ${outputPath}`);
+        // Two-step DMG creation for reliability:
+        // 1. Create a sparse image with explicit size
+        // 2. Mount it and copy files
+        // 3. Unmount and convert to compressed DMG
+        const sparseImagePath = outputPath.replace(/\.dmg$/i, '.sparseimage');
+
+        try {
+          // Step 1: Create sparse disk image with explicit size
+          console.log('[AgentUpdateService] Creating sparse image...');
+          await execAsync(`hdiutil create -size ${sizeInMB}m -fs HFS+ -volname "${volumeName}" -type SPARSE "${sparseImagePath}"`);
+
+          // Step 2: Mount the sparse image
+          console.log('[AgentUpdateService] Mounting sparse image...');
+          const mountResult = await execAsync(`hdiutil attach "${sparseImagePath}" -mountpoint "/Volumes/${volumeName}-temp"`);
+          const mountPoint = `/Volumes/${volumeName}-temp`;
+
+          try {
+            // Step 3: Copy files to mounted volume
+            console.log('[AgentUpdateService] Copying files to image...');
+            for (const file of stagingFiles) {
+              await fsPromises.copyFile(
+                path.join(stagingDir, file),
+                path.join(mountPoint, file)
+              );
+            }
+
+            // Step 4: Unmount
+            console.log('[AgentUpdateService] Unmounting image...');
+            await execAsync(`hdiutil detach "${mountPoint}"`);
+
+          } catch (copyError) {
+            // Make sure to unmount on error
+            try {
+              await execAsync(`hdiutil detach "${mountPoint}" -force`);
+            } catch (e) { /* ignore */ }
+            throw copyError;
+          }
+
+          // Step 5: Convert sparse image to compressed DMG
+          console.log('[AgentUpdateService] Converting to compressed DMG...');
+          await execAsync(`hdiutil convert "${sparseImagePath}" -format UDZO -o "${outputPath}"`);
+
+          console.log(`[AgentUpdateService] DMG created: ${outputPath}`);
+
+        } finally {
+          // Clean up sparse image
+          try {
+            await fsPromises.unlink(sparseImagePath);
+          } catch (e) { /* ignore */ }
+        }
+
         return outputPath;
 
       } finally {
@@ -899,9 +1240,15 @@ For support, visit: https://allow2.com/support
           ext: installerAsset.ext
         };
 
+        // Prune old versions to save disk space
+        await this.pruneInstallerCache();
+
         installerPath = cachePath;
         installerExt = installerAsset.ext;
       }
+
+      // Clean up any old bundle files for this platform before creating new ones
+      await this.cleanupOldBundles(tempDir, platform);
 
       // Generate config file (NO registration code)
       reportProgress(55, 'Generating configuration...');
@@ -1110,6 +1457,90 @@ For support, visit: https://allow2.com/support
    */
   getLatestVersions() {
     return this.latestVersions;
+  }
+
+  /**
+   * Perform full cleanup of temp files and old cache items
+   * Can be called manually when disk space is low
+   * @returns {Promise<Object>} Cleanup results
+   */
+  async performCleanup() {
+    const results = {
+      tempFilesRemoved: 0,
+      cacheItemsRemoved: 0,
+      dmgsUnmounted: 0,
+      bytesFreed: 0
+    };
+
+    try {
+      console.log('[AgentUpdateService] Performing full cleanup...');
+
+      // Get initial disk space
+      const tempDir = path.join(this.app.getPath('temp'), 'allow2-installer-staging');
+      const initialSpace = await this.getAvailableDiskSpace(this.cacheDir);
+
+      // On macOS, unmount any orphaned DMG volumes first
+      if (process.platform === 'darwin') {
+        const { exec } = require('child_process');
+        const { promisify } = require('util');
+        const execAsync = promisify(exec);
+
+        try {
+          const volumes = fs.readdirSync('/Volumes').filter(v =>
+            v.startsWith('Allow2 Automate Agent')
+          );
+
+          for (const volume of volumes) {
+            const volumePath = `/Volumes/${volume}`;
+            try {
+              console.log(`[AgentUpdateService] Unmounting orphaned DMG: ${volumePath}`);
+              await execAsync(`hdiutil detach "${volumePath}" -force`);
+              results.dmgsUnmounted++;
+            } catch (e) {
+              // Ignore - might not be a DMG or already unmounted
+            }
+          }
+        } catch (e) {
+          // Ignore - /Volumes might not be readable
+        }
+      }
+
+      // Clean up temp staging directory
+      if (fs.existsSync(tempDir)) {
+        const files = fs.readdirSync(tempDir);
+        for (const file of files) {
+          const filePath = path.join(tempDir, file);
+          try {
+            const stat = fs.statSync(filePath);
+            if (stat.isDirectory()) {
+              fs.rmSync(filePath, { recursive: true, force: true });
+            } else {
+              fs.unlinkSync(filePath);
+            }
+            results.tempFilesRemoved++;
+            console.log(`[AgentUpdateService] Removed temp file: ${file}`);
+          } catch (e) {
+            // Ignore errors
+          }
+        }
+      }
+
+      // Prune installer cache (keeps only latest per platform)
+      const beforeCacheSize = this.installerCache.size;
+      await this.pruneInstallerCache();
+      results.cacheItemsRemoved = Math.max(0, beforeCacheSize - this.installerCache.size);
+
+      // Calculate bytes freed
+      const finalSpace = await this.getAvailableDiskSpace(this.cacheDir);
+      results.bytesFreed = Math.max(0, finalSpace - initialSpace);
+
+      console.log(`[AgentUpdateService] Cleanup complete: ${results.tempFilesRemoved} temp files, ${results.cacheItemsRemoved} cache items, ${results.dmgsUnmounted} DMGs unmounted, ${Math.round(results.bytesFreed / 1024 / 1024)}MB freed`);
+
+      return results;
+    } catch (error) {
+      console.error('[AgentUpdateService] Error during cleanup:', error);
+      throw error;
+    }
   }
 
   /**
