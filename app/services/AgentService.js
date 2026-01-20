@@ -1,5 +1,4 @@
 import EventEmitter from 'events';
-import AgentConnection from './AgentConnection.js';
 import crypto from 'crypto';
 
 /**
@@ -7,22 +6,27 @@ import crypto from 'crypto';
  *
  * Responsibilities:
  * - Agent registration and authentication
- * - Policy management and distribution
+ * - Policy management (agents PULL policies via API)
  * - Violation tracking and notifications
  * - Heartbeat monitoring
  * - Child-to-agent mapping
+ *
+ * ARCHITECTURE NOTE (Pull-Based Communication):
+ * - Agents initiate ALL communication with parent (this app)
+ * - Parent does NOT push policies to agents
+ * - Agents poll /api/agent/policies to get latest policies
+ * - This simplifies firewall/NAT traversal and improves reliability
  */
 export default class AgentService extends EventEmitter {
   constructor(database) {
     super();
     this.db = database;
-    this.agents = new Map(); // agentId -> AgentConnection
     this.heartbeatInterval = null;
   }
 
   /**
    * Initialize the agent service
-   * Loads agents from database and starts monitoring
+   * Starts monitoring agent heartbeats
    */
   async initialize() {
     console.log('[AgentService] Initializing...');
@@ -31,13 +35,14 @@ export default class AgentService extends EventEmitter {
       // Ensure database tables exist
       await this.initializeDatabase();
 
-      // Load existing agents from database
-      await this.loadAgents();
-
       // Start heartbeat monitoring
       this.startHeartbeatMonitoring();
 
-      console.log('[AgentService] Initialized successfully');
+      // Count registered agents
+      const agentCount = await this.db.queryOne('SELECT COUNT(*) as count FROM agents');
+      console.log(`[AgentService] ${agentCount?.count || 0} agents registered`);
+
+      console.log('[AgentService] Initialized successfully (pull-based mode)');
       this.emit('initialized');
     } catch (error) {
       console.error('[AgentService] Initialization failed:', error);
@@ -52,25 +57,6 @@ export default class AgentService extends EventEmitter {
     // This would typically run migrations
     // For now, we'll assume migrations are run separately
     console.log('[AgentService] Database tables ready');
-  }
-
-  /**
-   * Load agents from database
-   */
-  async loadAgents() {
-    try {
-      const agentRecords = await this.db.query('SELECT * FROM agents');
-
-      for (const record of agentRecords) {
-        const connection = new AgentConnection(record.id, null, this.db);
-        connection.lastKnownIP = record.last_known_ip;
-        this.agents.set(record.id, connection);
-      }
-
-      console.log(`[AgentService] Loaded ${this.agents.size} agents from database`);
-    } catch (error) {
-      console.error('[AgentService] Error loading agents:', error);
-    }
   }
 
 
@@ -237,11 +223,6 @@ export default class AgentService extends EventEmitter {
           [agentId, registrationCode]
         );
       }
-
-      // Create agent connection
-      const connection = new AgentConnection(agentId, null, this.db);
-      connection.lastKnownIP = agentInfo.ip;
-      this.agents.set(agentId, connection);
 
       console.log(`[AgentService] Registered new agent: ${agentId} (${agentInfo.hostname})${childId ? ` with child ${childId}` : ' (no child assigned)'}`);
       this.emit('agentRegistered', { agentId, ...agentInfo, childId });
@@ -456,6 +437,7 @@ export default class AgentService extends EventEmitter {
 
   /**
    * Create or update a policy for an agent
+   * NOTE: Agent will receive this policy on next sync (pull-based model)
    */
   async createPolicy(agentId, policyConfig) {
     try {
@@ -475,13 +457,10 @@ export default class AgentService extends EventEmitter {
         policyConfig.category || 'general'
       ]);
 
-      // Send policy to agent
-      const connection = this.agents.get(agentId);
-      if (connection) {
-        await connection.sendPolicy({ id: policyId, ...policyConfig });
-      }
+      // NOTE: Agent will receive this policy on next sync (pull-based model)
+      // No push notification needed - agent polls /api/agent/policies
 
-      console.log(`[AgentService] Created policy ${policyId} for agent ${agentId}`);
+      console.log(`[AgentService] Created policy ${policyId} for agent ${agentId} (agent will sync on next poll)`);
       this.emit('policyCreated', { agentId, policyId, policyConfig });
 
       return policyId;
@@ -493,6 +472,7 @@ export default class AgentService extends EventEmitter {
 
   /**
    * Update an existing policy
+   * NOTE: Agent will receive updated policy on next sync (pull-based model)
    */
   async updatePolicy(agentId, policyId, updates) {
     try {
@@ -523,13 +503,10 @@ export default class AgentService extends EventEmitter {
         values
       );
 
-      // Send updated policy to agent
-      const connection = this.agents.get(agentId);
-      if (connection) {
-        await connection.updatePolicy(policyId, updates);
-      }
+      // NOTE: Agent will receive updated policy on next sync (pull-based model)
+      // No push notification needed - agent polls /api/agent/policies
 
-      console.log(`[AgentService] Updated policy ${policyId}`);
+      console.log(`[AgentService] Updated policy ${policyId} (agent will sync on next poll)`);
       this.emit('policyUpdated', { agentId, policyId, updates });
     } catch (error) {
       console.error('[AgentService] Error updating policy:', error);
@@ -539,18 +516,16 @@ export default class AgentService extends EventEmitter {
 
   /**
    * Delete a policy
+   * NOTE: Agent will stop enforcing this policy on next sync (pull-based model)
    */
   async deletePolicy(agentId, policyId) {
     try {
       await this.db.query('DELETE FROM policies WHERE id = $1 AND agent_id = $2', [policyId, agentId]);
 
-      // Notify agent to remove policy
-      const connection = this.agents.get(agentId);
-      if (connection) {
-        await connection.deletePolicy(policyId);
-      }
+      // NOTE: Agent will stop enforcing this policy on next sync (pull-based model)
+      // No push notification needed - agent polls /api/agent/policies
 
-      console.log(`[AgentService] Deleted policy ${policyId}`);
+      console.log(`[AgentService] Deleted policy ${policyId} (agent will sync on next poll)`);
       this.emit('policyDeleted', { agentId, policyId });
     } catch (error) {
       console.error('[AgentService] Error deleting policy:', error);
@@ -592,11 +567,12 @@ export default class AgentService extends EventEmitter {
 
   /**
    * Update agent heartbeat
+   * Called when agent syncs (pull-based) to track agent online status
    */
   async updateHeartbeat(agentId, metadata = {}) {
     try {
       await this.db.query(
-        'UPDATE agents SET last_heartbeat = NOW() WHERE id = $1',
+        'UPDATE agents SET last_heartbeat = datetime("now") WHERE id = $1',
         [agentId]
       );
 
@@ -606,11 +582,6 @@ export default class AgentService extends EventEmitter {
           'UPDATE agents SET last_known_ip = $1 WHERE id = $2',
           [metadata.ip, agentId]
         );
-
-        const connection = this.agents.get(agentId);
-        if (connection) {
-          connection.lastKnownIP = metadata.ip;
-        }
       }
     } catch (error) {
       console.error('[AgentService] Error updating heartbeat:', error);
@@ -647,12 +618,6 @@ export default class AgentService extends EventEmitter {
       clearInterval(this.heartbeatInterval);
     }
 
-    // Close all agent connections
-    for (const connection of this.agents.values()) {
-      await connection.close();
-    }
-
-    this.agents.clear();
     this.emit('shutdown');
   }
 }

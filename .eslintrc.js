@@ -1,5 +1,3 @@
-const path = require('path');
-
 module.exports = {
   extends: [
     'eslint:recommended',
@@ -13,8 +11,7 @@ module.exports = {
     }
   },
   plugins: [
-    'react',
-    path.resolve(__dirname, 'scripts/eslint-plugin-analytics')
+    'react'
   ],
   rules: {
     'indent': [ 2, 2 ],

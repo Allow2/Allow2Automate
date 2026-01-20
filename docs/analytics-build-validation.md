@@ -6,17 +6,7 @@ This document describes the build-time validation system that enforces Firebase 
 
 ## Components
 
-### 1. Custom ESLint Plugin
-
-**Location:** `/mnt/ai/automate/automate/scripts/eslint-plugin-analytics/index.js`
-
-Custom ESLint plugin with two rules:
-- `require-analytics-import`: Ensures Analytics module is imported in React components
-- `analytics-lifecycle-tracking`: Verifies Analytics usage in lifecycle methods
-
-**Scope:** Only checks files in `app/components/` and `app/containers/` directories
-
-### 2. Compliance Checker Script
+### Compliance Checker Script
 
 **Location:** `/mnt/ai/automate/automate/scripts/check-analytics-compliance.js`
 

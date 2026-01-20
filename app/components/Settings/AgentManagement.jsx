@@ -20,7 +20,8 @@ import {
   Divider,
   Snackbar,
   Link,
-  Box
+  Box,
+  Tooltip
 } from '@material-ui/core';
 import {
   Computer as ComputerIcon,
@@ -542,14 +543,16 @@ export default function AgentManagement({ ipcRenderer }) {
                         SHA256: {versionInfo.win32.checksum.substring(0, 16)}...
                       </Typography>
                     )}
-                    <Link
-                      component="button"
-                      variant="body2"
-                      className={classes.uninstallLink}
-                      onClick={() => downloadUninstallScript('win32')}
-                    >
-                      Uninstall Script
-                    </Link>
+                    <Tooltip title="This script must be run as Administrator" arrow>
+                      <Link
+                        component="button"
+                        variant="body2"
+                        className={classes.uninstallLink}
+                        onClick={() => downloadUninstallScript('win32')}
+                      >
+                        Uninstall Script
+                      </Link>
+                    </Tooltip>
                   </Fragment>
                 )}
               </div>
@@ -596,14 +599,16 @@ export default function AgentManagement({ ipcRenderer }) {
                         SHA256: {versionInfo.darwin.checksum.substring(0, 16)}...
                       </Typography>
                     )}
-                    <Link
-                      component="button"
-                      variant="body2"
-                      className={classes.uninstallLink}
-                      onClick={() => downloadUninstallScript('darwin')}
-                    >
-                      Uninstall Script
-                    </Link>
+                    <Tooltip title="This script must be run with sudo" arrow>
+                      <Link
+                        component="button"
+                        variant="body2"
+                        className={classes.uninstallLink}
+                        onClick={() => downloadUninstallScript('darwin')}
+                      >
+                        Uninstall Script
+                      </Link>
+                    </Tooltip>
                   </Fragment>
                 )}
               </div>
@@ -650,14 +655,16 @@ export default function AgentManagement({ ipcRenderer }) {
                         SHA256: {versionInfo.linux.checksum.substring(0, 16)}...
                       </Typography>
                     )}
-                    <Link
-                      component="button"
-                      variant="body2"
-                      className={classes.uninstallLink}
-                      onClick={() => downloadUninstallScript('linux')}
-                    >
-                      Uninstall Script
-                    </Link>
+                    <Tooltip title="This script must be run with sudo or as root" arrow>
+                      <Link
+                        component="button"
+                        variant="body2"
+                        className={classes.uninstallLink}
+                        onClick={() => downloadUninstallScript('linux')}
+                      >
+                        Uninstall Script
+                      </Link>
+                    </Tooltip>
                   </Fragment>
                 )}
               </div>
