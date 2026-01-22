@@ -604,6 +604,80 @@ function setupIPCHandlers(agentService, agentUpdateService, actions) {
     }
   });
 
+  // Generate Linux install script
+  ipcMain.handle('agents:generate-linux-script', async (event, { childId }) => {
+    try {
+      // Get latest version for Linux
+      const latestVersions = agentUpdateService.getLatestVersions();
+      const linuxVersion = (latestVersions['linux-deb'] && latestVersions['linux-deb'].version) ||
+                          (latestVersions['linux-rpm'] && latestVersions['linux-rpm'].version) ||
+                          (latestVersions['linux'] && latestVersions['linux'].version);
+
+      if (!linuxVersion) {
+        throw new Error('No Linux agent version available. Please check GitHub releases.');
+      }
+
+      // Get server URL for parent API
+      const serverIp = getPreferredIPAddress();
+      const serverPort = (global.services && global.services.serverPort) || 8080;
+      const parentApiUrl = `http://${serverIp}:${serverPort}`;
+
+      // Generate the script
+      const result = await agentService.generateLinuxInstallScript({
+        childId: childId || null,
+        version: linuxVersion,
+        parentApiUrl: parentApiUrl
+      });
+
+      return {
+        success: true,
+        script: result.script,
+        agentId: result.agentId,
+        authToken: result.authToken,
+        filename: result.filename,
+        version: linuxVersion,
+        parentApiUrl: parentApiUrl
+      };
+    } catch (error) {
+      console.error('[IPC] Error generating Linux install script:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Save Linux install script to file
+  ipcMain.handle('agents:save-linux-script', async (event, { script, filename }) => {
+    try {
+      // Show save dialog
+      const saveResult = await dialog.showSaveDialog({
+        title: 'Save Linux Install Script',
+        defaultPath: path.join(electronApp.getPath('downloads'), filename || 'install-allow2-agent.sh'),
+        filters: [
+          { name: 'Shell Script', extensions: ['sh'] },
+          { name: 'All Files', extensions: ['*'] }
+        ],
+        properties: ['createDirectory', 'showOverwriteConfirmation']
+      });
+
+      // Check if user cancelled
+      if (saveResult.canceled || !saveResult.filePath) {
+        return { success: false, cancelled: true };
+      }
+
+      // Write the script file
+      await fs.promises.writeFile(saveResult.filePath, script, { mode: 0o755 });
+
+      console.log(`[AgentIntegration] Linux install script saved to: ${saveResult.filePath}`);
+
+      return {
+        success: true,
+        filePath: saveResult.filePath
+      };
+    } catch (error) {
+      console.error('[IPC] Error saving Linux install script:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
   // Steam plugin integration - bridge to agent service
   // These handlers provide a direct bridge between the Steam plugin and the agent service
   // The Steam plugin expects error-first callback style: [error, result]

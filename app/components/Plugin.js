@@ -6,6 +6,9 @@ import path from 'path';
 import { ipcRenderer } from 'electron';
 import Module from 'module';
 import Analytics from '../analytics';
+import { Paper, IconButton, Typography } from '@material-ui/core';
+import { Close as CloseIcon } from '@material-ui/icons';
+import ManageAgentsButton from './ManageAgentsButton';
 
 
 export default class Login extends Component {
@@ -228,6 +231,54 @@ export default class Login extends Component {
 		ipcRenderer.handle( channel, handler)
 	}
 
+    /**
+     * Render the plugin info banner
+     * Shows plugin description with dismiss button
+     */
+    renderBanner() {
+        const { plugin, bannerVisible, onDismissBanner } = this.props;
+
+        // Don't render if banner is not visible or no description
+        if (!bannerVisible) {
+            return null;
+        }
+
+        const description = plugin.description || 'No description available for this plugin.';
+
+        return (
+            <Paper
+                elevation={1}
+                style={{
+                    padding: '12px 16px',
+                    marginBottom: 16,
+                    backgroundColor: '#e3f2fd',
+                    position: 'relative',
+                    display: 'flex',
+                    alignItems: 'flex-start'
+                }}
+            >
+                <Typography
+                    variant="body2"
+                    style={{ flex: 1, paddingRight: 32 }}
+                >
+                    {description}
+                </Typography>
+                <IconButton
+                    size="small"
+                    onClick={onDismissBanner}
+                    style={{
+                        position: 'absolute',
+                        top: 4,
+                        right: 4
+                    }}
+                    aria-label="Dismiss plugin info"
+                >
+                    <CloseIcon fontSize="small" />
+                </IconButton>
+            </Paper>
+        );
+    }
+
 	render() {
         // console.log('tab props 1', this.props);
         // console.log(JSON.parse(JSON.stringify(this.plugin)));
@@ -324,23 +375,27 @@ export default class Login extends Component {
 
 
         return (
-            <TabContent
-                plugin={this.props.plugin}
-                data={this.props.data}
-                children={this.props.children}
-                user={this.props.user}
-                pluginDir={this.state.pluginDir}
-                ipcRenderer={ipcRestricted}
-                ipc={ipcRestricted}
-                globalIpc={globalIpc}
-                configurationUpdate={configurationUpdate}
-                statusUpdate={statusUpdate}
-                persist={persist}
-                assign={this.assign.bind(this)}
-                allow2={{
-                    avatarURL: allow2AvatarURL
-                }}
-            />
+            <div>
+                {this.renderBanner()}
+                <TabContent
+                    plugin={this.props.plugin}
+                    data={this.props.data}
+                    children={this.props.children}
+                    user={this.props.user}
+                    pluginDir={this.state.pluginDir}
+                    ipcRenderer={ipcRestricted}
+                    ipc={ipcRestricted}
+                    globalIpc={globalIpc}
+                    configurationUpdate={configurationUpdate}
+                    statusUpdate={statusUpdate}
+                    persist={persist}
+                    assign={this.assign.bind(this)}
+                    allow2={{
+                        avatarURL: allow2AvatarURL
+                    }}
+                    ManageAgentsButton={ManageAgentsButton}
+                />
+            </div>
         );
     }
 }

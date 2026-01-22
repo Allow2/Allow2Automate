@@ -1,5 +1,54 @@
 # Allow2Automate Ecosystem Brief
 
+## Getting Started (READ THIS FIRST)
+
+**Before starting any work, gather context from the full ecosystem:**
+
+### 1. Check Hive-Mind Memory
+```bash
+# If using claude-flow MCP, check stored knowledge:
+npx @claude-flow/cli@latest memory list
+npx @claude-flow/cli@latest memory search --query "project overview"
+```
+
+Key memory entries to retrieve:
+- `project_overview` - Full ecosystem summary
+- `plugin_architecture` - How plugins work
+- `agent_architecture` - Agent service details
+- `current_work_context` - Recent session state
+- `ecosystem_status_*` - Latest status snapshots
+
+### 2. Check Git Status Across All Projects
+```bash
+# Main app (this directory)
+git status && git log --oneline -5
+
+# Agent (sibling directory)
+cd ../allow2automate-agent && git status && git log --oneline -10
+
+# Registry
+cd ../registry && git status && git log --oneline -5
+
+# Plugins (each is a separate git repo)
+cd ../plugins && for d in allow2automate-*/; do echo "=== $d ===" && cd "$d" && git status -s && git log --oneline -3 && cd ..; done
+```
+
+### 3. Read Key Documentation
+| Priority | Document | Purpose |
+|----------|----------|---------|
+| 1 | This file (`BRIEF.md`) | Ecosystem overview |
+| 2 | `../allow2automate-agent/README.md` | Agent architecture & build |
+| 3 | `../plugins/MAIN_PROCESS_PLUGINS.md` | Plugin development guide |
+| 4 | `docs/AGENT_SERVICE_INTEGRATION.md` | App-Agent communication |
+| 5 | `docs/PLUGIN_ARCHITECTURE_ANALYSIS.md` | Plugin system deep dive |
+
+### 4. Understand the Build/Deploy Flow
+- **Main App**: User runs locally via `npm run develop`
+- **Agent**: User commits changes → GitHub Actions builds binaries → Main app downloads from GitHub releases
+- **Plugins**: Each plugin is a separate npm package with its own GitHub repo
+
+---
+
 ## Overview
 
 This project is the main app - an Electron desktop application that allows users to link Allow2 parental control service with other services and machines.
@@ -38,6 +87,7 @@ For instance: The allow2automate agent by default returns information like the c
 - there shold be a standard account mapping component that can be reused by all plugins, so they can simply provide a list of "things" and the main allow2automate app should do the work to put that in a standard interface (table?) and when the user changes the child assignment, it returns that to the plugin, so it knows which child to map to that "thing".
 - The current remaining quotas for all activities and children should be pull-through cached and rate limited by the allw2automate process and also pull cached as they update (incremental) to any agent(s) - so plugins make a check or log activity, that flows through the app and the app makes calls to Allow2. The returned updated quotas/bans/etc are cached on the app and used from there. If an agent plugin component has asked for that, or needs it, it is pull cached (and rate limited) to the agent for ANY and ALL plugins to use as well.
 
+note that optional chaining operator (?.) isn't supported by the current Babel/Node configuration, so don't use it in any code.
 ## Key Projects
 
 ### 1. Main App (this directory)
@@ -144,3 +194,96 @@ module.exports = {
 ## Git Branches
 - Main branch: `master`
 - Current work typically on `main` or feature branches
+
+## Critical Architecture Decisions
+
+### Communication Model: PULL-BASED (Not Push)
+```
+┌─────────────────┐                      ┌─────────────────┐
+│   Main App      │  ← Agent PULLS →     │     Agent       │
+│   (Parent PC)   │    policies via      │   (Child PC)    │
+│                 │    REST API          │                 │
+│ Does NOT push   │                      │ Initiates ALL   │
+│ to agents       │                      │ communication   │
+└─────────────────┘                      └─────────────────┘
+```
+- Agents poll `/api/agent/policies` to get latest policies
+- Parent app NEVER pushes to agents (simplifies NAT/firewall traversal)
+- `AgentService.js` documents this pattern extensively
+
+### Module Systems (CRITICAL - Don't Mix!)
+| Project | Module System | Reason |
+|---------|---------------|--------|
+| Main App | CommonJS (`require`) | Electron + Webpack |
+| Agent | ESM (`import`) → esbuild → CJS → pkg | Node 20 native ESM, bundled for pkg |
+| Plugins | CommonJS (`require`) | Must match main app's plugin loader |
+
+### Agent Build Pipeline (Resolved pkg Issues)
+```bash
+# The agent had bundling issues with node-fetch v3 (ESM-only)
+# Solution: Removed node-fetch, use native fetch, esbuild prebuild
+
+npm run prebuild   # esbuild: ESM → CJS bundle (dist/bundle.cjs)
+npm run build      # pkg: bundles CJS into executables
+```
+
+## Recently Resolved Issues
+
+### 1. Agent pkg Bundling Corruption (Jan 2026)
+**Problem**: `SyntaxError: Unexpected identifier 'to'` - raw TypeScript from `web-streams-polyfill` appearing in bundle
+**Root Cause**: `node-fetch@3` is ESM-only, pkg has poor ESM support
+**Solution**:
+- Removed `node-fetch` dependency entirely
+- Using native `fetch` (Node 18+ required anyway)
+- Added esbuild prebuild step to convert ESM → CJS before pkg
+**Commits**: `f6d75e0`, `851844d`, `988214c`
+
+### 2. Helper App Native Binary Bundling (Jan 2026)
+**Problem**: `SyntaxError: Invalid or unexpected token` in `pkg/prelude/bootstrap.js:1` when running packaged helper
+**Root Cause**:
+- `systray` package contains native binaries (~35MB) that pkg couldn't bundle correctly
+- `node-notifier` also has native vendor binaries for notifications
+- pkg was trying to parse binary files as JavaScript
+**Solution**:
+- Added esbuild prebuild step: `--external:systray --external:node-notifier`
+- Configured pkg assets to include native binaries: `node_modules/systray/traybin/**/*` and `node_modules/node-notifier/vendor/**/*`
+- Added `copyDir: true` to SysTray constructor so binaries are extracted to `~/.cache/node-systray/` at runtime
+- Added esbuild as devDependency in helper package.json
+
+### 3. Public API Removal (Jan 2026)
+**Change**: Removed outbound connections from agent to public APIs
+**Reason**: Agents should only communicate with parent app
+**Commit**: `e21da14`
+
+## Coding Constraints
+
+1. **No optional chaining (`?.`)** - Not supported by current Babel/Node config
+2. **No ES modules in plugins** - Must use CommonJS for plugin loader compatibility
+3. **No node-fetch in agent** - Use native `fetch` instead
+4. **No push notifications to agents** - Use pull-based polling model
+5. **Material-UI v5** - Not v4, use `@material-ui/core` imports
+
+## Ecosystem Health Checklist
+
+Before starting work, verify:
+- [ ] Main app: `git status` - check for uncommitted work
+- [ ] Agent: `cd ../allow2automate-agent && git status`
+- [ ] Plugins: Check `../plugins/*/` for modified files
+- [ ] Registry: `cd ../registry && git status`
+- [ ] Memory: Check hive-mind for recent context
+
+## Quick Commands
+
+```bash
+# Development
+cd /mnt/ai/automate/automate && npm run develop  # Main app
+cd /mnt/ai/automate/allow2automate-agent && npm run start:dev  # Agent
+
+# Building
+cd /mnt/ai/automate/allow2automate-agent && npm run build:all  # Agent binaries
+cd /mnt/ai/automate/registry && npm run build  # Registry plugins.json
+
+# Testing
+npm test  # Run tests in any project
+npm run test:coverage  # With coverage report
+```

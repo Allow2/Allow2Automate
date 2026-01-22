@@ -160,6 +160,21 @@ export default function configureStore(routerHistory) {
             console.log('[IPC Handler] Dispatch complete');
         }
         });
+
+        // CRITICAL FIX: Listen for configuration updates from main process plugins
+        // electron-redux v2 has broken action sync from main to renderer, so we use direct IPC
+        ipcRenderer.on('CONFIGURATION_UPDATE_SYNC', (event, action) => {
+            console.log('[IPC Handler] Received CONFIGURATION_UPDATE_SYNC');
+            console.log('[IPC Handler] Action type:', action.type);
+            console.log('[IPC Handler] Payload keys:', action.payload ? Object.keys(action.payload) : 'null');
+
+            if (action.type === 'CONFIGURATION_UPDATE' && action.payload) {
+                console.log('[IPC Handler] Dispatching CONFIGURATION_UPDATE to renderer store...');
+                const configUpdateAction = actionCreators.configurationUpdate(action.payload);
+                store.dispatch(configUpdateAction);
+                console.log('[IPC Handler] CONFIGURATION_UPDATE dispatch complete');
+            }
+        });
     } else {
         console.warn('[ChildStore] ipcRenderer not available - PLUGIN_LIBRARY_SYNC will not work');
     }

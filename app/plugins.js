@@ -437,8 +437,23 @@ module.exports = function(app, store, actions) {
 
                 const configurationUpdate = function(newConfiguration) {
                     console.log("updateConfiguration: ", pluginName, " = ", newConfiguration);
-                    actions.configurationUpdate({ [pluginName]:newConfiguration });
+                    const actionPayload = { [pluginName]: newConfiguration };
+                    actions.configurationUpdate(actionPayload);
                     store.save();
+
+                    // CRITICAL FIX: electron-redux v2 has broken action sync from main to renderer
+                    // Manually broadcast configuration updates to all renderer windows via IPC
+                    const { BrowserWindow } = require('electron');
+                    const action = {
+                        type: 'CONFIGURATION_UPDATE',
+                        payload: actionPayload
+                    };
+                    BrowserWindow.getAllWindows().forEach(win => {
+                        if (win && win.webContents) {
+                            console.log('[Plugins] Broadcasting CONFIGURATION_UPDATE to renderer');
+                            win.webContents.send('CONFIGURATION_UPDATE_SYNC', action);
+                        }
+                    });
                 };
 
                 // Plugin status update interface
@@ -664,8 +679,23 @@ module.exports = function(app, store, actions) {
                         // Configuration and status update functions for dev-plugin
                         const devConfigurationUpdate = function(newConfiguration) {
                             console.log("[Dev-Plugin] updateConfiguration:", pluginName, "=", newConfiguration);
-                            actions.configurationUpdate({ [pluginName]: newConfiguration });
+                            const actionPayload = { [pluginName]: newConfiguration };
+                            actions.configurationUpdate(actionPayload);
                             store.save();
+
+                            // CRITICAL FIX: electron-redux v2 has broken action sync from main to renderer
+                            // Manually broadcast configuration updates to all renderer windows via IPC
+                            const { BrowserWindow } = require('electron');
+                            const action = {
+                                type: 'CONFIGURATION_UPDATE',
+                                payload: actionPayload
+                            };
+                            BrowserWindow.getAllWindows().forEach(win => {
+                                if (win && win.webContents) {
+                                    console.log('[Dev-Plugin] Broadcasting CONFIGURATION_UPDATE to renderer');
+                                    win.webContents.send('CONFIGURATION_UPDATE_SYNC', action);
+                                }
+                            });
                         };
 
                         const devStatusUpdate = function(statusData) {

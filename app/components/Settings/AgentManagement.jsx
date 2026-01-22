@@ -29,7 +29,9 @@ import {
   Delete as DeleteIcon,
   Refresh as RefreshIcon,
   Add as AddIcon,
-  GetApp as GetAppIcon
+  GetApp as GetAppIcon,
+  Code as CodeIcon,
+  FileCopy as CopyIcon
 } from '@material-ui/icons';
 import { Alert } from '@material-ui/lab';
 import { makeStyles } from '@material-ui/core/styles';
@@ -151,6 +153,11 @@ export default function AgentManagement({ ipcRenderer }) {
   const [checkingVersions, setCheckingVersions] = useState(false);
   const [versionInfo, setVersionInfo] = useState({});
   const [toast, setToast] = useState({ open: false, message: '', severity: 'info' });
+
+  // Linux universal install script state
+  const [linuxScriptDialog, setLinuxScriptDialog] = useState(false);
+  const [linuxScriptData, setLinuxScriptData] = useState(null);
+  const [generatingScript, setGeneratingScript] = useState(false);
 
   useEffect(() => {
     loadAgents();
@@ -367,6 +374,75 @@ export default function AgentManagement({ ipcRenderer }) {
     } catch (error) {
       console.error('Error deleting agent:', error);
       showToast('Failed to delete agent', 'error');
+    }
+  };
+
+  // Generate Linux universal install script
+  const generateLinuxScript = async () => {
+    setGeneratingScript(true);
+    try {
+      const version = versionInfo.linux && versionInfo.linux.version ? versionInfo.linux.version : null;
+      if (!version) {
+        showToast('Please wait for version info to load, then try again', 'warning');
+        setGeneratingScript(false);
+        return;
+      }
+
+      const result = await ipcRenderer.invoke('agents:generate-linux-script', {
+        version,
+        parentApiUrl: serverUrl
+      });
+
+      if (result.success) {
+        setLinuxScriptData(result);
+        setLinuxScriptDialog(true);
+      } else {
+        showToast('Error generating script: ' + (result.error || 'Unknown error'), 'error');
+      }
+    } catch (error) {
+      console.error('Error generating Linux script:', error);
+      showToast('Failed to generate Linux install script', 'error');
+    } finally {
+      setGeneratingScript(false);
+    }
+  };
+
+  // Copy script to clipboard
+  const copyScriptToClipboard = async () => {
+    if (linuxScriptData && linuxScriptData.script) {
+      try {
+        await navigator.clipboard.writeText(linuxScriptData.script);
+        showToast('Script copied to clipboard', 'success');
+      } catch (error) {
+        // Fallback for older browsers
+        const textArea = document.createElement('textarea');
+        textArea.value = linuxScriptData.script;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+        showToast('Script copied to clipboard', 'success');
+      }
+    }
+  };
+
+  // Save script to file
+  const saveScriptToFile = async () => {
+    if (linuxScriptData && linuxScriptData.script) {
+      try {
+        const result = await ipcRenderer.invoke('agents:save-linux-script', {
+          script: linuxScriptData.script,
+          filename: linuxScriptData.filename
+        });
+        if (result.success) {
+          showToast('Script saved to: ' + result.filePath, 'success');
+        } else if (!result.cancelled) {
+          showToast('Error saving script: ' + (result.error || 'Unknown error'), 'error');
+        }
+      } catch (error) {
+        console.error('Error saving script:', error);
+        showToast('Failed to save script', 'error');
+      }
     }
   };
 
@@ -627,7 +703,7 @@ export default function AgentManagement({ ipcRenderer }) {
                   ) : (
                     <DownloadIcon style={{ marginRight: 8 }} />
                   )}
-                  Linux
+                  Linux (DEB)
                 </Button>
                 {/* Progress indicator */}
                 {(downloadState.linux.downloading || downloadState.linux.complete || downloadState.linux.error) && (
@@ -667,6 +743,32 @@ export default function AgentManagement({ ipcRenderer }) {
                     </Tooltip>
                   </Fragment>
                 )}
+              </div>
+
+              {/* Linux Universal Script */}
+              <div className={classes.platformButton}>
+                <Tooltip title="Works on Ubuntu, Debian, Fedora, RHEL, CentOS, openSUSE and more" arrow>
+                  <Button
+                    variant="outlined"
+                    color="primary"
+                    onClick={generateLinuxScript}
+                    disabled={generatingScript || checkingVersions || !versionInfo.linux}
+                    fullWidth
+                  >
+                    {generatingScript ? (
+                      <CircularProgress size={20} style={{ marginRight: 8 }} />
+                    ) : (
+                      <CodeIcon style={{ marginRight: 8 }} />
+                    )}
+                    Linux Script
+                  </Button>
+                </Tooltip>
+                <Typography className={classes.versionInfo} style={{ textAlign: 'center' }}>
+                  Universal Installer
+                </Typography>
+                <Typography variant="caption" color="textSecondary" style={{ textAlign: 'center', marginTop: 4 }}>
+                  Auto-detects distro
+                </Typography>
               </div>
             </div>
 
@@ -756,6 +858,90 @@ export default function AgentManagement({ ipcRenderer }) {
         <DialogActions>
           <Button onClick={() => setDownloadResultDialog(false)} color="primary" variant="contained">
             Done
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Linux Universal Script Dialog */}
+      <Dialog
+        open={linuxScriptDialog}
+        onClose={() => setLinuxScriptDialog(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>Linux Universal Install Script</DialogTitle>
+        <DialogContent>
+          {linuxScriptData && (
+            <Fragment>
+              <Alert severity="info" style={{ marginBottom: 16 }}>
+                This script auto-detects your Linux distribution and installs the correct package.
+                Supports: Ubuntu, Debian, Mint, Fedora, RHEL, CentOS, Rocky, AlmaLinux, openSUSE, and derivatives.
+              </Alert>
+
+              <Typography variant="subtitle2" gutterBottom>
+                Installation Instructions:
+              </Typography>
+              <ol style={{ marginTop: 0, paddingLeft: 20 }}>
+                <li>
+                  <Typography variant="body2">
+                    Copy the script below or save it to a file
+                  </Typography>
+                </li>
+                <li>
+                  <Typography variant="body2">
+                    Transfer to the target Linux device
+                  </Typography>
+                </li>
+                <li>
+                  <Typography variant="body2">
+                    Run: <code style={{ backgroundColor: '#f5f5f5', padding: '2px 6px', borderRadius: 4 }}>sudo sh {linuxScriptData.filename || 'install-allow2-agent.sh'}</code>
+                  </Typography>
+                </li>
+              </ol>
+
+              <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+                <Button
+                  variant="contained"
+                  color="primary"
+                  onClick={copyScriptToClipboard}
+                  startIcon={<CopyIcon />}
+                >
+                  Copy to Clipboard
+                </Button>
+                <Button
+                  variant="outlined"
+                  color="primary"
+                  onClick={saveScriptToFile}
+                  startIcon={<GetAppIcon />}
+                >
+                  Save to File
+                </Button>
+              </div>
+
+              <Typography variant="subtitle2" gutterBottom>
+                Script Preview:
+              </Typography>
+              <TextField
+                multiline
+                rows={12}
+                fullWidth
+                variant="outlined"
+                value={linuxScriptData.script || ''}
+                InputProps={{
+                  readOnly: true,
+                  style: { fontFamily: 'monospace', fontSize: '0.75rem' }
+                }}
+              />
+
+              <Typography variant="caption" color="textSecondary" style={{ marginTop: 8, display: 'block' }}>
+                Agent ID: {linuxScriptData.agentId ? linuxScriptData.agentId.substring(0, 8) + '...' : 'N/A'}
+              </Typography>
+            </Fragment>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setLinuxScriptDialog(false)} color="primary">
+            Close
           </Button>
         </DialogActions>
       </Dialog>

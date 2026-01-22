@@ -63,6 +63,15 @@ export default class PlugIns extends Component {
         if (installedPluginsCount === 0) {
             this.setState({ isMarketplaceOpen: true });
         }
+
+        // Handle initial tab from navigation (e.g., from ManageAgentsButton)
+        if (this.props.initialTab !== undefined) {
+            this.setState({ currentTab: this.props.initialTab });
+            // Notify parent that we've consumed the initial tab
+            if (this.props.onInitialTabConsumed) {
+                this.props.onInitialTabConsumed();
+            }
+        }
     }
 
     componentDidUpdate(prevProps) {
@@ -80,6 +89,14 @@ export default class PlugIns extends Component {
         if (prevCount === 0 && currentCount > 0) {
             // Just a state update to re-render with close button enabled
             this.forceUpdate();
+        }
+
+        // Handle initialTab prop changes (navigation from ManageAgentsButton)
+        if (this.props.initialTab !== undefined && this.props.initialTab !== prevProps.initialTab) {
+            this.setState({ currentTab: this.props.initialTab });
+            if (this.props.onInitialTabConsumed) {
+                this.props.onInitialTabConsumed();
+            }
         }
     }
 

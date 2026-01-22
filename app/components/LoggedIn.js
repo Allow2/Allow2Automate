@@ -184,9 +184,22 @@ export default class Plugins extends Component {
             console.warn('[LoggedIn] Could not read currentTab from localStorage:', e);
         }
 
+        // Restore dismissed banners from localStorage
+        let dismissedBanners = new Set();
+        try {
+            const stored = localStorage.getItem('allow2automate-dismissed-banners');
+            if (stored) {
+                dismissedBanners = new Set(JSON.parse(stored));
+            }
+        } catch (e) {
+            console.warn('[LoggedIn] Could not read dismissedBanners from localStorage:', e);
+        }
+
         this.state = {
             currentTab: savedTab,
-            toasts: [] // Array of {id, message, severity}
+            toasts: [], // Array of {id, message, severity}
+            dismissedBanners: dismissedBanners, // Set of plugin names with permanently dismissed banners
+            temporarilyShowBanner: null // Plugin name to temporarily show banner for
         };
     }
 
@@ -197,11 +210,18 @@ export default class Plugins extends Component {
      * This prevents the component from re-rendering when unrelated state changes.
      */
     shouldComponentUpdate(nextProps, nextState) {
-        // Always update if local state changed (tab switch, toasts)
+        // Always update if local state changed (tab switch, toasts, banners)
         if (this.state.currentTab !== nextState.currentTab) {
             return true;
         }
         if (this.state.toasts.length !== nextState.toasts.length) {
+            return true;
+        }
+        // Banner state changes
+        if (this.state.dismissedBanners !== nextState.dismissedBanners) {
+            return true;
+        }
+        if (this.state.temporarilyShowBanner !== nextState.temporarilyShowBanner) {
             return true;
         }
 
@@ -249,10 +269,25 @@ export default class Plugins extends Component {
             this.showToast(event.detail.message, event.detail.severity || 'info');
         };
         window.addEventListener('show-toast', this.handleToastEvent);
+
+        // Listen for navigation to agents (from ManageAgentsButton)
+        this.handleNavigateToAgents = () => {
+            console.log('[LoggedIn] Navigate to Agents requested');
+            this.setState({
+                currentTab: 'Allow2AutomateSettingsTab',
+                settingsInitialTab: 0 // Device Monitoring tab
+            });
+            // Persist to localStorage
+            try {
+                localStorage.setItem('allow2automate-current-tab', 'Allow2AutomateSettingsTab');
+            } catch (e) {}
+        };
+        window.addEventListener('navigate-to-agents', this.handleNavigateToAgents);
     };
 
     componentWillUnmount = () => {
         window.removeEventListener('show-toast', this.handleToastEvent);
+        window.removeEventListener('navigate-to-agents', this.handleNavigateToAgents);
     };
 
     showToast = (message, severity = 'info') => {
@@ -295,6 +330,88 @@ export default class Plugins extends Component {
         }
     };
 
+    /**
+     * Get display title for the active tab
+     * @param {Array} plugins - List of active plugins
+     * @returns {string} Display title for the active tab
+     */
+    getActiveTabTitle = (plugins) => {
+        const { currentTab } = this.state;
+
+        if (currentTab === 'Allow2AutomateSettingsTab') {
+            return 'Settings';
+        }
+
+        // Find the plugin and return its display name
+        const plugin = plugins.find(p => p.name === currentTab);
+        if (plugin) {
+            return plugin.shortName || plugin.displayName || plugin.name;
+        }
+
+        return currentTab;
+    };
+
+    /**
+     * Permanently dismiss banner for a plugin (persists across reboots)
+     * @param {string} pluginName - Plugin name to dismiss banner for
+     */
+    handleDismissBanner = (pluginName) => {
+        const newDismissed = new Set(this.state.dismissedBanners);
+        newDismissed.add(pluginName);
+
+        this.setState({
+            dismissedBanners: newDismissed,
+            temporarilyShowBanner: null
+        });
+
+        // Persist to localStorage
+        try {
+            localStorage.setItem('allow2automate-dismissed-banners', JSON.stringify([...newDismissed]));
+        } catch (e) {
+            console.warn('[LoggedIn] Could not save dismissedBanners to localStorage:', e);
+        }
+    };
+
+    /**
+     * Temporarily show banner for a plugin (doesn't persist)
+     * Banner will be hidden again when user navigates away or dismisses it
+     * @param {string} pluginName - Plugin name to show banner for
+     */
+    handleShowBannerTemporarily = (pluginName) => {
+        this.setState({
+            temporarilyShowBanner: pluginName
+        });
+    };
+
+    /**
+     * Check if banner should be shown for a plugin
+     * @param {string} pluginName - Plugin name to check
+     * @returns {boolean} True if banner should be visible
+     */
+    isBannerVisible = (pluginName) => {
+        const { dismissedBanners, temporarilyShowBanner } = this.state;
+
+        // If temporarily showing this plugin's banner, show it
+        if (temporarilyShowBanner === pluginName) {
+            return true;
+        }
+
+        // Otherwise, show if not permanently dismissed
+        return !dismissedBanners.has(pluginName);
+    };
+
+    /**
+     * Check if the help icon should be shown in title bar
+     * @param {string} pluginName - Current plugin name
+     * @returns {boolean} True if help icon should be visible
+     */
+    shouldShowHelpIcon = (pluginName) => {
+        const { dismissedBanners, temporarilyShowBanner } = this.state;
+
+        // Show help icon if banner is dismissed AND not temporarily shown
+        return dismissedBanners.has(pluginName) && temporarilyShowBanner !== pluginName;
+    };
+
     render() {
         let user = this.props.user;
         let name = ( user.user && user.user.firstName ) || "...";
@@ -311,7 +428,27 @@ export default class Plugins extends Component {
                 <AppBar position="fixed" style={{ zIndex: 1201 }}>
                     <Toolbar>
                         {avatar}
-                        <span style={{ marginLeft: 8, flexGrow: 1 }}>{name}</span>
+                        <span style={{ marginLeft: 8 }}>{name}</span>
+                        {/* Centered title showing active tab with optional help icon */}
+                        <div style={{ flexGrow: 1, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <span style={{ fontSize: '1.1rem', fontWeight: 500 }}>
+                                {this.getActiveTabTitle(plugins)}
+                            </span>
+                            {/* Show help icon when plugin banner is dismissed */}
+                            {this.state.currentTab !== 'Allow2AutomateSettingsTab' &&
+                             this.shouldShowHelpIcon(this.state.currentTab) && (
+                                <Tooltip title="Show plugin information">
+                                    <IconButton
+                                        color="inherit"
+                                        size="small"
+                                        style={{ marginLeft: 8 }}
+                                        onClick={() => this.handleShowBannerTemporarily(this.state.currentTab)}
+                                    >
+                                        <HelpOutline fontSize="small" />
+                                    </IconButton>
+                                </Tooltip>
+                            )}
+                        </div>
                         <Tooltip title="Log Out">
                             <IconButton color="inherit" onClick={this.handleLogout}>
                                 <ExitToApp />
@@ -421,6 +558,7 @@ export default class Plugins extends Component {
                         name: plugin.name,
                         shortName: plugin.shortName,
                         version: plugin.version,
+                        description: plugin.description || (plugin.packageJson && plugin.packageJson.description),
                         main: plugin.packageJson && plugin.packageJson.main,
                         dev_plugin: plugin.dev_plugin,
                         installation: plugin.installation || (plugin.available && plugin.available.installation)
@@ -432,14 +570,20 @@ export default class Plugins extends Component {
                                 data={plugin.configuration}
                                 children={pluginData.children}
                                 user={pluginData.user}
-                                onUpdateConfiguration={this.props.onUpdateConfiguration} />
+                                onUpdateConfiguration={this.props.onUpdateConfiguration}
+                                bannerVisible={this.isBannerVisible(plugin.name)}
+                                onDismissBanner={() => this.handleDismissBanner(plugin.name)} />
                         </TabPanel>
                     );
                 }.bind(this))
                 }
 
                     <TabPanel index="Allow2AutomateSettingsTab" value={this.state.currentTab} >
-                        <PlugIns {...this.props} />
+                        <PlugIns
+                            {...this.props}
+                            initialTab={this.state.settingsInitialTab}
+                            onInitialTabConsumed={() => this.setState({ settingsInitialTab: undefined })}
+                        />
                     </TabPanel>
 
                     {/* Stacked toast notifications - bottom right */}
