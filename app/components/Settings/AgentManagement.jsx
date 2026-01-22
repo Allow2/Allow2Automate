@@ -689,48 +689,37 @@ export default function AgentManagement({ ipcRenderer }) {
                 )}
               </div>
 
-              {/* Linux Platform */}
+              {/* Linux Universal Script - replaces DEB download */}
               <div className={classes.platformButton}>
-                <Button
-                  variant="contained"
-                  color="primary"
-                  onClick={() => downloadInstaller('linux')}
-                  disabled={downloadState.linux.downloading || checkingVersions}
-                  fullWidth
-                >
-                  {downloadState.linux.downloading ? (
-                    <CircularProgress size={20} style={{ marginRight: 8 }} />
-                  ) : (
-                    <DownloadIcon style={{ marginRight: 8 }} />
-                  )}
-                  Linux (DEB)
-                </Button>
-                {/* Progress indicator */}
-                {(downloadState.linux.downloading || downloadState.linux.complete || downloadState.linux.error) && (
-                  <Box className={classes.progressContainer}>
-                    <LinearProgress
-                      variant="determinate"
-                      value={downloadState.linux.progress}
-                      className={classes.progressBar}
-                      color={downloadState.linux.error ? 'secondary' : 'primary'}
-                    />
-                    <Typography
-                      className={`${classes.progressStage} ${downloadState.linux.complete ? classes.progressComplete : ''}`}
-                    >
-                      {downloadState.linux.stage}
-                    </Typography>
-                  </Box>
-                )}
-                {versionInfo.linux && !downloadState.linux.downloading && !downloadState.linux.complete && (
+                <Tooltip title="Works on Ubuntu, Debian, Fedora, RHEL, CentOS, openSUSE and more" arrow>
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    onClick={generateLinuxScript}
+                    disabled={generatingScript || checkingVersions || !versionInfo.linux}
+                    fullWidth
+                  >
+                    {generatingScript ? (
+                      <CircularProgress size={20} style={{ marginRight: 8 }} />
+                    ) : (
+                      <DownloadIcon style={{ marginRight: 8 }} />
+                    )}
+                    Linux
+                  </Button>
+                </Tooltip>
+                {versionInfo.linux && (
                   <Fragment>
                     <Typography className={classes.versionInfo}>
                       v{versionInfo.linux.version}
                     </Typography>
-                    {versionInfo.linux.checksum && (
-                      <Typography className={classes.checksumText} title={versionInfo.linux.checksum}>
-                        SHA256: {versionInfo.linux.checksum.substring(0, 16)}...
+                    {versionInfo.linux.scriptChecksum && (
+                      <Typography className={classes.checksumText} title={versionInfo.linux.scriptChecksum}>
+                        SHA256: {versionInfo.linux.scriptChecksum.substring(0, 16)}...
                       </Typography>
                     )}
+                    <Typography variant="caption" color="textSecondary" style={{ textAlign: 'center', marginTop: 4 }}>
+                      Universal installer script
+                    </Typography>
                     <Tooltip title="This script must be run with sudo or as root" arrow>
                       <Link
                         component="button"
@@ -742,34 +731,7 @@ export default function AgentManagement({ ipcRenderer }) {
                       </Link>
                     </Tooltip>
                   </Fragment>
-                )}
-              </div>
-
-              {/* Linux Universal Script */}
-              <div className={classes.platformButton}>
-                <Tooltip title="Works on Ubuntu, Debian, Fedora, RHEL, CentOS, openSUSE and more" arrow>
-                  <Button
-                    variant="outlined"
-                    color="primary"
-                    onClick={generateLinuxScript}
-                    disabled={generatingScript || checkingVersions || !versionInfo.linux}
-                    fullWidth
-                  >
-                    {generatingScript ? (
-                      <CircularProgress size={20} style={{ marginRight: 8 }} />
-                    ) : (
-                      <CodeIcon style={{ marginRight: 8 }} />
-                    )}
-                    Linux Script
-                  </Button>
-                </Tooltip>
-                <Typography className={classes.versionInfo} style={{ textAlign: 'center' }}>
-                  Universal Installer
-                </Typography>
-                <Typography variant="caption" color="textSecondary" style={{ textAlign: 'center', marginTop: 4 }}>
-                  Auto-detects distro
-                </Typography>
-              </div>
+                )}</div>
             </div>
 
             <div style={{ marginTop: 16 }}>

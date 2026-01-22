@@ -486,6 +486,104 @@ ipcMain.handle('pairDevice', async (event, options = {}) => {
 });
 
 /**
+ * Check Device Usage - Internal function for plugins to report device usage to Allow2.
+ * This is the conduit for plugins to check and log device usage.
+ *
+ * @param {object} options
+ *   - UDN: string - Device unique identifier
+ *   - pluginName: string - Plugin name (e.g., 'allow2automate-wemo') to look up pairing
+ *   - activityId: number - Activity ID for Allow2 (default: 7 for devices)
+ *   - log: boolean - Whether to log usage (true) or just check (false)
+ *
+ * @returns {Promise<{success: boolean, allowed?: boolean, result?: object, error?: string}>}
+ */
+async function checkDeviceUsageInternal(options = {}) {
+    const { UDN, pluginName, activityId = 7, log = false } = options;
+
+    if (!UDN || !pluginName) {
+        return { success: false, error: 'Missing required parameters (UDN, pluginName)' };
+    }
+
+    // Get state to find pairing and timezone
+    const state = store.getState();
+
+    // Get timezone from state
+    const tz = (state.util && state.util.timezoneGuess) || moment.tz.guess();
+
+    // Look up pairing from plugin configuration
+    const pluginConfig = state.configuration && state.configuration[pluginName];
+    if (!pluginConfig || !pluginConfig.pairings) {
+        return { success: false, error: 'No pairings found for plugin' };
+    }
+
+    const pairing = pluginConfig.pairings[UDN];
+    if (!pairing) {
+        return { success: false, error: 'Device not paired to a child' };
+    }
+
+    // Validate pairing has required fields
+    if (!pairing.controllerId || !pairing.id || !pairing.pairToken || !pairing.deviceToken || !pairing.ChildId) {
+        console.error('[checkDeviceUsage] Invalid pairing data:', pairing);
+        return { success: false, error: 'Invalid pairing data - missing credentials' };
+    }
+
+    console.log(`[checkDeviceUsage] Checking device ${UDN} for child ${pairing.ChildId}, log=${log}`);
+
+    return new Promise((resolve) => {
+        const params = {
+            userId: pairing.controllerId,
+            pairId: pairing.id,
+            pairToken: pairing.pairToken,
+            deviceToken: pairing.deviceToken,
+            childId: pairing.ChildId,
+            tz: tz,
+            activities: [{
+                id: activityId,
+                log: log
+            }]
+        };
+
+        allow2.check(params, function(err, result) {
+            if (err) {
+                console.error('[checkDeviceUsage] Allow2 check error:', err);
+
+                // Check for invalid pairing error
+                if (err.message && err.message.includes('invalid pairToken')) {
+                    return resolve({
+                        success: false,
+                        error: 'Invalid pairing - please re-pair device',
+                        invalidPairing: true
+                    });
+                }
+
+                return resolve({
+                    success: false,
+                    error: err.message || 'Allow2 check failed'
+                });
+            }
+
+            console.log(`[checkDeviceUsage] Device ${UDN}: allowed=${result.allowed}`);
+
+            resolve({
+                success: true,
+                allowed: result.allowed,
+                result: result
+            });
+        });
+    });
+}
+
+// Expose checkDeviceUsage to plugins via global.services
+// This allows main-process plugins to call it directly without IPC
+global.services = global.services || {};
+global.services.checkDeviceUsage = checkDeviceUsageInternal;
+
+// IPC handler for renderer processes (wraps the internal function)
+ipcMain.handle('checkDeviceUsage', async (event, options = {}) => {
+    return checkDeviceUsageInternal(options);
+});
+
+/**
  * Remove Device Pairing - Unassign a device from a child
  *
  * Options:

@@ -343,6 +343,9 @@ export default class AgentUpdateService {
         'linux': { extensions: ['.deb', '.rpm', '.AppImage'], assetPattern: /linux/i, uninstallExt: '.sh' }
       };
 
+      // Pattern to match the universal Linux install script (versioned)
+      const linuxScriptPattern = /^install-allow2-agent-v.*\.sh$/;
+
       // Store all releases
       this.releases = releasesData.map(release => {
         const version = release.tag_name.replace(/^v/, '');
@@ -385,6 +388,21 @@ export default class AgentUpdateService {
           }
         }
 
+        // Find Linux universal install script (versioned)
+        const scriptAsset = release.assets.find(a =>
+          linuxScriptPattern.test(a.name)
+        );
+
+        if (scriptAsset) {
+          assets.push({
+            name: scriptAsset.name,
+            url: scriptAsset.browser_download_url,
+            platform: 'linux',
+            type: 'script',
+            ext: 'sh'
+          });
+        }
+
         return {
           version,
           tag: release.tag_name,
@@ -424,6 +442,33 @@ export default class AgentUpdateService {
             uninstallUrl: uninstallAsset ? uninstallAsset.url : null,
             uninstallName: uninstallAsset ? uninstallAsset.name : null
           };
+
+          // For Linux, also include the universal install script info
+          if (platform === 'linux') {
+            const scriptAsset = latestRelease.assets.find(a =>
+              a.platform === 'linux' && a.type === 'script'
+            );
+            if (scriptAsset) {
+              this.latestVersions[platform].scriptUrl = scriptAsset.url;
+              this.latestVersions[platform].scriptName = scriptAsset.name;
+              // Checksum will be calculated when script is downloaded/cached
+              this.latestVersions[platform].scriptChecksum = null;
+            }
+          }
+        }
+      }
+
+      // If we have a Linux script, try to download and calculate checksum
+      if (this.latestVersions.linux && this.latestVersions.linux.scriptUrl) {
+        try {
+          const scriptChecksum = await this.downloadAndCacheLinuxScript(
+            this.latestVersions.linux.scriptUrl,
+            this.latestVersions.linux.scriptName,
+            this.latestVersions.linux.version
+          );
+          this.latestVersions.linux.scriptChecksum = scriptChecksum;
+        } catch (err) {
+          console.warn('[AgentUpdateService] Could not cache Linux script:', err.message);
         }
       }
 
@@ -593,6 +638,102 @@ export default class AgentUpdateService {
         reject(err);
       });
     });
+  }
+
+  /**
+   * Download and cache Linux universal install script
+   * @param {string} url - Download URL for the script
+   * @param {string} fileName - Script filename
+   * @param {string} version - Version number
+   * @returns {Promise<string>} SHA256 checksum of the script
+   */
+  async downloadAndCacheLinuxScript(url, fileName, version) {
+    try {
+      const cachePath = path.join(this.cacheDir, fileName);
+
+      // Check if already cached with matching version
+      if (fs.existsSync(cachePath)) {
+        // Verify it's current by checking filename contains version
+        if (fileName.includes(version) || fileName.includes(`v${version}`)) {
+          const checksum = await this.calculateChecksum(cachePath);
+          console.log(`[AgentUpdateService] Using cached Linux script: ${fileName}`);
+          return checksum;
+        }
+      }
+
+      // Download the script
+      console.log(`[AgentUpdateService] Downloading Linux install script: ${fileName}`);
+      await this.downloadFile(url, cachePath);
+
+      // Calculate checksum
+      const checksum = await this.calculateChecksum(cachePath);
+      console.log(`[AgentUpdateService] Linux script cached with checksum: ${checksum.substring(0, 16)}...`);
+
+      return checksum;
+    } catch (error) {
+      console.error('[AgentUpdateService] Error caching Linux script:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get cached Linux install script path
+   * @param {string} version - Version to get
+   * @returns {string|null} Path to cached script or null
+   */
+  getCachedLinuxScript(version) {
+    const linux = this.latestVersions.linux;
+    if (!linux || !linux.scriptName) return null;
+
+    const cachePath = path.join(this.cacheDir, linux.scriptName);
+    if (fs.existsSync(cachePath)) {
+      return cachePath;
+    }
+    return null;
+  }
+
+  /**
+   * Export Linux install script to destination
+   * @param {string} destinationPath - Destination directory
+   * @returns {Promise<Object>} Script info
+   */
+  async exportLinuxScript(destinationPath) {
+    try {
+      const linux = this.latestVersions.linux;
+      if (!linux || !linux.scriptUrl) {
+        throw new Error('No Linux install script available');
+      }
+
+      // Ensure we have it cached
+      if (!linux.scriptChecksum) {
+        linux.scriptChecksum = await this.downloadAndCacheLinuxScript(
+          linux.scriptUrl,
+          linux.scriptName,
+          linux.version
+        );
+      }
+
+      const cachePath = path.join(this.cacheDir, linux.scriptName);
+      const destPath = path.join(destinationPath, linux.scriptName);
+
+      // Copy to destination
+      fs.copyFileSync(cachePath, destPath);
+
+      // Make executable
+      fs.chmodSync(destPath, 0o755);
+
+      console.log(`[AgentUpdateService] Exported Linux script to ${destPath}`);
+
+      return {
+        scriptPath: destPath,
+        scriptName: linux.scriptName,
+        version: linux.version,
+        checksum: linux.scriptChecksum
+      };
+    } catch (error) {
+      console.error('[AgentUpdateService] Error exporting Linux script:', error);
+      throw error;
+    }
   }
 
   /**
