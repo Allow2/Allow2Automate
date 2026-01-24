@@ -77,6 +77,9 @@ export default class AgentService extends EventEmitter {
         for (const agent of staleAgents) {
           this.emit('agentStale', agent.id);
         }
+
+        // Also cleanup expired pending tokens
+        await this.cleanupExpiredTokens();
       } catch (error) {
         console.error('[AgentService] Error checking heartbeats:', error);
       }
@@ -140,16 +143,83 @@ export default class AgentService extends EventEmitter {
   }
 
   /**
+   * Validate a pending agent token
+   * @param {string} authToken - The auth token to validate
+   * @returns {object|null} The pending token record if valid, null otherwise
+   */
+  async validatePendingToken(authToken) {
+    if (!authToken) return null;
+
+    try {
+      const pendingToken = await this.db.queryOne(
+        'SELECT * FROM pending_agent_tokens WHERE auth_token = $1 AND expires_at > datetime("now")',
+        [authToken]
+      );
+
+      return pendingToken;
+    } catch (error) {
+      console.error('[AgentService] Error validating pending token:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Delete a pending agent token
+   * @param {string} tokenId - The token ID to delete
+   */
+  async deletePendingToken(tokenId) {
+    try {
+      await this.db.query('DELETE FROM pending_agent_tokens WHERE id = $1', [tokenId]);
+      console.log(`[AgentService] Deleted pending token: ${tokenId}`);
+    } catch (error) {
+      console.error('[AgentService] Error deleting pending token:', error);
+    }
+  }
+
+  /**
+   * Cleanup expired pending tokens
+   * Called periodically to remove stale tokens
+   */
+  async cleanupExpiredTokens() {
+    try {
+      const result = await this.db.query(
+        'DELETE FROM pending_agent_tokens WHERE expires_at < datetime("now")'
+      );
+      if (result.rowCount > 0) {
+        console.log(`[AgentService] Cleaned up ${result.rowCount} expired pending tokens`);
+      }
+    } catch (error) {
+      console.error('[AgentService] Error cleaning up expired tokens:', error);
+    }
+  }
+
+  /**
    * Register a new agent
    * @param {string} registrationCode - Optional registration code (for backward compatibility)
    * @param {object} agentInfo - Agent information (machineId, hostname, platform, version, ip)
+   * @param {string} authToken - Optional auth token from installer (for pending token validation)
    */
-  async registerAgent(registrationCode, agentInfo) {
+  async registerAgent(registrationCode, agentInfo, authToken = null) {
     try {
       let childId = null;
+      let pendingTokenUsed = false;
+
+      // First, check if authToken provided and validate against pending_agent_tokens
+      // This is the new flow for installers (Linux, Mac, Windows)
+      if (authToken) {
+        const pendingToken = await this.validatePendingToken(authToken);
+        if (pendingToken) {
+          childId = pendingToken.child_id;
+          pendingTokenUsed = true;
+          console.log(`[AgentService] Valid pending token found for registration`);
+        } else {
+          console.warn(`[AgentService] Invalid or expired auth token provided`);
+          // Don't fail - continue with normal registration
+        }
+      }
 
       // Check if registration code provided (backward compatibility)
-      if (registrationCode) {
+      if (!childId && registrationCode) {
         const codeRecord = await this.db.queryOne(
           'SELECT * FROM registration_codes WHERE code = $1 AND used = false AND expires_at > datetime("now")',
           [registrationCode]
@@ -188,6 +258,17 @@ export default class AgentService extends EventEmitter {
           agentId
         ]);
 
+        // If pending token was used and agent was re-registering, delete the pending token
+        if (pendingTokenUsed && authToken) {
+          const pendingToken = await this.db.queryOne(
+            'SELECT id FROM pending_agent_tokens WHERE auth_token = $1',
+            [authToken]
+          );
+          if (pendingToken) {
+            await this.deletePendingToken(pendingToken.id);
+          }
+        }
+
         console.log(`[AgentService] Agent re-registered: ${agentId} (${agentInfo.hostname})`);
 
         return {
@@ -199,7 +280,7 @@ export default class AgentService extends EventEmitter {
 
       // New agent registration
       const agentId = crypto.randomUUID();
-      const authToken = crypto.randomBytes(32).toString('hex');
+      const newAuthToken = crypto.randomBytes(32).toString('hex');
 
       // Create agent record (child_id is null initially, can be set later via UI)
       await this.db.query(`
@@ -208,16 +289,27 @@ export default class AgentService extends EventEmitter {
       `, [
         agentId,
         agentInfo.machineId,
-        childId,  // null unless registration code provided
+        childId,  // null unless registration code or pending token provided
         agentInfo.hostname,
         agentInfo.platform,
         agentInfo.version,
-        authToken,
+        newAuthToken,
         agentInfo.ip
       ]);
 
+      // Delete the pending token after successful registration
+      if (pendingTokenUsed && authToken) {
+        const pendingToken = await this.db.queryOne(
+          'SELECT id FROM pending_agent_tokens WHERE auth_token = $1',
+          [authToken]
+        );
+        if (pendingToken) {
+          await this.deletePendingToken(pendingToken.id);
+        }
+      }
+
       // Mark registration code as used (if provided)
-      if (registrationCode && childId) {
+      if (registrationCode && childId && !pendingTokenUsed) {
         await this.db.query(
           'UPDATE registration_codes SET used = 1, agent_id = $1 WHERE code = $2',
           [agentId, registrationCode]
@@ -229,7 +321,7 @@ export default class AgentService extends EventEmitter {
 
       return {
         agentId,
-        authToken,
+        authToken: newAuthToken,
         childId
       };
     } catch (error) {
@@ -635,6 +727,10 @@ export default class AgentService extends EventEmitter {
         throw new Error('Version is required to generate install script');
       }
 
+      // Token expires after 7 days if not used
+      const expiresAt = new Date(Date.now() + (7 * 24 * 60 * 60 * 1000));
+      const expiresAtISO = expiresAt.toISOString();
+
       // Build the config object that will be embedded in the script
       const agentConfig = {
         agentId,
@@ -644,7 +740,8 @@ export default class AgentService extends EventEmitter {
         apiPort: 8443,
         checkInterval: 30000,
         enableMDNS: true,
-        autoUpdate: true
+        autoUpdate: true,
+        tokenExpiresAt: expiresAtISO  // Installer validates this before running
       };
 
       // The install script template
@@ -658,34 +755,36 @@ export default class AgentService extends EventEmitter {
 
       console.log(`[AgentService] Generated Linux install script for agent ${agentId} (version ${version})`);
 
-      // Pre-register the agent so it's ready when the script runs
-      // This allows the agent to authenticate immediately on first contact
-      const existingAgent = await this.db.queryOne(
-        'SELECT * FROM agents WHERE id = $1',
+      // Store pending token - agent will only appear in list when it first connects
+
+      // Check if token already exists (e.g., regenerating script)
+      const existingToken = await this.db.queryOne(
+        'SELECT * FROM pending_agent_tokens WHERE id = $1',
         [agentId]
       );
 
-      if (!existingAgent) {
+      if (existingToken) {
+        // Update existing pending token
         await this.db.query(`
-          INSERT INTO agents (id, machine_id, child_id, hostname, platform, version, auth_token, registered_at)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, datetime('now'))
-        `, [
-          agentId,
-          'pending-linux-' + agentId, // Unique per install, updated on first heartbeat
-          childId,
-          'pending', // Will be updated on first heartbeat
-          'linux',
-          version,
-          authToken
-        ]);
-        console.log(`[AgentService] Pre-registered agent ${agentId} for Linux install`);
+          UPDATE pending_agent_tokens
+          SET auth_token = $1, child_id = $2, platform = $3, version = $4, parent_api_url = $5, expires_at = $6
+          WHERE id = $7
+        `, [authToken, childId, 'linux', version, parentApiUrl, expiresAtISO, agentId]);
+        console.log(`[AgentService] Updated pending token ${agentId} for Linux install`);
+      } else {
+        // Create new pending token
+        await this.db.query(`
+          INSERT INTO pending_agent_tokens (id, auth_token, child_id, platform, version, parent_api_url, expires_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7)
+        `, [agentId, authToken, childId, 'linux', version, parentApiUrl, expiresAtISO]);
+        console.log(`[AgentService] Created pending token ${agentId} for Linux install (expires: ${expiresAtISO})`);
       }
 
       return {
         script,
         agentId,
         authToken,
-        filename: `install-allow2-agent-${agentId.substring(0, 8)}.sh`
+        filename: `install-allow2automate-agent-v${version}.sh`
       };
     } catch (error) {
       console.error('[AgentService] Error generating Linux install script:', error);
@@ -709,7 +808,7 @@ export default class AgentService extends EventEmitter {
 # 4. Write the embedded configuration
 # 5. Start the agent service
 #
-# Usage: sudo sh install-allow2-agent.sh
+# Usage: sudo sh install-allow2automate-agent-vX.X.X.sh
 
 set -e
 
@@ -855,11 +954,44 @@ start_service() {
     fi
 }
 
+# Check if installer has expired
+check_expiry() {
+    # Extract expiry date from config
+    EXPIRY_DATE=$(echo "$AGENT_CONFIG" | grep -o '"tokenExpiresAt"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\\([^"]*\\)"$/\\1/')
+
+    if [ -z "$EXPIRY_DATE" ]; then
+        warn "No expiry date found in config, proceeding..."
+        return 0
+    fi
+
+    # Convert ISO date to epoch (portable)
+    if command -v date >/dev/null 2>&1; then
+        # Try GNU date first
+        EXPIRY_EPOCH=$(date -d "$EXPIRY_DATE" +%s 2>/dev/null)
+        if [ -z "$EXPIRY_EPOCH" ]; then
+            # Try BSD date format
+            EXPIRY_EPOCH=$(date -j -f "%Y-%m-%dT%H:%M:%S" "$EXPIRY_DATE" +%s 2>/dev/null)
+        fi
+
+        if [ -n "$EXPIRY_EPOCH" ]; then
+            CURRENT_EPOCH=$(date +%s)
+            if [ "$CURRENT_EPOCH" -gt "$EXPIRY_EPOCH" ]; then
+                error "This installer has EXPIRED on $(echo "$EXPIRY_DATE" | cut -d'T' -f1). Please download a new installer from Allow2Automate."
+            fi
+        fi
+    fi
+
+    log "Installer token is valid"
+}
+
 # Main
 main() {
     log "============================================"
     log "  Allow2Automate Agent Installer v\${VERSION}"
     log "============================================"
+
+    # Validate token hasn't expired before proceeding
+    check_expiry
 
     detect_distro
     detect_package_manager

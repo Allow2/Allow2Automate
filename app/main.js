@@ -3,7 +3,15 @@ import url from 'url';
 import { app, crashReporter, BrowserWindow, Menu, ipcMain, safeStorage } from 'electron';
 import allActions from './actions';
 import configureStore from './mainStore';
-import { allow2Request } from './util';
+import {
+    allow2Request,
+    enrichActivity,
+    enrichAllow2Response,
+    getOverallStatus,
+    refreshActivityStatus,
+    formatDuration,
+    formatCountdown
+} from './util';
 import { bindActionCreators } from 'redux';
 import { getPluginPath, getPathByName, getPluginPathInfo, isDevelopmentMode } from './pluginPaths';
 const async = require('async');
@@ -498,7 +506,7 @@ ipcMain.handle('pairDevice', async (event, options = {}) => {
  * @returns {Promise<{success: boolean, allowed?: boolean, result?: object, error?: string}>}
  */
 async function checkDeviceUsageInternal(options = {}) {
-    const { UDN, pluginName, activityId = 7, log = false } = options;
+    const { UDN, pluginName, activityId = 7, log = false, deviceName = null, deviceToken = null, childId = null } = options;
 
     if (!UDN || !pluginName) {
         return { success: false, error: 'Missing required parameters (UDN, pluginName)' };
@@ -510,39 +518,71 @@ async function checkDeviceUsageInternal(options = {}) {
     // Get timezone from state
     const tz = (state.util && state.util.timezoneGuess) || moment.tz.guess();
 
-    // Look up pairing from plugin configuration
+    // Get controller (Allow2Automate app) credentials from user state
+    const controllerCredentials = state.user ? {
+        controllerUserId: state.user.userId,
+        controllerPairId: state.user.pairId,
+        controllerPairToken: state.user.pairToken
+    } : null;
+
+    // Look up existing pairing from plugin configuration
     const pluginConfig = state.configuration && state.configuration[pluginName];
-    if (!pluginConfig || !pluginConfig.pairings) {
-        return { success: false, error: 'No pairings found for plugin' };
-    }
+    const existingPairing = pluginConfig && pluginConfig.pairings && pluginConfig.pairings[UDN];
 
-    const pairing = pluginConfig.pairings[UDN];
-    if (!pairing) {
-        return { success: false, error: 'Device not paired to a child' };
-    }
+    // Determine which credentials to use
+    let params;
 
-    // Validate pairing has required fields
-    if (!pairing.controllerId || !pairing.id || !pairing.pairToken || !pairing.deviceToken || !pairing.ChildId) {
-        console.error('[checkDeviceUsage] Invalid pairing data:', pairing);
-        return { success: false, error: 'Invalid pairing data - missing credentials' };
-    }
-
-    console.log(`[checkDeviceUsage] Checking device ${UDN} for child ${pairing.ChildId}, log=${log}`);
-
-    return new Promise((resolve) => {
-        const params = {
-            userId: pairing.controllerId,
-            pairId: pairing.id,
-            pairToken: pairing.pairToken,
-            deviceToken: pairing.deviceToken,
-            childId: pairing.ChildId,
+    if (existingPairing && existingPairing.controllerId && existingPairing.id && existingPairing.pairToken && existingPairing.deviceToken && existingPairing.ChildId) {
+        // Use existing plugin pairing
+        console.log(`[checkDeviceUsage] Using existing pairing for device ${UDN}`);
+        params = {
+            userId: existingPairing.controllerId,
+            pairId: existingPairing.id,
+            pairToken: existingPairing.pairToken,
+            deviceToken: existingPairing.deviceToken,
+            childId: existingPairing.ChildId,
             tz: tz,
             activities: [{
                 id: activityId,
                 log: log
             }]
         };
+    } else if (controllerCredentials && controllerCredentials.controllerUserId && deviceToken && childId) {
+        // No plugin pairing - use controller credentials for auto-provisioning
+        console.log(`[checkDeviceUsage] No plugin pairing for ${UDN}, using controller credentials for auto-provisioning`);
+        params = {
+            // Plugin doesn't have these yet - server will auto-provision
+            userId: null,
+            pairId: null,
+            pairToken: null,
+            deviceToken: deviceToken,
+            deviceId: UDN,
+            deviceName: deviceName || UDN,
+            childId: childId,
+            tz: tz,
+            activities: [{
+                id: activityId,
+                log: log
+            }],
+            // Controller credentials for fallback/auto-provisioning
+            controllerUserId: controllerCredentials.controllerUserId,
+            controllerPairId: controllerCredentials.controllerPairId,
+            controllerPairToken: controllerCredentials.controllerPairToken
+        };
+    } else if (!controllerCredentials || !controllerCredentials.controllerUserId) {
+        return { success: false, error: 'Not logged in to Allow2' };
+    } else if (!deviceToken) {
+        return { success: false, error: 'Device not paired to a child (missing deviceToken)' };
+    } else if (!childId) {
+        return { success: false, error: 'Device not paired to a child' };
+    } else {
+        return { success: false, error: 'No pairings found for plugin' };
+    }
 
+    const effectiveChildId = existingPairing ? existingPairing.ChildId : childId;
+    console.log(`[checkDeviceUsage] Checking device ${UDN} for child ${effectiveChildId}, log=${log}`);
+
+    return new Promise((resolve) => {
         allow2.check(params, function(err, result) {
             if (err) {
                 console.error('[checkDeviceUsage] Allow2 check error:', err);
@@ -564,6 +604,32 @@ async function checkDeviceUsageInternal(options = {}) {
 
             console.log(`[checkDeviceUsage] Device ${UDN}: allowed=${result.allowed}`);
 
+            // If server returned a provisioned pairing, store it for future calls
+            if (result.provisionedPairing) {
+                console.log(`[checkDeviceUsage] Received provisioned pairing for ${UDN}, storing...`);
+                const newPairing = {
+                    controllerId: result.provisionedPairing.userId,
+                    id: result.provisionedPairing.pairId,
+                    pairToken: result.provisionedPairing.pairToken,
+                    deviceToken: result.provisionedPairing.deviceToken,
+                    ChildId: result.provisionedPairing.childId
+                };
+
+                // Store the pairing in plugin configuration
+                const currentConfig = (state.configuration && state.configuration[pluginName]) || {};
+                const currentPairings = currentConfig.pairings || {};
+                actions.configurationUpdate({
+                    [pluginName]: {
+                        ...currentConfig,
+                        pairings: {
+                            ...currentPairings,
+                            [UDN]: newPairing
+                        }
+                    }
+                });
+                console.log(`[checkDeviceUsage] Stored provisioned pairing for ${UDN}`);
+            }
+
             resolve({
                 success: true,
                 allowed: result.allowed,
@@ -578,9 +644,51 @@ async function checkDeviceUsageInternal(options = {}) {
 global.services = global.services || {};
 global.services.checkDeviceUsage = checkDeviceUsageInternal;
 
+// Status enrichment utilities for plugins
+// These functions convert Allow2 response data into human-readable messages
+global.services.allow2Status = {
+    // Enrich a single activity with human-readable status messages
+    enrichActivity: enrichActivity,
+    // Enrich full Allow2 response with status messages for all activities
+    enrichResponse: enrichAllow2Response,
+    // Get overall status summary from activities
+    getOverallStatus: getOverallStatus,
+    // Refresh status messages (for live countdowns)
+    refreshStatus: refreshActivityStatus,
+    // Utility: Format seconds as duration string
+    formatDuration: formatDuration,
+    // Utility: Format seconds as countdown string
+    formatCountdown: formatCountdown
+};
+
 // IPC handler for renderer processes (wraps the internal function)
 ipcMain.handle('checkDeviceUsage', async (event, options = {}) => {
     return checkDeviceUsageInternal(options);
+});
+
+// IPC handlers for Allow2 status enrichment (for renderer plugins)
+ipcMain.handle('allow2:enrichActivity', async (event, activity) => {
+    return enrichActivity(activity);
+});
+
+ipcMain.handle('allow2:enrichResponse', async (event, response) => {
+    return enrichAllow2Response(response);
+});
+
+ipcMain.handle('allow2:getOverallStatus', async (event, activities) => {
+    return getOverallStatus(activities);
+});
+
+ipcMain.handle('allow2:refreshStatus', async (event, cachedActivity, elapsedSeconds) => {
+    return refreshActivityStatus(cachedActivity, elapsedSeconds);
+});
+
+ipcMain.handle('allow2:formatDuration', async (event, seconds, short) => {
+    return formatDuration(seconds, short);
+});
+
+ipcMain.handle('allow2:formatCountdown', async (event, seconds) => {
+    return formatCountdown(seconds);
 });
 
 /**

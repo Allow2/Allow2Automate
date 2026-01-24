@@ -143,3 +143,34 @@ bridge.stateSyncEnhancer = () => {
 };
 
 window.__ElectronReduxBridge = bridge;
+
+// Allow2 Status Enrichment API for renderer plugins
+// These functions convert Allow2 response data into human-readable messages
+// for display in plugin UIs (e.g., "2 hrs 15 mins remaining")
+window.allow2Status = {
+    // Enrich a single activity with human-readable status messages
+    enrichActivity: async (activity) => {
+        return ipcRenderer.invoke('allow2:enrichActivity', activity);
+    },
+    // Enrich full Allow2 response with status messages for all activities
+    enrichResponse: async (response) => {
+        return ipcRenderer.invoke('allow2:enrichResponse', response);
+    },
+    // Get overall status summary from activities
+    getOverallStatus: async (activities) => {
+        return ipcRenderer.invoke('allow2:getOverallStatus', activities);
+    },
+    // Refresh status messages (for live countdowns)
+    // Pass cached activity and elapsed seconds since last update
+    refreshStatus: async (cachedActivity, elapsedSeconds = 0) => {
+        return ipcRenderer.invoke('allow2:refreshStatus', cachedActivity, elapsedSeconds);
+    },
+    // Utility: Format seconds as duration string ("2 hrs 15 mins")
+    formatDuration: async (seconds, short = true) => {
+        return ipcRenderer.invoke('allow2:formatDuration', seconds, short);
+    },
+    // Utility: Format seconds as countdown string ("in 2 hrs 15 mins")
+    formatCountdown: async (seconds) => {
+        return ipcRenderer.invoke('allow2:formatCountdown', seconds);
+    }
+};

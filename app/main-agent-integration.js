@@ -177,10 +177,52 @@ export async function initializeAgentServices(app, store, actions) {
     console.log(`[AgentIntegration] Parent UUID: ${parentUuid}`);
     console.log(`[AgentIntegration] mDNS service: ${parentUuid}._allow2automate._tcp.local`);
 
+    // Create a unified agent service facade for plugins
+    // Plugins expect methods from both AgentService and PluginExtensionCoordinator
+    const agentServiceFacade = {
+      // === AgentService methods ===
+      listAgents: (...args) => agentService.listAgents(...args),
+      getAgent: (...args) => agentService.getAgent(...args),
+      registerAgent: (...args) => agentService.registerAgent(...args),
+      updateAgent: (...args) => agentService.updateAgent(...args),
+      recordHeartbeat: (...args) => agentService.recordHeartbeat(...args),
+      createPolicy: (...args) => agentService.createPolicy(...args),
+      updatePolicy: (...args) => agentService.updatePolicy(...args),
+      deletePolicy: (...args) => agentService.deletePolicy(...args),
+      getPolicies: (...args) => agentService.getPolicies(...args),
+      setAgentChild: (...args) => agentService.setAgentChild(...args),
+      getCurrentUser: (...args) => agentService.getCurrentUser(...args),
+      getLastUser: (...args) => agentService.getLastUser(...args),
+      getUserSessionHistory: (...args) => agentService.getUserSessionHistory(...args),
+      generateRegistrationCode: (...args) => agentService.generateRegistrationCode(...args),
+      generateLinuxInstallScript: (...args) => agentService.generateLinuxInstallScript(...args),
+
+      // === PluginExtensionCoordinator methods (for plugins) ===
+      deployMonitor: (...args) => pluginExtensionCoordinator.deployMonitor(...args),
+      deployAction: (...args) => pluginExtensionCoordinator.deployAction(...args),
+      updateMonitor: (...args) => pluginExtensionCoordinator.updateMonitor(...args),
+      removeMonitor: (...args) => pluginExtensionCoordinator.removeMonitor(...args),
+      triggerAction: (...args) => pluginExtensionCoordinator.triggerAction(...args),
+      removeAgentDeployments: (...args) => pluginExtensionCoordinator.removeAgentDeployments(...args),
+
+      // === EventEmitter methods (delegate to agentService) ===
+      on: (...args) => agentService.on(...args),
+      off: (...args) => agentService.off(...args),
+      emit: (...args) => agentService.emit(...args),
+      once: (...args) => agentService.once(...args),
+      removeListener: (...args) => agentService.removeListener(...args),
+      removeAllListeners: (...args) => agentService.removeAllListeners(...args),
+
+      // === Direct access to underlying services (for advanced use) ===
+      _agentService: agentService,
+      _pluginExtensionCoordinator: pluginExtensionCoordinator,
+      db: agentService.db
+    };
+
     // Expose services globally for routes and plugins
     global.services = {
       ...global.services,
-      agent: agentService,
+      agent: agentServiceFacade,
       agentUpdate: agentUpdateService,
       pluginExtension: pluginExtensionCoordinator,
       uuid: uuidManager,

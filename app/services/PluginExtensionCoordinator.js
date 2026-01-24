@@ -317,6 +317,100 @@ export default class PluginExtensionCoordinator extends EventEmitter {
   }
 
   /**
+   * Update a deployed monitor's configuration (e.g., interval)
+   * @param {string} agentId - Target agent ID
+   * @param {object} updateConfig - Update configuration
+   * @returns {object} Update result with payload for agent
+   */
+  async updateMonitor(agentId, updateConfig) {
+    const { pluginId, monitorId, interval, metadata = {} } = updateConfig;
+
+    // Validate agent exists
+    const agent = await this.agentService.getAgent(agentId);
+    if (!agent) {
+      throw new Error(`Agent not found: ${agentId}`);
+    }
+
+    // Check if monitor is deployed
+    const monitorKey = `${pluginId}:${monitorId}`;
+    const agentExtensions = this.deployedExtensions.get(agentId);
+    const existing = agentExtensions && agentExtensions.monitors ? agentExtensions.monitors.get(monitorKey) : null;
+
+    if (!existing) {
+      console.log(`[PluginExtensionCoordinator] Monitor ${monitorId} not deployed to agent ${agentId}, skipping update`);
+      return { status: 'not_deployed' };
+    }
+
+    // Create update payload for agent
+    const updatePayload = {
+      type: 'update_monitor',
+      pluginId,
+      monitorId,
+      interval: interval || 30000,
+      metadata
+    };
+
+    console.log(`[PluginExtensionCoordinator] Updated monitor ${monitorId} on agent ${agentId} (interval: ${interval}ms)`);
+    this.emit('monitorUpdated', { agentId, pluginId, monitorId, interval });
+
+    return {
+      status: 'updated',
+      deploymentId: existing.id,
+      payload: updatePayload
+    };
+  }
+
+  /**
+   * Remove a deployed monitor from an agent
+   * @param {string} agentId - Target agent ID
+   * @param {object} removeConfig - Remove configuration
+   * @returns {object} Removal result
+   */
+  async removeMonitor(agentId, removeConfig) {
+    const { pluginId, monitorId } = removeConfig;
+
+    // Validate agent exists (but don't fail if not - agent may have been removed)
+    const agent = await this.agentService.getAgent(agentId);
+
+    // Check if monitor is deployed
+    const monitorKey = `${pluginId}:${monitorId}`;
+    const agentExtensions = this.deployedExtensions.get(agentId);
+    const existing = agentExtensions && agentExtensions.monitors ? agentExtensions.monitors.get(monitorKey) : null;
+
+    if (!existing) {
+      console.log(`[PluginExtensionCoordinator] Monitor ${monitorId} not deployed to agent ${agentId}, nothing to remove`);
+      return { status: 'not_deployed' };
+    }
+
+    // Remove from database
+    await this.db.query(`
+      DELETE FROM plugin_deployments
+      WHERE agent_id = $1 AND plugin_id = $2 AND extension_type = 'monitor' AND extension_id = $3
+    `, [agentId, pluginId, monitorId]);
+
+    // Remove from in-memory state
+    if (agentExtensions && agentExtensions.monitors) {
+      agentExtensions.monitors.delete(monitorKey);
+    }
+
+    // Create removal payload for agent
+    const removalPayload = {
+      type: 'remove_monitor',
+      pluginId,
+      monitorId
+    };
+
+    console.log(`[PluginExtensionCoordinator] Removed monitor ${monitorId} from agent ${agentId}`);
+    this.emit('monitorRemoved', { agentId, pluginId, monitorId });
+
+    return {
+      status: 'removed',
+      deploymentId: existing.id,
+      payload: removalPayload
+    };
+  }
+
+  /**
    * Queue an action trigger for an agent
    * @param {string} agentId - Target agent ID
    * @param {string} pluginId - Plugin ID

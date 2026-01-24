@@ -229,6 +229,24 @@ export default class DatabaseModule {
           'CREATE INDEX IF NOT EXISTS idx_agent_user_sessions_is_active ON agent_user_sessions(is_active);',
           'CREATE INDEX IF NOT EXISTS idx_agent_user_sessions_last_seen ON agent_user_sessions(last_seen DESC);'
         ]
+      },
+      pending_agent_tokens: {
+        sql: `
+          CREATE TABLE IF NOT EXISTS pending_agent_tokens (
+            id TEXT PRIMARY KEY,
+            auth_token TEXT UNIQUE NOT NULL,
+            child_id TEXT,
+            platform TEXT,
+            version TEXT,
+            parent_api_url TEXT,
+            expires_at TEXT,
+            created_at TEXT DEFAULT (datetime('now'))
+          );
+        `,
+        indexes: [
+          'CREATE INDEX IF NOT EXISTS idx_pending_agent_tokens_auth_token ON pending_agent_tokens(auth_token);',
+          'CREATE INDEX IF NOT EXISTS idx_pending_agent_tokens_expires_at ON pending_agent_tokens(expires_at);'
+        ]
       }
     };
   }

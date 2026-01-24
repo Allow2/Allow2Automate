@@ -9,8 +9,13 @@ const JWT_SECRET = process.env.AGENT_JWT_SECRET || 'change-me-in-production';
 
 /**
  * Middleware to authenticate agent requests
+ *
+ * Supports two authentication modes:
+ * 1. JWT token (for registered agents) - validates signed JWT
+ * 2. Raw auth token (for first-time connection) - validates against pending_agent_tokens
+ *    and auto-registers the agent, returning a JWT in X-Agent-Token header
  */
-function authenticateAgent(req, res, next) {
+async function authenticateAgent(req, res, next) {
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -19,25 +24,107 @@ function authenticateAgent(req, res, next) {
 
   const token = authHeader.substring(7);
 
+  // First, try JWT verification (for registered agents)
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
     req.agentId = decoded.agentId;
+    return next();
+  } catch (jwtError) {
+    // JWT verification failed - this might be a raw auth token from a new agent
+  }
+
+  // JWT failed - check if this is a raw auth token from pending_agent_tokens
+  const agentService = global.services && global.services.agent;
+  if (!agentService) {
+    return res.status(503).json({ error: 'Agent service not available' });
+  }
+
+  try {
+    // Check pending_agent_tokens for this raw token
+    const pendingToken = await agentService.validatePendingToken(token);
+
+    if (!pendingToken) {
+      // Also check if this is an existing agent's auth_token (direct token auth)
+      const existingAgent = await agentService.db.queryOne(
+        'SELECT id FROM agents WHERE auth_token = $1',
+        [token]
+      );
+
+      if (existingAgent) {
+        // Agent exists but using raw token - issue a JWT for future use
+        const newJwt = jwt.sign(
+          { agentId: existingAgent.id },
+          JWT_SECRET,
+          { expiresIn: '365d' }
+        );
+        req.agentId = existingAgent.id;
+        res.setHeader('X-Agent-Token', newJwt);
+        return next();
+      }
+
+      return res.status(401).json({ error: 'Invalid or expired token' });
+    }
+
+    // Valid pending token found - auto-register the agent
+    // Get machine info from request headers or body
+    const machineId = req.headers['x-machine-id'] ||
+                      (req.body && req.body.machineId) ||
+                      `auto-${pendingToken.id}`;
+    const hostname = req.headers['x-hostname'] ||
+                     (req.body && req.body.hostname) ||
+                     'unknown';
+    const platform = req.headers['x-agent-platform'] || pendingToken.platform || 'unknown';
+    const version = req.headers['x-agent-version'] || pendingToken.version || '1.0.0';
+
+    const agentInfo = {
+      machineId,
+      hostname,
+      platform,
+      version,
+      ip: req.ip || req.connection.remoteAddress
+    };
+
+    // Register the new agent (this will delete the pending token)
+    const result = await agentService.registerAgent(null, agentInfo, token);
+
+    // Generate JWT for this new agent
+    const newJwt = jwt.sign(
+      { agentId: result.agentId },
+      JWT_SECRET,
+      { expiresIn: '365d' }
+    );
+
+    // Set agent ID for the request and return JWT in header for agent to store
+    req.agentId = result.agentId;
+    res.setHeader('X-Agent-Token', newJwt);
+    res.setHeader('X-Agent-Id', result.agentId);
+
+    console.log(`[AgentAuth] Auto-registered new agent ${result.agentId} from pending token`);
     next();
+
   } catch (error) {
-    return res.status(401).json({ error: 'Invalid or expired token' });
+    console.error('[AgentAuth] Error during authentication:', error);
+    return res.status(401).json({ error: 'Authentication failed' });
   }
 }
 
 /**
  * Agent registration endpoint
  * POST /api/agent/register
- * Body: { registrationCode (optional), agentInfo: { machineId, hostname, platform, version, ip } }
+ * Body: {
+ *   registrationCode (optional) - Legacy registration code for backward compatibility
+ *   authToken (optional) - Auth token from installer for pending token validation
+ *   agentInfo: { machineId, hostname, platform, version, ip }
+ * }
+ *
+ * Agents only appear in the parent's list when they first connect via this endpoint.
+ * No pre-registration or "pending" placeholders - agents are created on first contact.
  */
 router.post('/api/agent/register', async (req, res) => {
   try {
-    const { registrationCode, agentInfo } = req.body;
+    const { registrationCode, authToken, agentInfo } = req.body;
 
-    // agentInfo is required, registrationCode is optional
+    // agentInfo is required, registrationCode and authToken are optional
     if (!agentInfo) {
       return res.status(400).json({ error: 'Missing required field: agentInfo' });
     }
@@ -53,8 +140,9 @@ router.post('/api/agent/register', async (req, res) => {
       return res.status(503).json({ error: 'Agent service not available' });
     }
 
-    // Register agent (registrationCode is optional)
-    const result = await agentService.registerAgent(registrationCode || null, agentInfo);
+    // Register agent (registrationCode and authToken are optional)
+    // authToken is used to validate pending tokens from installers
+    const result = await agentService.registerAgent(registrationCode || null, agentInfo, authToken || null);
 
     // Generate JWT token for the agent
     const token = jwt.sign(
